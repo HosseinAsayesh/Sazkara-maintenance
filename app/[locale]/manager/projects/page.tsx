@@ -4,6 +4,7 @@ import { ProjectsManager, type ProjectRow } from '@/components/ProjectsManager';
 import { requireManager } from '@/lib/auth';
 import { formatDateForLocale } from '@/lib/dates';
 import { listProjects } from '@/lib/projects';
+import { getStorage } from '@/lib/storage';
 
 export default async function ProjectsPage({
   params,
@@ -29,6 +30,16 @@ export default async function ProjectsPage({
       id: p.id,
       name: p.name,
       sortOrder: p.sortOrder,
+    })),
+    batches: project.batches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      source: b.source,
+      phaseName: b.phase?.name ?? null,
+      lineCount: b._count.lines,
+      importedAt: formatDateForLocale(b.importedAt, locale),
+      // Archives keep their uploaded original; older batches may predate that.
+      fileUrl: b.fileRef ? getStorage().url(b.fileRef) : null,
     })),
   }));
 

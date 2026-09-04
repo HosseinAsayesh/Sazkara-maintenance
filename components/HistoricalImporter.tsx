@@ -16,6 +16,7 @@ import {
   Card,
   CardHeader,
   Field,
+  Select,
   Input,
   Table,
   TableWrap,
@@ -24,7 +25,20 @@ import {
 } from './ui';
 
 /** §7 — bring pre-system Jti exports into the stats. */
-export function HistoricalImporter({ locale }: { locale: string }) {
+export interface HistoricalProjectOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  phases: Array<{ id: string; name: string }>;
+}
+
+export function HistoricalImporter({
+  locale,
+  projects = [],
+}: {
+  locale: string;
+  projects?: HistoricalProjectOption[];
+}) {
   const t = useTranslations('historical');
   const ti = useTranslations('imports');
   const tc = useTranslations('common');
@@ -38,6 +52,11 @@ export function HistoricalImporter({ locale }: { locale: string }) {
     {},
   );
   const [name, setName] = useState('');
+  // An archive filed under no project is invisible to every project filter, so the
+  // manager picks the campaign it belonged to at import time.
+  const [projectId, setProjectId] = useState('');
+  const [phaseId, setPhaseId] = useState('');
+  const phases = projects.find((p) => p.id === projectId)?.phases ?? [];
 
   const preview = previewState.preview;
 
@@ -99,6 +118,8 @@ export function HistoricalImporter({ locale }: { locale: string }) {
               fd.set('fileRef', preview.fileRef);
               fd.set('name', name || 'Historical import');
               fd.set('locale', locale);
+              fd.set('projectId', projectId);
+              fd.set('phaseId', phases.some((p) => p.id === phaseId) ? phaseId : '');
               commitAction(fd);
             }}
             className="space-y-4 p-4"
@@ -111,7 +132,12 @@ export function HistoricalImporter({ locale }: { locale: string }) {
               })}
             </Alert>
 
+            {/* Which sheet generation was read. The legacy layout has 28 part columns
+                and two of today's parts simply did not exist in it. */}
             <div className="flex flex-wrap gap-2">
+              <Badge tone={preview.layout === 'LEGACY' ? 'warning' : 'info'}>
+                {preview.layout === 'LEGACY' ? t('layoutLegacy') : t('layoutCurrent')}
+              </Badge>
               {preview.skipped > 0 ? (
                 <Badge tone="warning">
                   {ti('invalidRows', { count: preview.skipped })}
@@ -131,6 +157,39 @@ export function HistoricalImporter({ locale }: { locale: string }) {
                 </Badge>
               ) : null}
             </div>
+
+            {projects.length ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={tc('project')}>
+                  <Select
+                    value={projectId}
+                    onChange={(e) => {
+                      setProjectId(e.target.value);
+                      setPhaseId('');
+                    }}
+                  >
+                    <option value="">—</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {phases.length ? (
+                  <Field label={tc('phase')}>
+                    <Select value={phaseId} onChange={(e) => setPhaseId(e.target.value)}>
+                      <option value="">—</option>
+                      {phases.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                ) : null}
+              </div>
+            ) : null}
 
             <TableWrap>
               <Table className="min-w-0">

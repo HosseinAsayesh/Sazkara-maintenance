@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
+import { Link } from '@/i18n/navigation';
 import { formatDateForLocale } from '@/lib/dates';
 
 import { Badge, Card, CardHeader, EmptyState } from './ui';
@@ -25,9 +26,12 @@ interface HistoryForm {
 export async function StandHistory({
   locale,
   history,
+  canEdit = false,
 }: {
   locale: string;
   history: HistoryForm[];
+  /** Managers get a link into the report editor; technicians see a plain code. */
+  canEdit?: boolean;
 }) {
   const [t, tr, ta, to] = await Promise.all([
     getTranslations({ locale, namespace: 'technician' }),
@@ -73,8 +77,19 @@ export async function StandHistory({
                         : ''}
                       {form.city ? ` · ${form.city.name}` : ''}
                     </span>
+                    {/* Managers can open the report to correct or delete it; the
+                        technician view keeps it as plain text. */}
                     <span className="ms-auto dir-ltr text-xs text-[var(--muted)]">
-                      {form.formCode}
+                      {canEdit ? (
+                        <Link
+                          href={`/manager/form/${form.id}`}
+                          className="text-brand-700 hover:underline"
+                        >
+                          {form.formCode}
+                        </Link>
+                      ) : (
+                        form.formCode
+                      )}
                     </span>
                   </div>
 

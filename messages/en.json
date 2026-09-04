@@ -89,7 +89,8 @@
     "historical": "Historical data",
     "newReport": "New report",
     "myProfile": "My stats",
-    "projects": "Projects"
+    "projects": "Projects",
+    "uidArchive": "UID archive"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -217,7 +218,9 @@
     "replacedSection": "Replaced parts",
     "repairedSection": "Repaired parts",
     "cmHint": "in centimetres (steps of 50)",
-    "sharedUidNote": "Stand {n} at the same UID ({uid}) — it has no separate UID."
+    "sharedUidNote": "Stand {n} at the same UID ({uid}) — it has no separate UID.",
+    "sectionStorePhoto": "Store photo",
+    "standPhotosHelp": "Before and after photos of THIS stand"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
@@ -449,7 +452,14 @@
     "wageTierThird": "Third or later stand at the same store",
     "photos": "Photos",
     "signatures": "Signatures",
-    "reRepairOf": "Re-repair of form {code}"
+    "reRepairOf": "Re-repair of form {code}",
+    "edit": "Edit report",
+    "delete": "Delete report",
+    "deleteConfirm": "Delete this report? Its photos and signatures go too, and the UID returns to the work queue.",
+    "formDeleted": "Report deleted",
+    "formSaved": "Report saved",
+    "editHelp": "Changing the parts re-derives the repair outcome and the wage.",
+    "cannotEditPhotos": "Photos and signatures cannot be edited; delete the report so it can be filed again."
   },
   "reRepairs": {
     "title": "Re-repairs",
@@ -502,7 +512,9 @@
     "importNow": "Import now",
     "willCreate": "{forms, number} forms, {stands, number} stands and {stores, number} stores will be created",
     "imported": "{count, number} historical forms imported",
-    "technicianForHistorical": "Technician attributed to historical data"
+    "technicianForHistorical": "Technician attributed to historical data",
+    "layoutCurrent": "Current layout (30 parts)",
+    "layoutLegacy": "Legacy layout (28 parts)"
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
@@ -516,7 +528,8 @@
     "duplicateUid": "That UID is already in this order.",
     "lineHasForms": "A repair report exists for this UID, so the row cannot be deleted.",
     "cannotDeleteWithForms": "This order has repair reports against it and cannot be deleted.",
-    "phaseMismatch": "The selected phase does not belong to this project."
+    "phaseMismatch": "The selected phase does not belong to this project.",
+    "qualityOutOfRange": "Quality score must be between 0 and 5."
   },
   "projects": {
     "title": "Projects and phases",
@@ -538,5 +551,16 @@
     "batches": "orders",
     "none": "No projects yet",
     "assignToProject": "Project and phase"
+  },
+  "uidArchive": {
+    "title": "UID archive",
+    "listTitle": "UIDs in this period",
+    "help": "One row per UID, summarising every report filed against it within the current filter.",
+    "totalForms": "Reports",
+    "stands": "Stands",
+    "forms": "Reports",
+    "partsReplaced": "Parts replaced",
+    "lastVisit": "Last visit",
+    "multiStand": "multi-stand"
   }
 }

@@ -39,6 +39,7 @@ export default async function ManagerLayout({
         { href: '/manager/evidence', label: t('evidence') },
         { href: '/manager/analytics', label: t('analytics') },
         { href: '/manager/re-repairs', label: t('reRepairs') },
+        { href: '/manager/uids', label: t('uidArchive') },
         { href: '/manager/uid', label: t('uidSearch') },
         { href: '/manager/historical', label: t('historical') },
         { href: '/manager/parts', label: t('parts') },

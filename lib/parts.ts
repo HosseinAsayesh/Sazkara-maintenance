@@ -137,3 +137,83 @@ if (JTI_EXPORT_HEADERS.length !== JTI_EXPORT_COLUMN_COUNT) {
     `Jti export must have exactly ${JTI_EXPORT_COLUMN_COUNT} columns, got ${JTI_EXPORT_HEADERS.length}`,
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Legacy archive layout
+ * ------------------------------------------------------------------ */
+
+/**
+ * The part columns of the Jti sheets used BEFORE this system existed: 28 columns rather
+ * than today's 30. Two entries in the current catalogue simply had no column back then:
+ *
+ *   - `سیم نمره ۰.۵` (Wire gauge 0.5) — the archives only ever recorded gauge 1.
+ *   - `کلید گرد` / `کلید مستطیلی` — the archives had a single merged "Switch" column.
+ *
+ * Kept in the original English wording of those sheets so a header row can be matched
+ * against it, and ordered exactly as the columns appeared.
+ */
+export const LEGACY_PART_HEADERS = [
+  'Plexiglass shelf',
+  'Light box',
+  'Door shelf',
+  '12Amp electrical switch',
+  'Gauge-1 wire',
+  'Fuse holder',
+  'Fuse',
+  'Transformer',
+  'Microswitch',
+  'Microswitch base',
+  'Adapter cable',
+  'Telephone wire',
+  'Telephone wire socket',
+  'Cable 3/60',
+  'Door holder catch',
+  'Light frame',
+  'Door closer',
+  'Spring',
+  'Stand board (PCB)',
+  'White LED (SMD)',
+  'Blue LED (SMD)',
+  'Switch',
+  'L rail and pusher',
+  'U rail and pusher',
+  'Cooler socket',
+  'Plastic shelf cover/door',
+  'White plexiglass',
+  'Door',
+] as const;
+
+export const LEGACY_PART_COLUMN_COUNT = LEGACY_PART_HEADERS.length;
+
+/**
+ * Legacy column position (1-based) -> current catalogue `sortOrder`.
+ *
+ * The merged legacy "Switch" maps to `کلید گرد` (round switch) — the client's ruling.
+ * Nothing maps onto `سیم نمره ۰.۵` (6) or `کلید مستطیلی` (24): those did not exist when
+ * the archives were written, and inventing values for them would fabricate history.
+ */
+export const LEGACY_TO_CURRENT_SORT_ORDER: Record<number, number> = {
+  1: 1, 2: 2, 3: 3, 4: 4, 5: 5,
+  6: 7, 7: 8, 8: 9, 9: 10, 10: 11,
+  11: 12, 12: 13, 13: 14, 14: 15, 15: 16,
+  16: 17, 17: 18, 18: 19, 19: 20, 20: 21,
+  21: 22,
+  22: 23, // merged "Switch" -> کلید گرد
+  23: 25, 24: 26, 25: 27, 26: 28, 27: 29, 28: 30,
+};
+
+/** Catalogue entries that no legacy column feeds. */
+export const SORT_ORDERS_ABSENT_FROM_LEGACY = PART_CATALOG.map((p) => p.sortOrder).filter(
+  (order) => !Object.values(LEGACY_TO_CURRENT_SORT_ORDER).includes(order),
+);
+
+if (Object.keys(LEGACY_TO_CURRENT_SORT_ORDER).length !== LEGACY_PART_COLUMN_COUNT) {
+  throw new Error(
+    `Legacy map must cover all ${LEGACY_PART_COLUMN_COUNT} archive columns, ` +
+      `got ${Object.keys(LEGACY_TO_CURRENT_SORT_ORDER).length}`,
+  );
+}
+
+if (new Set(Object.values(LEGACY_TO_CURRENT_SORT_ORDER)).size !== LEGACY_PART_COLUMN_COUNT) {
+  throw new Error('Legacy map must not send two archive columns to the same part');
+}

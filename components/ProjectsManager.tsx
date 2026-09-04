@@ -10,6 +10,8 @@ import {
   type ActionState,
 } from '@/app/actions/projects';
 
+import { Link } from '@/i18n/navigation';
+
 import { JalaliDateInput } from './JalaliDateInput';
 import {
   Alert,
@@ -33,6 +35,15 @@ export interface ProjectRow {
   formCount: number;
   batchCount: number;
   phases: Array<{ id: string; name: string; sortOrder: number }>;
+  batches: Array<{
+    id: string;
+    name: string;
+    source: string;
+    phaseName: string | null;
+    lineCount: number;
+    importedAt: string;
+    fileUrl: string | null;
+  }>;
 }
 
 /**
@@ -51,6 +62,7 @@ export function ProjectsManager({
 }) {
   const t = useTranslations('projects');
   const tc = useTranslations('common');
+  const ti = useTranslations('imports');
   const tErr = useTranslations('errors');
 
   const [createState, createAction, creating] = useActionState<ActionState, FormData>(
@@ -114,6 +126,47 @@ export function ProjectsManager({
                     </form>
                   ) : null}
                 </div>
+
+                {/* Everything imported into this campaign, including archives of past
+                    work, with the uploaded original still downloadable. */}
+                {project.batches.length ? (
+                  <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2">
+                    {project.batches.map((batch) => (
+                      <li
+                        key={batch.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/manager/imports/${batch.id}`}
+                            className="font-medium text-brand-700 hover:underline"
+                          >
+                            {batch.name}
+                          </Link>
+                          <Badge tone={batch.source === 'HISTORICAL' ? 'warning' : 'neutral'}>
+                            {ti(`source.${batch.source}`)}
+                          </Badge>
+                          {batch.phaseName ? (
+                            <span className="text-[var(--muted)]">{batch.phaseName}</span>
+                          ) : null}
+                          <span className="text-[var(--muted)]">
+                            {batch.lineCount} · {batch.importedAt}
+                          </span>
+                        </span>
+                        {batch.fileUrl ? (
+                          <a
+                            href={batch.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-brand-700 underline"
+                          >
+                            {tc('download')}
+                          </a>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-[var(--muted)]">{t('phases')}:</span>

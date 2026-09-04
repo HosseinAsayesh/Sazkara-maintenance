@@ -10,6 +10,8 @@ export interface HistoricalState {
   error?: string;
   preview?: {
     fileRef: string;
+    /** Which sheet generation was detected: the current 30-part or the legacy 28-part. */
+    layout: 'CURRENT' | 'LEGACY';
     rows: number;
     newStands: number;
     newStores: number;
@@ -47,6 +49,7 @@ export async function previewHistoricalAction(
     return {
       preview: {
         fileRef,
+        layout: preview.layout,
         rows: preview.rows,
         newStands: preview.newStands,
         newStores: preview.newStores,
@@ -72,10 +75,26 @@ export async function commitHistoricalAction(
     const fileRef = String(formData.get('fileRef') ?? '');
     const name = String(formData.get('name') ?? '').trim() || 'Historical import';
     const locale = String(formData.get('locale') || 'fa');
+    const projectId = String(formData.get('projectId') ?? '') || null;
+    const phaseId = String(formData.get('phaseId') ?? '') || null;
     if (!fileRef) return { error: 'parseFailed' };
 
+    // A phase from a different project would leave the batch unreachable from both.
+    if (phaseId) {
+      const { prisma } = await import('@/lib/prisma');
+      const phase = await prisma.phase.findUnique({ where: { id: phaseId } });
+      if (!phase || phase.projectId !== projectId) return { error: 'phaseMismatch' };
+    }
+
     const buffer = await getStorage().get(fileRef);
-    const result = await commitHistorical(buffer, { name, importedById: manager.id });
+    const result = await commitHistorical(buffer, {
+      name,
+      importedById: manager.id,
+      projectId,
+      phaseId,
+      // Keep the original on the batch so the manager can download what was uploaded.
+      fileRef,
+    });
 
     revalidatePath(`/${locale}/manager`, 'layout');
     return { imported: { count: result.imported, skipped: result.skipped } };

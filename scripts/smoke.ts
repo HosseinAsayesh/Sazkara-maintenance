@@ -25,7 +25,7 @@ import { buildJtiWorkbook, collectJtiRows } from '../lib/exports/jti';
 import { buildPartsUsageReport } from '../lib/exports/parts-usage';
 import { commitHistorical, parseHistoricalDate, previewHistorical } from '../lib/historical';
 import { buildReview, commitImport, extractRows, parseWorkbook } from '../lib/imports';
-import { JTI_EXPORT_HEADERS, PART_CATALOG } from '../lib/parts';
+import { JTI_EXPORT_HEADERS, LEGACY_PART_HEADERS, PART_CATALOG } from '../lib/parts';
 import { generateEvidencePdf } from '../lib/pdf/evidence';
 import { prisma } from '../lib/prisma';
 import { createRepairForm, lookupUid } from '../lib/repair-forms';
@@ -570,6 +570,88 @@ async function main() {
   section('§7 historical import');
   assert.equal(formatJalali(parseHistoricalDate('1403/05/12')!), '1403/05/12');
   ok('Jalali date round-trips through the historical parser', '1403/05/12');
+
+  // --- legacy 28-column archives ------------------------------------------------
+  // The archives written before this system existed have 28 part columns, not 30, so
+  // everything after the parts sits two columns to the left. Read at the current
+  // positions they did not fail loudly: the store name came out of the technician-code
+  // column and part quantities landed on neighbouring catalogue entries. This locks the
+  // layout detection in place.
+  const legacyBook = new ExcelJS.Workbook();
+  const legacySheet = legacyBook.addWorksheet('گزارش');
+  legacySheet.addRow([
+    'رقم', 'تاریخ', 'شهر', 'شناسه',
+    ...LEGACY_PART_HEADERS,
+    'Digital Address', 'Address', 'Maintenance detail', 'Tel',
+    'Store name', "Manager's name", 'Technician code', 'Form code', 'Stand quality',
+  ]);
+  for (let i = 1; i <= 10; i++) {
+    const qty = LEGACY_PART_HEADERS.map(() => 0);
+    qty[7] = 1; // Transformer
+    qty[6] = 2; // Fuse
+    qty[21] = 3; // the merged legacy "Switch"
+    qty[19] = 150; // White LED (SMD) — already centimetres in the archives
+    legacySheet.addRow([
+      i, `1403/05/${String(i + 10).padStart(2, '0')}`, 'تهران', `LEG${2000 + i}`,
+      ...qty,
+      'https://maps.example/x', 'خیابان آزادی', 'تعویض ترانس', '02100000000',
+      `فروشگاه بایگانی ${i}`, 'آقای تست', 'TC-900', `OLD-${i}`, 4,
+    ]);
+  }
+  const legacyBuffer = Buffer.from(await legacyBook.xlsx.writeBuffer());
+
+  const legacyPreview = await previewHistorical(legacyBuffer);
+  assert.equal(legacyPreview.layout, 'LEGACY');
+  assert.equal(legacyPreview.rows, 10, 'every legacy row must be read, not just the ends');
+  assert.equal(legacyPreview.skipped, 0);
+  ok('legacy 28-column layout detected and fully read', `${legacyPreview.rows} rows`);
+
+  const legacyCommit = await commitHistorical(legacyBuffer, {
+    name: 'Legacy archive',
+    importedById: manager.id,
+  });
+  assert.equal(legacyCommit.imported, 10);
+
+  const legacyForm = await prisma.repairForm.findFirstOrThrow({
+    where: { uid: 'LEG2001' },
+    include: { parts: { include: { part: true } } },
+  });
+
+  // Trailing columns must land in the right fields despite the two-column shift.
+  assert.equal(legacyForm.storeName, 'فروشگاه بایگانی 1');
+  assert.equal(legacyForm.storePhone, '02100000000');
+  assert.equal(legacyForm.digitalAddress, 'https://maps.example/x');
+  assert.equal(legacyForm.qualityScore, 4);
+  ok('legacy trailing columns map to the right fields');
+
+  const legacyQty = (nameFa: string) =>
+    legacyForm.parts.find((p) => p.part.nameFa === nameFa)?.quantity ?? 0;
+
+  assert.equal(legacyQty('ترانس'), 1);
+  assert.equal(legacyQty('فیوز'), 2);
+  assert.equal(legacyQty('پایه فیوز'), 0, 'fuse must not bleed onto the fuse base');
+  ok('legacy part quantities land on the correct catalogue entries');
+
+  // The archives had one merged "Switch"; the client's ruling sends it to کلید گرد.
+  assert.equal(legacyQty('کلید گرد'), 3);
+  assert.equal(legacyQty('کلید مستطیلی'), 0);
+  ok('merged legacy Switch imports as کلید گرد', '3');
+
+  // Nothing feeds the two parts that did not exist back then.
+  assert.equal(legacyQty('سیم نمره ۰.۵'), 0);
+  ok('parts absent from the legacy sheet stay empty');
+
+  // Legacy SMD values are already centimetres and are imported unchanged.
+  assert.equal(legacyQty('نوار SMD سفید'), 150);
+  ok('legacy SMD centimetres import as-is', '150');
+
+  await prisma.partUsage.deleteMany({
+    where: { repairForm: { uid: { startsWith: 'LEG2' } } },
+  });
+  await prisma.repairForm.deleteMany({ where: { uid: { startsWith: 'LEG2' } } });
+  await prisma.stand.deleteMany({ where: { store: { uid: { startsWith: 'LEG2' } } } });
+  await prisma.store.deleteMany({ where: { uid: { startsWith: 'LEG2' } } });
+  await prisma.importBatch.deleteMany({ where: { name: { startsWith: 'Legacy archive' } } });
 
   const archive = await buildJtiWorkbook(exportRows);
   const preview = await previewHistorical(archive);

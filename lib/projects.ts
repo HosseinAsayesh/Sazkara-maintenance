@@ -27,6 +27,21 @@ export async function listProjects() {
     orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
     include: {
       phases: { orderBy: { sortOrder: 'asc' } },
+      // The uploaded originals belong to the project, and the manager needs to get back
+      // to the file they imported — especially for archives of past campaigns, which are
+      // otherwise only reachable through per-uid history.
+      batches: {
+        orderBy: { importedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          source: true,
+          fileRef: true,
+          importedAt: true,
+          phase: { select: { name: true } },
+          _count: { select: { lines: true } },
+        },
+      },
       _count: { select: { repairForms: true, batches: true } },
     },
   });

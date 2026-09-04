@@ -3,7 +3,12 @@ import 'server-only';
 import ExcelJS from 'exceljs';
 
 import { nextFormCode } from './codes';
-import { PART_CATALOG, JTI_EXPORT_HEADERS } from './parts';
+import {
+  JTI_EXPORT_HEADERS,
+  LEGACY_PART_COLUMN_COUNT,
+  LEGACY_TO_CURRENT_SORT_ORDER,
+  PART_CATALOG,
+} from './parts';
 import { prisma } from './prisma';
 import { cleanOptional, makeStoreMatchKey, normaliseUid, toLatinDigits } from './text';
 
@@ -25,20 +30,97 @@ import { cleanOptional, makeStoreMatchKey, normaliseUid, toLatinDigits } from '.
  * excluded from wage totals rather than inventing amounts.
  */
 
+// The four leading columns are identical in every generation of the sheet.
 const COL_ROW_NUMBER = 1;
 const COL_DATE = 2;
 const COL_CITY = 3;
 const COL_UID = 4;
 const COL_FIRST_PART = 5;
-const COL_DIGITAL_ADDRESS = 35;
-const COL_ADDRESS = 36;
-const COL_MAINTENANCE = 37;
-const COL_TEL = 38;
-const COL_STORE = 39;
-const COL_MANAGER = 40;
-const COL_TECH_CODE = 41;
-const COL_FORM_CODE = 42;
-const COL_QUALITY = 43;
+
+/**
+ * Two sheet layouts exist in the wild and they are NOT interchangeable:
+ *
+ *   CURRENT — 4 leading + 30 part columns + 10 trailing.
+ *   LEGACY  — 4 leading + 28 part columns +  9 trailing, produced before this system
+ *             existed. It has no `سیم نمره ۰.۵`, a single merged `Switch`, and no
+ *             repair-status column.
+ *
+ * Reading a legacy sheet at the current column positions does not fail loudly — it
+ * silently shifts everything after the parts by two, so the store name is read out of the
+ * technician-code column and part quantities land on the wrong catalogue entries. The
+ * layout is therefore detected before a single row is read.
+ */
+export type ArchiveLayout = 'CURRENT' | 'LEGACY';
+
+interface ResolvedLayout {
+  layout: ArchiveLayout;
+  partCount: number;
+  /** Zero-based part column offset -> catalogue sortOrder. */
+  sortOrderFor: (offset: number) => number | null;
+  colDigitalAddress: number;
+  colAddress: number;
+  colMaintenance: number;
+  colTel: number;
+  colStore: number;
+  colManager: number;
+  colTechCode: number;
+  colFormCode: number;
+  colQuality: number;
+}
+
+function buildLayout(partCount: number): ResolvedLayout {
+  const legacy = partCount === LEGACY_PART_COLUMN_COUNT;
+  const afterParts = COL_FIRST_PART + partCount;
+
+  return {
+    layout: legacy ? 'LEGACY' : 'CURRENT',
+    partCount,
+    sortOrderFor: (offset) =>
+      legacy
+        ? (LEGACY_TO_CURRENT_SORT_ORDER[offset + 1] ?? null)
+        : (PART_CATALOG[offset]?.sortOrder ?? null),
+    colDigitalAddress: afterParts,
+    colAddress: afterParts + 1,
+    colMaintenance: afterParts + 2,
+    colTel: afterParts + 3,
+    colStore: afterParts + 4,
+    colManager: afterParts + 5,
+    colTechCode: afterParts + 6,
+    colFormCode: afterParts + 7,
+    colQuality: afterParts + 8,
+  };
+}
+
+/**
+ * `Digital Address` is the first trailing column and its English header survived every
+ * revision of the sheet, so its position tells us exactly how many part columns precede
+ * it. Falling back on the raw column count only when the header is unreadable keeps
+ * hand-edited archives importable.
+ */
+function detectLayout(sheet: ExcelJS.Worksheet, headerRow: number): ResolvedLayout {
+  const header = sheet.getRow(headerRow);
+  const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
+
+  for (let c = COL_FIRST_PART; c <= width; c++) {
+    if (cellText(header.getCell(c)).trim().toLowerCase() === 'digital address') {
+      const partCount = c - COL_FIRST_PART;
+      if (partCount === PART_CATALOG.length || partCount === LEGACY_PART_COLUMN_COUNT) {
+        return buildLayout(partCount);
+      }
+      throw new Error(`UNKNOWN_LAYOUT:${partCount}`);
+    }
+  }
+
+  // No usable header: infer from total width. Current sheets are 44 columns wide,
+  // legacy ones 41.
+  if (width >= COL_FIRST_PART + PART_CATALOG.length + 8) {
+    return buildLayout(PART_CATALOG.length);
+  }
+  if (width >= COL_FIRST_PART + LEGACY_PART_COLUMN_COUNT + 8) {
+    return buildLayout(LEGACY_PART_COLUMN_COUNT);
+  }
+  throw new Error(`UNKNOWN_LAYOUT:${width}`);
+}
 
 function cellText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return '';
@@ -117,6 +199,8 @@ export function parseHistoricalDate(raw: string): Date | null {
 }
 
 export interface HistoricalPreview {
+  /** Which sheet generation was detected — shown to the manager before committing. */
+  layout: ArchiveLayout;
   rows: number;
   forms: number;
   newStands: number;
@@ -143,23 +227,42 @@ interface HistoricalRow {
   parts: Array<{ sortOrder: number; quantity: number }>;
 }
 
-function readRows(buffer: Buffer): Promise<{ rows: HistoricalRow[]; skipped: number }> {
+function readRows(
+  buffer: Buffer,
+): Promise<{ rows: HistoricalRow[]; skipped: number; layout: ArchiveLayout }> {
   return (async () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) throw new Error('NO_SHEET');
 
-    // Detect the header row by looking for the known first header, falling back to row 1.
+    // Detect the header row by looking for a known header, falling back to row 1. The
+    // English trailing headers are checked too, because some archives were re-saved with
+    // the Persian leading headers translated or stripped.
     let headerRow = 1;
-    for (let r = 1; r <= Math.min(5, sheet.rowCount); r++) {
-      const first = cellText(sheet.getRow(r).getCell(COL_ROW_NUMBER)).trim();
-      const second = cellText(sheet.getRow(r).getCell(COL_DATE)).trim();
-      if (first === JTI_EXPORT_HEADERS[0] || second === JTI_EXPORT_HEADERS[1]) {
+    for (let r = 1; r <= Math.min(8, sheet.rowCount); r++) {
+      const row = sheet.getRow(r);
+      const first = cellText(row.getCell(COL_ROW_NUMBER)).trim();
+      const second = cellText(row.getCell(COL_DATE)).trim();
+      const hasEnglishTrailer = (() => {
+        const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
+        for (let c = COL_FIRST_PART; c <= width; c++) {
+          if (cellText(row.getCell(c)).trim().toLowerCase() === 'digital address') return true;
+        }
+        return false;
+      })();
+
+      if (
+        first === JTI_EXPORT_HEADERS[0] ||
+        second === JTI_EXPORT_HEADERS[1] ||
+        hasEnglishTrailer
+      ) {
         headerRow = r;
         break;
       }
     }
+
+    const cols = detectLayout(sheet, headerRow);
 
     const rows: HistoricalRow[] = [];
     let skipped = 0;
@@ -174,38 +277,43 @@ function readRows(buffer: Buffer): Promise<{ rows: HistoricalRow[]; skipped: num
         continue;
       }
 
+      // Quantities are read by OFFSET within the part block and then translated to a
+      // catalogue sortOrder, so a legacy sheet's 28 columns land on the right parts
+      // instead of being shifted onto their neighbours.
       const parts: Array<{ sortOrder: number; quantity: number }> = [];
-      for (const part of PART_CATALOG) {
-        const qty = cellNumber(row.getCell(COL_FIRST_PART + part.sortOrder - 1).value);
-        if (qty > 0) parts.push({ sortOrder: part.sortOrder, quantity: Math.round(qty) });
+      for (let offset = 0; offset < cols.partCount; offset++) {
+        const sortOrder = cols.sortOrderFor(offset);
+        if (sortOrder === null) continue;
+        const qty = cellNumber(row.getCell(COL_FIRST_PART + offset).value);
+        if (qty > 0) parts.push({ sortOrder, quantity: Math.round(qty) });
       }
 
-      const qualityRaw = cellText(row.getCell(COL_QUALITY));
+      const qualityRaw = cellText(row.getCell(cols.colQuality));
       const quality = qualityRaw ? Math.max(0, Math.min(5, cellNumber(qualityRaw))) : null;
 
       rows.push({
         uid,
         date,
         cityName: cellText(row.getCell(COL_CITY)).trim() || 'نامشخص',
-        storeName: cleanOptional(cellText(row.getCell(COL_STORE))),
-        address: cleanOptional(cellText(row.getCell(COL_ADDRESS))),
-        digitalAddress: cleanOptional(cellText(row.getCell(COL_DIGITAL_ADDRESS))),
-        managerName: cleanOptional(cellText(row.getCell(COL_MANAGER))),
-        phone: cleanOptional(cellText(row.getCell(COL_TEL))),
-        technicianCode: cleanOptional(cellText(row.getCell(COL_TECH_CODE))),
-        formCode: cleanOptional(cellText(row.getCell(COL_FORM_CODE))),
+        storeName: cleanOptional(cellText(row.getCell(cols.colStore))),
+        address: cleanOptional(cellText(row.getCell(cols.colAddress))),
+        digitalAddress: cleanOptional(cellText(row.getCell(cols.colDigitalAddress))),
+        managerName: cleanOptional(cellText(row.getCell(cols.colManager))),
+        phone: cleanOptional(cellText(row.getCell(cols.colTel))),
+        technicianCode: cleanOptional(cellText(row.getCell(cols.colTechCode))),
+        formCode: cleanOptional(cellText(row.getCell(cols.colFormCode))),
         quality,
-        notes: cleanOptional(cellText(row.getCell(COL_MAINTENANCE))),
+        notes: cleanOptional(cellText(row.getCell(cols.colMaintenance))),
         parts,
       });
     }
 
-    return { rows, skipped };
+    return { rows, skipped, layout: cols.layout };
   })();
 }
 
 export async function previewHistorical(buffer: Buffer): Promise<HistoricalPreview> {
-  const { rows, skipped } = await readRows(buffer);
+  const { rows, skipped, layout } = await readRows(buffer);
 
   const uids = [...new Set(rows.map((r) => r.uid))];
   // Locations, not stands, are what a uid identifies now.
@@ -224,6 +332,7 @@ export async function previewHistorical(buffer: Buffer): Promise<HistoricalPrevi
   return {
     rows: rows.length,
     forms: rows.length,
+    layout,
     newStands: uids.filter((u) => !known.has(u)).length,
     newStores: storeKeys.size,
     skipped,
@@ -263,7 +372,19 @@ async function historicalTechnicianId(): Promise<string> {
 
 export async function commitHistorical(
   buffer: Buffer,
-  opts: { name: string; importedById: string },
+  opts: {
+    name: string;
+    importedById: string;
+    /**
+     * Campaign the archive belongs to. Without one, an imported archive is invisible to
+     * every project filter and only reachable through per-uid history — which is exactly
+     * how past uploads went missing from the manager's view.
+     */
+    projectId?: string | null;
+    phaseId?: string | null;
+    /** Storage ref of the uploaded original, so the manager can download it again. */
+    fileRef?: string | null;
+  },
 ) {
   const { rows } = await readRows(buffer);
   if (rows.length === 0) return { imported: 0, skipped: 0 };
@@ -289,6 +410,9 @@ export async function commitHistorical(
             name: `${opts.name} (${start / CHUNK + 1})`,
             source: 'HISTORICAL',
             importedById: opts.importedById,
+            projectId: opts.projectId ?? null,
+            phaseId: opts.phaseId ?? null,
+            fileRef: opts.fileRef ?? null,
           },
         });
 
@@ -361,6 +485,10 @@ export async function commitHistorical(
               storeId,
               uid: row.uid,
               standIndex: 1,
+              // Carried onto the form itself, not just the batch: every project filter
+              // in the app reads RepairForm.projectId.
+              projectId: opts.projectId ?? null,
+              phaseId: opts.phaseId ?? null,
               storeName: row.storeName ?? null,
               storeAddress: row.address ?? null,
               storeManagerName: row.managerName ?? null,

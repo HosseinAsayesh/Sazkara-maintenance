@@ -165,7 +165,7 @@ export default async function UidSearchPage({
             </div>
           </Card>
 
-          <StandHistory locale={locale} history={stand.repairForms} />
+          <StandHistory locale={locale} history={stand.repairForms} canEdit />
         </>
       ) : null}
     </div>

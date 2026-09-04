@@ -277,7 +277,20 @@ export function RepairFormClient(props: RepairFormProps) {
         </div>
       </Card>
 
-      {/* ---------------- parts ---------------- */}
+      {/* ---------------- stand 1 ----------------
+          Everything below belongs to ONE stand and stays together: parts, quality, and
+          crucially its own before/after photos. The photos used to sit in a shared card
+          after the extra stands, which meant filling stand 1's parts, then all of stand 2,
+          then coming back for stand 1's photos — an easy way to attach the wrong pair. */}
+      <div className="rounded-xl border-2 border-brand-300 bg-brand-50/40 p-3 sm:p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
+            ۱
+          </span>
+          <h2 className="text-sm font-bold text-brand-900">{t('primaryStand')}</h2>
+          <span className="text-xs text-[var(--muted)] dir-ltr">{props.uid}</span>
+        </div>
+
       <Alert tone={outcome === 'REPAIRED' ? 'success' : 'warning'}>
         <span className="font-semibold">
           {outcome === 'REPAIRED' ? t('outcomeRepaired') : t('outcomeNotRepaired')}
@@ -379,6 +392,17 @@ export function RepairFormClient(props: RepairFormProps) {
         </div>
       </Card>
 
+        {/* This stand's own before/after shots, captured while it is still in front of
+            the technician. */}
+        <Card className="mt-4">
+          <CardHeader title={t('sectionPhotos')} description={t('standPhotosHelp')} />
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
+            <PhotoInput label={t('photoBefore')} name="photoBefore" required />
+            <PhotoInput label={t('photoAfter')} name="photoAfter" required />
+          </div>
+        </Card>
+      </div>
+
       {/* ---------------- additional stands at this store ---------------- */}
       <div className="space-y-4">
         {extraStands.map((stand, i) => (
@@ -413,14 +437,14 @@ export function RepairFormClient(props: RepairFormProps) {
         </Card>
       </div>
 
-      {/* ---------------- photos ---------------- */}
+      {/* ---------------- shared: the store itself ----------------
+          The storefront photo and any extras describe the visit, not one stand, so they
+          are shared across every stand reported here. */}
       <Card>
-        <CardHeader title={t('sectionPhotos')} description={t('photosHelp')} />
-        <div className="grid gap-4 p-4 sm:grid-cols-3">
+        <CardHeader title={t('sectionStorePhoto')} description={t('photosHelp')} />
+        <div className="grid gap-4 p-4 sm:grid-cols-2">
           <PhotoInput label={t('photoStore')} name="photoStore" required />
-          <PhotoInput label={t('photoBefore')} name="photoBefore" required />
-          <PhotoInput label={t('photoAfter')} name="photoAfter" required />
-          <div className="sm:col-span-3">
+          <div>
             <ExtraPhotoInput name="photoOther" />
           </div>
         </div>
