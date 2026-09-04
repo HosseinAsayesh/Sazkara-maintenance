@@ -250,6 +250,9 @@ export interface CommitOptions {
   excludedUids?: string[];
   /** §6.2 — manual stray uids are admitted straight away when a manager adds them. */
   confirmStands?: boolean;
+  /** Campaign this order belongs to. Defaults to the active project. */
+  projectId?: string | null;
+  phaseId?: string | null;
 }
 
 /**
@@ -258,6 +261,20 @@ export interface CommitOptions {
  */
 export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
   const excluded = new Set((opts.excludedUids ?? []).map(normaliseUid));
+
+  // An order belongs to a campaign. Unless the manager picked one, it joins the active
+  // project — otherwise the rows would sit outside every project filter and the stands
+  // repaired against them would have no campaign to be a re-repair *within*.
+  let projectId = opts.projectId ?? null;
+  let phaseId = opts.phaseId ?? null;
+  if (!projectId) {
+    const active = await prisma.project.findFirst({
+      where: { isActive: true },
+      select: { id: true, phases: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+    });
+    projectId = active?.id ?? null;
+    phaseId = phaseId ?? active?.phases[0]?.id ?? null;
+  }
 
   // Collapse in-file duplicates: last row for a uid wins, since later rows in Jti's
   // sheets tend to be the corrected ones.
@@ -277,6 +294,8 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
           fileRef: opts.fileRef,
           columnMapping: opts.mapping ? (opts.mapping as object) : undefined,
           mappingProfileId: opts.mappingProfileId,
+          projectId,
+          phaseId,
         },
       });
 

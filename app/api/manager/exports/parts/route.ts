@@ -16,9 +16,17 @@ export async function GET(request: Request) {
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   const cityId = url.searchParams.get('cityId') || undefined;
+  const projectId = url.searchParams.get('projectId') || undefined;
+  const phaseId = url.searchParams.get('phaseId') || undefined;
 
   const range = localDayRange(from, to);
-  const report = await buildPartsUsageReport({ from: range.from, to: range.to, cityId });
+  const report = await buildPartsUsageReport({
+    from: range.from,
+    to: range.to,
+    cityId,
+    projectId,
+    phaseId,
+  });
 
   const label = rangeLabel(from, to);
 

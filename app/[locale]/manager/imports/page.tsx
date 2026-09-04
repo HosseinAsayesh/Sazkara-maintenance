@@ -34,6 +34,8 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
       take: 40,
       include: {
         importedBy: { select: { name: true } },
+        project: { select: { name: true } },
+        phase: { select: { name: true } },
         _count: { select: { lines: true } },
       },
     }),
@@ -77,6 +79,7 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
                 <thead>
                   <tr>
                     <Th>{t('batchName')}</Th>
+                    <Th>{tc('project')}</Th>
                     <Th>{tc('status')}</Th>
                     <Th>{t('lines')}</Th>
                     <Th>{t('done')}</Th>
@@ -91,7 +94,18 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
                     const counts = countsByBatch.get(batch.id) ?? {};
                     return (
                       <tr key={batch.id}>
-                        <Td className="font-medium">{batch.name}</Td>
+                        <Td className="font-medium">
+                          <Link
+                            href={`/manager/imports/${batch.id}`}
+                            className="text-brand-700 hover:underline"
+                          >
+                            {batch.name}
+                          </Link>
+                        </Td>
+                        <Td className="text-xs text-[var(--muted)]">
+                          {batch.project?.name ?? '—'}
+                          {batch.phase ? ` · ${batch.phase.name}` : ''}
+                        </Td>
                         <Td>
                           <Badge tone="info">{t(`source.${batch.source}`)}</Badge>
                         </Td>

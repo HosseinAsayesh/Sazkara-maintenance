@@ -61,9 +61,20 @@ export interface EvidenceParams {
   cityId: string;
   /** Any instant inside the target Tehran-local day. */
   date: Date;
+  /**
+   * Restrict the pack to within-project re-repairs. Those are reviewed separately from
+   * ordinary fieldwork, so they get their own document rather than being buried in the
+   * day's main pack. Never cached: the EvidencePdfBatch cache is keyed on (city, day),
+   * which belongs to the main pack.
+   */
+  onlyReRepairs?: boolean;
 }
 
-export async function collectEvidenceData({ cityId, date }: EvidenceParams) {
+export async function collectEvidenceData({
+  cityId,
+  date,
+  onlyReRepairs,
+}: EvidenceParams) {
   const [city, settings, forms] = await Promise.all([
     prisma.city.findUnique({ where: { id: cityId } }),
     getAppSettings(),
@@ -71,6 +82,7 @@ export async function collectEvidenceData({ cityId, date }: EvidenceParams) {
       where: {
         cityId,
         date: { gte: startOfLocalDay(date), lt: endOfLocalDayExclusive(date) },
+        ...(onlyReRepairs ? { isReRepair: true } : {}),
       },
       orderBy: { formCode: 'asc' },
       include: {

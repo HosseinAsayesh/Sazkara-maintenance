@@ -174,7 +174,7 @@ export function RepairFormClient(props: RepairFormProps) {
           </p>
         ) : null}
         {state.success.isReRepair ? (
-          <p className="mt-2 text-xs text-amber-700">{tt('reRepairWarning', { days: 14 })}</p>
+          <p className="mt-2 text-xs text-amber-700">{tt('reRepairWarning')}</p>
         ) : null}
         <div className="mt-5 flex flex-col gap-2">
           <Link

@@ -206,12 +206,26 @@ export function jalaliToDate(
   // A Jalali year begins around 20 March of (year + 621).
   let guess = Date.UTC(year + 621, 2, 20, 12) + (targetDoy - 1) * DAY_MS;
 
-  for (let i = 0; i < 8; i++) {
+  /** >0 when the target is after `p`, <0 when before, 0 when identical. */
+  const compare = (p: JalaliParts) => {
+    if (p.year !== year) return year - p.year;
+    if (p.month !== month) return month - p.month;
+    return day - p.day;
+  };
+
+  for (let i = 0; i < 12; i++) {
     const p = toJalaliParts(new Date(guess), timeZone);
-    const deltaDays =
+    const direction = compare(p);
+    if (direction === 0) return startOfLocalDay(new Date(guess), timeZone);
+
+    // The jump treats every Jalali year as 365 days, which is one short whenever the
+    // span crosses a 366-day leap year — around Nowruz that makes the estimate land on
+    // the last day of the previous year and the naive delta evaluate to zero. When the
+    // estimate says "no move" but the dates still differ, step a single day in the
+    // direction `compare` proves is correct, so the loop always makes progress.
+    const approxDelta =
       (year - p.year) * 365 + (targetDoy - jalaliDayOfYear(p.month, p.day));
-    if (deltaDays === 0) return startOfLocalDay(new Date(guess), timeZone);
-    guess += deltaDays * DAY_MS;
+    guess += (approxDelta !== 0 ? approxDelta : Math.sign(direction)) * DAY_MS;
   }
 
   throw new Error(`Could not resolve Jalali date ${year}/${month}/${day}`);

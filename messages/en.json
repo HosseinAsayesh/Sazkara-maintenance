@@ -131,7 +131,7 @@
     "historyTitle": "History for this stand",
     "noHistory": "No previous reports for this UID",
     "lastRepairedOn": "Last repaired: {date}",
-    "reRepairWarning": "This stand was repaired within the last {days, number} days — this report will be logged as a re-repair.",
+    "reRepairWarning": "This stand was already repaired in this project, so this report is recorded as a re-repair.",
     "startForm": "Start report",
     "profileTitle": "My stats",
     "stats": {
@@ -140,7 +140,8 @@
       "reRepairs": "Re-repairs",
       "totalVisits": "Total visits",
       "estimatedWage": "Estimated wage"
-    }
+    },
+    "previousProjectNotice": "This stand was repaired in an earlier project. This report is not a re-repair and goes in the main export."
   },
   "form": {
     "title": "Stand repair form",
@@ -330,7 +331,12 @@
     "cannotDeleteWithForms": "This order has repair reports against it and cannot be deleted.",
     "addLine": "Add row",
     "saveLine": "Save",
-    "editLines": "Edit rows"
+    "editLines": "Edit rows",
+    "status": {
+      "PENDING": "Pending",
+      "DONE": "Done",
+      "EXCLUDED": "Excluded"
+    }
   },
   "pendingUids": {
     "title": "UIDs awaiting confirmation",
@@ -373,7 +379,12 @@
     "partsPerCity": "By city",
     "downloadParts": "Download parts report",
     "noRows": "There is nothing to export in this range",
-    "generating": "Generating…"
+    "generating": "Generating…",
+    "contentScope": "Export contents",
+    "scopeMain": "Main repairs (re-repairs excluded)",
+    "scopeReRepair": "Re-repairs only",
+    "scopeAll": "Both in one file",
+    "contentScopeHelp": "A re-repair is the same UID twice within one project. UIDs repaired in earlier projects stay in the main file and are only tinted."
   },
   "evidence": {
     "title": "Evidence PDFs",
@@ -388,7 +399,8 @@
     "cachedList": "Generated files",
     "coverContact": "Repair manager contact",
     "logoPlaceholder": "Sazkara logo",
-    "generatedAtHeader": "Generated at"
+    "generatedAtHeader": "Generated at",
+    "generating": "Generating..."
   },
   "analytics": {
     "title": "Analytics",
@@ -436,7 +448,7 @@
   },
   "reRepairs": {
     "title": "Re-repairs",
-    "help": "Stands that needed repair again within {days, number} days. They are not counted a second time in the repaired-stand total, but their parts do count toward overall usage.",
+    "help": "Stands repaired twice within one project. The same UID recurring in a later project is not a re-repair. These are not counted again in \"stands repaired\", but the parts they consumed still count toward usage totals.",
     "daysAfter": "{days, number} days after the previous repair",
     "empty": "Nothing recorded",
     "gapHeader": "Gap since previous repair",

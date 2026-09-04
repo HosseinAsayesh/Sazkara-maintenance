@@ -13,7 +13,14 @@ import { getOverview, getPartRates, forecastParts } from '../lib/analytics';
 // NB: lib/auth is deliberately not imported here — it pulls in next/navigation, which
 // cannot load outside the Next runtime. Password hashing is the only piece needed.
 import { nextTechnicianCode } from '../lib/codes';
-import { DAY_MS, formatJalali } from '../lib/dates';
+import {
+  DAY_MS,
+  formatJalali,
+  isValidJalaliDate,
+  jalaliMonthLength,
+  jalaliToDate,
+  toJalaliParts,
+} from '../lib/dates';
 import { buildJtiWorkbook, collectJtiRows } from '../lib/exports/jti';
 import { buildPartsUsageReport } from '../lib/exports/parts-usage';
 import { commitHistorical, parseHistoricalDate, previewHistorical } from '../lib/historical';
@@ -39,6 +46,9 @@ const PNG = Buffer.from(
   'base64',
 );
 
+/** Name of the second campaign this suite creates to exercise the project boundary. */
+const TEST_PROJECT_NAME = 'پروژه آزمایشی دوم';
+
 async function reset() {
   // Wipe transactional data but keep the seeded catalogue/cities/manager.
   await prisma.partUsage.deleteMany();
@@ -48,6 +58,9 @@ async function reset() {
   await prisma.orderLine.deleteMany();
   await prisma.importBatch.deleteMany();
   await prisma.columnMappingProfile.deleteMany();
+  // The seeded project is left alone; only the one this suite creates is removed, so a
+  // re-run does not collide on Project.name. Phases cascade with it.
+  await prisma.project.deleteMany({ where: { name: TEST_PROJECT_NAME } });
   await prisma.stand.deleteMany();
   await prisma.store.deleteMany();
   await prisma.user.deleteMany({ where: { role: 'TECHNICIAN' } });
@@ -170,6 +183,11 @@ async function main() {
     create: { key: 'secondStandRate', value: 90000 },
     update: { value: 90000 },
   });
+  await prisma.wageSetting.upsert({
+    where: { key: 'unrepairedVisitRate' },
+    create: { key: 'unrepairedVisitRate', value: 50000 },
+    update: { value: 50000 },
+  });
 
   const photos = [
     { type: 'STORE' as const, fileRef: 'test/store.png' },
@@ -237,8 +255,12 @@ async function main() {
     ...sigs,
   });
   assert.equal(notRepaired.outcome, 'NOT_REPAIRED');
-  assert.equal(notRepaired.wage.amount, 0);
+  // Client ruling: the technician travelled either way, so a wasted trip is paid a flat
+  // call-out rate, and it sits outside the tier ladder (tier 0).
+  assert.equal(notRepaired.wage.amount, 50000);
+  assert.equal(notRepaired.wage.tier, 0);
   ok('no parts -> NOT_REPAIRED with a fixed reason', notRepaired.form.notRepairedReason!);
+  ok('unsuccessful visit paid the flat call-out rate', String(notRepaired.wage.amount));
 
   await assert.rejects(
     () =>
@@ -269,7 +291,9 @@ async function main() {
   ok('§4.4 all three photos are enforced');
 
   /* ---------------------------------------------------------------- */
-  section('§6.3 re-repair window');
+  // Revised rule: the PROJECT boundary defines a re-repair, not elapsed time.
+  section('§6.3 re-repair is scoped to the project');
+
   const reRepair = await createRepairForm({
     uid: 'SZ1001',
     technicianId: tech.id,
@@ -281,22 +305,62 @@ async function main() {
   });
   assert.equal(reRepair.isReRepair, true);
   assert.equal(reRepair.form.previousFormId, first.form.id);
-  ok('repeat repair inside 14 days flagged as a re-repair');
+  // 5 days after the first visit — inside the window, so also flagged "quick".
+  assert.equal(reRepair.form.isQuickReRepair, true);
+  ok('same stand twice in one project is a re-repair');
+  ok('re-repair within 14 days additionally flagged as quick');
 
-  // A repair long after the window is a fresh repair, not a re-repair.
-  const oldDate = new Date(Date.now() - 40 * DAY_MS);
-  const outsideWindow = await createRepairForm({
+  // Same project, but far outside the old 14-day window: still a re-repair, because the
+  // project boundary — not the gap — is what decides.
+  const slowReRepair = await createRepairForm({
     uid: 'SZ1002',
     technicianId: tech.id,
     cityId: tehran.id,
-    date: oldDate,
+    date: new Date(Date.now() + 40 * DAY_MS),
     parts: [{ partCatalogItemId: spring.id, action: 'REPLACED', quantity: 1 }],
     qualityScore: 4,
     photos,
     ...sigs,
   });
-  assert.equal(outsideWindow.isReRepair, false);
-  ok('repair outside the 14-day window is not a re-repair');
+  assert.equal(slowReRepair.isReRepair, true);
+  assert.equal(slowReRepair.form.isQuickReRepair, false);
+  ok('same project, 45 days apart, is still a re-repair (not quick)');
+
+  // A NEW campaign: the same uid is ordinary recurring work, must NOT be a re-repair,
+  // and is marked as having history in an earlier project instead.
+  const nextProject = await prisma.project.create({
+    data: { name: TEST_PROJECT_NAME, startDate: new Date(), isActive: false },
+  });
+  const nextPhase = await prisma.phase.create({
+    data: { projectId: nextProject.id, name: 'فاز ۱', sortOrder: 1 },
+  });
+  const nextBatch = await prisma.importBatch.create({
+    data: {
+      name: 'سفارش پروژه دوم',
+      source: 'JTI_EXCEL',
+      importedById: manager.id,
+      projectId: nextProject.id,
+      phaseId: nextPhase.id,
+    },
+  });
+  await prisma.orderLine.create({
+    data: { batchId: nextBatch.id, uid: 'SZ1001', cityName: tehran.name },
+  });
+
+  const laterProjectRepair = await createRepairForm({
+    uid: 'SZ1001',
+    technicianId: tech.id,
+    cityId: tehran.id,
+    parts: [{ partCatalogItemId: fuse.id, action: 'REPLACED', quantity: 1 }],
+    qualityScore: 5,
+    photos,
+    ...sigs,
+  });
+  assert.equal(laterProjectRepair.form.projectId, nextProject.id);
+  assert.equal(laterProjectRepair.isReRepair, false);
+  assert.equal(laterProjectRepair.form.hasPreviousProjectHistory, true);
+  ok('same uid in a LATER project is not a re-repair');
+  ok('...but is marked as having history in an earlier project');
 
   /* ---------------------------------------------------------------- */
   section('§6.4 duplicate detection on a later order');
@@ -329,27 +393,33 @@ async function main() {
   /* ---------------------------------------------------------------- */
   section('§6.7 per-uid history');
   const history = await lookupUid('SZ1001');
-  assert.equal(history.history.length, 2);
+  // Two repairs in project 1 (original + re-repair) and one in project 2.
+  assert.equal(history.history.length, 3);
   ok('stand accumulates every form ever filed against it', `${history.history.length} forms`);
 
   /* ---------------------------------------------------------------- */
   section('§7 / §6.3 dashboard counting');
   const overview = await getOverview({});
-  // SZ1001 (first) + SZ1002 (first) + SZ1002 (old) = 3 repaired; the re-repair excluded.
-  assert.equal(overview.totals.reRepairs, 1);
+  // Repaired (re-repairs excluded): SZ1001 p1, SZ1002 p1, SZ1001 p2 = 3.
+  // Re-repairs: the SZ1001 repeat and the SZ1002 repeat, both inside project 1 = 2.
+  assert.equal(overview.totals.reRepairs, 2);
   assert.equal(overview.totals.repaired, 3);
   assert.equal(overview.totals.notRepaired, 1);
+  // Distinct uids visited: SZ1001, SZ1002, SZ1003.
+  assert.equal(overview.totals.totalUids, 3);
+  // Only the second stand of the shared-store visit was serviced as a sub-stand.
+  assert.equal(overview.totals.subStands, 1);
+  ok('distinct uids and sub-stands counted apart', `uids=${overview.totals.totalUids}, sub=${overview.totals.subStands}`);
   ok('re-repair excluded from the repaired count', `repaired=${overview.totals.repaired}, reRepairs=${overview.totals.reRepairs}`);
 
-  // All three repairs were in Tehran (SZ1001 today, SZ1002 today, SZ1002 40 days ago —
-  // the last is a separate project, outside the re-repair window, so it counts).
   assert.equal(overview.split.tehran.repaired, 3);
   assert.equal(overview.split.otherCities.notRepaired, 1);
   ok('§7 Tehran vs other-cities split', `Tehran repaired=${overview.split.tehran.repaired}`);
   // 5 days ago: SZ1001 tier 1 (150k) + SZ1002 tier 2 (90k).
-  // Today: the SZ1001 re-repair is the only stand at that store today, so tier 1 (150k).
-  // 40 days ago: SZ1002 alone that day, tier 1 (150k).
-  assert.equal(overview.split.tehran.wageTotal, 150000 + 90000 + 150000 + 150000);
+  // Today: the SZ1001 re-repair (150k) and the project-2 SZ1001 repair (150k) — the same
+  // stand, so neither demotes the other to the second-stand rate.
+  // +40 days: SZ1002 alone that day, tier 1 (150k).
+  assert.equal(overview.split.tehran.wageTotal, 150000 + 90000 + 150000 + 150000 + 150000);
   ok('wage totals split by city bucket', String(overview.split.tehran.wageTotal));
 
   /* ---------------------------------------------------------------- */
@@ -366,8 +436,26 @@ async function main() {
 
   /* ---------------------------------------------------------------- */
   section('§8 Jti export format');
+  // Default scope is MAIN: every stand repaired in the range EXCEPT within-project
+  // re-repairs, which get their own workbook.
   const exportRows = await collectJtiRows({});
-  assert.equal(exportRows.length, 4); // repaired only (3 repairs + 1 re-repair)
+  assert.equal(exportRows.length, 3);
+  ok('main export excludes within-project re-repairs', `${exportRows.length} rows`);
+
+  const reRepairRows = await collectJtiRows({ scope: 'RE_REPAIR' });
+  assert.equal(reRepairRows.length, 2);
+  assert.ok(reRepairRows.every((r) => r.isReRepair));
+  ok('re-repair export carries only the repeats', `${reRepairRows.length} rows`);
+
+  const allRows = await collectJtiRows({ scope: 'ALL' });
+  assert.equal(allRows.length, 5);
+  ok('combined scope returns both halves', `${allRows.length} rows`);
+
+  // A uid repaired in an earlier project stays in the MAIN sheet and is only marked.
+  const carriedOver = exportRows.filter((r) => r.hasPreviousProjectHistory);
+  assert.equal(carriedOver.length, 1);
+  assert.equal(carriedOver[0].uid, 'SZ1001');
+  ok('previous-project stand kept in the main export, flagged not excluded');
   const workbook = await buildJtiWorkbook(exportRows);
 
   const check = new ExcelJS.Workbook();
@@ -436,7 +524,7 @@ async function main() {
 
   const archive = await buildJtiWorkbook(exportRows);
   const preview = await previewHistorical(archive);
-  assert.equal(preview.rows, 4);
+  assert.equal(preview.rows, 3);
   ok('a previous Jti export is readable as historical data', `${preview.rows} rows`);
 
   const beforeForms = await prisma.repairForm.count();
@@ -446,7 +534,7 @@ async function main() {
   });
   // Every row carries a form code that already exists, so all are skipped as duplicates.
   assert.equal(historical.imported, 0);
-  assert.equal(historical.skipped, 4);
+  assert.equal(historical.skipped, 3);
   assert.equal(await prisma.repairForm.count(), beforeForms);
   ok('re-importing the same archive is idempotent', `${historical.skipped} rows skipped`);
 
@@ -477,9 +565,106 @@ async function main() {
   const pdf = await generateEvidencePdf({ cityId: tehran.id, date: new Date() });
   assert.equal(pdf.buffer.subarray(0, 4).toString('latin1'), '%PDF');
   assert.ok(pdf.buffer.length > 20_000, 'PDF should contain real rendered content');
-  // Today's Tehran visits: just the SZ1001 re-repair (the pair was 5 days ago).
-  assert.equal(pdf.standCount, 1);
+  // Today's Tehran visits: the SZ1001 re-repair and the SZ1001 repair filed under the
+  // second project (the shared-store pair was 5 days ago).
+  assert.equal(pdf.standCount, 2);
   ok('evidence PDF rendered via Chrome', `${(pdf.buffer.length / 1024).toFixed(0)} KB, ${pdf.standCount} stands`);
+
+  // The re-repair pack is the same day filtered to repeats, so it must be strictly
+  // smaller — this is the document the manager reviews separately from the day's work.
+  const reRepairPdf = await generateEvidencePdf({
+    cityId: tehran.id,
+    date: new Date(),
+    onlyReRepairs: true,
+  });
+  assert.equal(reRepairPdf.buffer.subarray(0, 4).toString('latin1'), '%PDF');
+  assert.equal(reRepairPdf.standCount, 1);
+  ok('re-repair evidence pack covers only the repeats', `${reRepairPdf.standCount} stand`);
+
+  /* ---------------------------------------------------------------- */
+  section('SMD strips measured in centimetres');
+  const smdWhite = parts.find((p) => p.nameFa === 'نوار SMD سفید')!;
+  assert.equal(smdWhite.unit, 'CENTIMETER');
+  assert.equal(smdWhite.quantityStep, 50);
+  const pieceParts = parts.filter((p) => p.unit === 'CENTIMETER');
+  assert.equal(pieceParts.length, 2); // white + blue strip, nothing else
+  ok('only the two SMD strips are centimetre-measured', `step ${smdWhite.quantityStep} cm`);
+
+  const smdForm = await createRepairForm({
+    uid: 'SZ7777',
+    technicianId: tech.id,
+    cityId: isfahan.id,
+    storeName: 'فروشگاه نوار',
+    parts: [{ partCatalogItemId: smdWhite.id, action: 'REPLACED', quantity: 150 }],
+    qualityScore: 4,
+    photos,
+    ...sigs,
+  });
+  assert.equal(smdForm.outcome, 'REPAIRED');
+  ok('a 150 cm strip cut is accepted');
+
+  // A length that is not a whole 50 cm step cannot be cut, so the server refuses it
+  // rather than silently rounding a number that ends up on a parts bill.
+  await assert.rejects(
+    () =>
+      createRepairForm({
+        uid: 'SZ7778',
+        technicianId: tech.id,
+        cityId: isfahan.id,
+        parts: [{ partCatalogItemId: smdWhite.id, action: 'REPLACED', quantity: 137 }],
+        qualityScore: 4,
+        photos,
+        ...sigs,
+      }),
+    /INVALID_QUANTITY/,
+  );
+  ok('a non-multiple-of-50 cut is rejected');
+
+  // The centimetre value must reach the Jti sheet as-is, in the strip's own column.
+  const smdRows = await collectJtiRows({ scope: 'ALL' });
+  const smdRow = smdRows.find((r) => r.uid === 'SZ7777')!;
+  assert.equal(smdRow.replaced[smdWhite.exportColumnKey], 150);
+  const smdBook = await buildJtiWorkbook([smdRow]);
+  const smdCheck = new ExcelJS.Workbook();
+  await smdCheck.xlsx.load(smdBook as unknown as ArrayBuffer);
+  const smdCol = 4 + PART_CATALOG.findIndex((p) => p.nameFa === 'نوار SMD سفید') + 1;
+  assert.equal(smdCheck.worksheets[0].getRow(2).getCell(smdCol).value, 150);
+  ok('centimetres export in the strip column, not converted to pieces', `col ${smdCol} = 150`);
+
+  /* ---------------------------------------------------------------- */
+  // The Shamsi picker converts Jalali -> Gregorian by correcting an estimate against the
+  // Intl forward conversion. An earlier version treated every Jalali year as 365 days,
+  // which silently returned the wrong day for Nowruz in any year following a leap year,
+  // so both directions are now walked exhaustively.
+  section('Jalali <-> Gregorian conversion');
+  let conversions = 0;
+  for (let year = 1400; year <= 1410; year++) {
+    for (let month = 1; month <= 12; month++) {
+      for (let day = 1; day <= jalaliMonthLength(year, month); day++) {
+        const back = toJalaliParts(jalaliToDate(year, month, day));
+        assert.deepEqual(
+          [back.year, back.month, back.day],
+          [year, month, day],
+          `Jalali round-trip failed for ${year}/${month}/${day}`,
+        );
+        conversions++;
+      }
+    }
+  }
+  ok('every Jalali day of 1400-1410 round-trips exactly', `${conversions} dates`);
+
+  // Nowruz immediately after a leap year is the case that used to break.
+  assert.equal(formatJalali(jalaliToDate(1404, 1, 1)), '1404/01/01');
+  assert.equal(formatJalali(jalaliToDate(1400, 1, 1)), '1400/01/01');
+  ok('Nowruz following a leap year resolves to the correct day');
+
+  // Esfand is 30 days only in a leap year, and the validator must agree.
+  for (let year = 1400; year <= 1410; year++) {
+    assert.equal(jalaliMonthLength(year, 12), isValidJalaliDate(year, 12, 30) ? 30 : 29);
+  }
+  assert.equal(isValidJalaliDate(1403, 12, 30), true);
+  assert.equal(isValidJalaliDate(1404, 12, 30), false);
+  ok('Esfand 30 exists only in leap years', '1403 yes, 1404 no');
 
   /* ---------------------------------------------------------------- */
   section('normalisation guards');

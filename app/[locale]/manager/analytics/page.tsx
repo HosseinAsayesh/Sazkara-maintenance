@@ -17,6 +17,7 @@ import { getOverview, getPartRates } from '@/lib/analytics';
 import { requireManager } from '@/lib/auth';
 import { localDayRange } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
+import { listProjectOptions } from '@/lib/projects';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,8 +33,10 @@ export default async function AnalyticsPage({
   const from = typeof sp.from === 'string' ? sp.from : undefined;
   const to = typeof sp.to === 'string' ? sp.to : undefined;
   const cityId = typeof sp.cityId === 'string' ? sp.cityId : undefined;
+  const projectId = typeof sp.projectId === 'string' ? sp.projectId : undefined;
+  const phaseId = typeof sp.phaseId === 'string' ? sp.phaseId : undefined;
   const range = localDayRange(from, to);
-  const filters = { from: range.from, to: range.to, cityId };
+  const filters = { from: range.from, to: range.to, cityId, projectId, phaseId };
 
   const [t, tc, tr, td] = await Promise.all([
     getTranslations({ locale, namespace: 'analytics' }),
@@ -42,10 +45,11 @@ export default async function AnalyticsPage({
     getTranslations({ locale, namespace: 'dashboard' }),
   ]);
 
-  const [overview, partRates, cities] = await Promise.all([
+  const [overview, partRates, cities, projects] = await Promise.all([
     getOverview(filters),
     getPartRates(filters),
     prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    listProjectOptions(),
   ]);
 
   const visited = overview.totals.repaired + overview.totals.notRepaired;
@@ -56,7 +60,15 @@ export default async function AnalyticsPage({
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
 
-      <DateRangeFilter from={from} to={to} cities={cities} cityId={cityId} />
+      <DateRangeFilter
+        from={from}
+        to={to}
+        cities={cities}
+        cityId={cityId}
+        projects={projects}
+        projectId={projectId}
+        phaseId={phaseId}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label={td('repaired')} value={overview.totals.repaired} tone="success" />

@@ -3,6 +3,7 @@ import 'server-only';
 import ExcelJS from 'exceljs';
 
 import { prisma } from '../prisma';
+import { projectScopeWhere } from '../projects';
 
 /**
  * Parts-usage totals for accounting (§6.8).
@@ -20,6 +21,8 @@ export interface PartsUsageFilters {
   from?: Date;
   to?: Date;
   cityId?: string;
+  projectId?: string | null;
+  phaseId?: string | null;
 }
 
 export interface PartUsageRow {
@@ -47,6 +50,7 @@ export async function buildPartsUsageReport(
 ): Promise<PartsUsageReport> {
   const formWhere = {
     outcome: 'REPAIRED' as const,
+    ...projectScopeWhere(filters.projectId, filters.phaseId),
     ...(filters.cityId ? { cityId: filters.cityId } : {}),
     ...(filters.from || filters.to
       ? {

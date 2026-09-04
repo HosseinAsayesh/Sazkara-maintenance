@@ -58,11 +58,6 @@ export function JalaliDateInput({
     month: selected?.month ?? today.month,
   }));
 
-  // Re-centre the calendar when the field is cleared or set from outside.
-  useEffect(() => {
-    if (selected) setView({ year: selected.year, month: selected.month });
-  }, [selected?.year, selected?.month]); // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -91,6 +86,21 @@ export function JalaliDateInput({
       />
     );
   }
+
+  /**
+   * Centre the calendar on the selected date each time it opens. Doing this on open
+   * rather than in an effect keeps the month the user paged to while the popup is
+   * still up, and avoids a setState-during-effect cascade.
+   */
+  const togglePicker = () => {
+    if (!open) {
+      setView({
+        year: selected?.year ?? today.year,
+        month: selected?.month ?? today.month,
+      });
+    }
+    setOpen(!open);
+  };
 
   const monthLength = jalaliMonthLength(view.year, view.month);
   const leading = jalaliMonthStartWeekday(view.year, view.month);
@@ -121,11 +131,11 @@ export function JalaliDateInput({
         aria-label={ariaLabel}
         value={label}
         placeholder="—"
-        onClick={() => setOpen((o) => !o)}
+        onClick={togglePicker}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            setOpen((o) => !o);
+            togglePicker();
           }
         }}
         className="cursor-pointer"

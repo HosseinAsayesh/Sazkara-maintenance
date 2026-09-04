@@ -4,7 +4,7 @@ import { RepairFormClient } from '@/components/RepairFormClient';
 import { StandHistory } from '@/components/StandHistory';
 import { Alert } from '@/components/ui';
 import { requireTechnician } from '@/lib/auth';
-import { formatDateForLocale, RE_REPAIR_WINDOW_DAYS } from '@/lib/dates';
+import { formatDateForLocale } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
 import { lookupUid } from '@/lib/repair-forms';
 
@@ -56,9 +56,18 @@ export default async function StandFormPage({
         <Alert tone="info">{tt('pendingConfirmBadge')}</Alert>
       ) : null}
 
-      {/* §6.3 — warn before the form is filled in, not after it is submitted. */}
-      {lookup.wouldBeReRepair && lookup.lastRepaired ? (
-        <Alert tone="warning" title={tt('reRepairWarning', { days: RE_REPAIR_WINDOW_DAYS })}>
+      {/* §6.3 — warn before the form is filled in, not after it is submitted. The
+          trigger is the project boundary, so the two cases read differently: a repeat
+          inside this campaign is a re-repair, while history from an earlier campaign is
+          context the technician should see but is not a re-repair. */}
+      {lookup.wouldBeReRepair && lookup.previousInProject ? (
+        <Alert tone="warning" title={tt('reRepairWarning')}>
+          {tt('lastRepairedOn', {
+            date: formatDateForLocale(lookup.previousInProject.date, locale),
+          })}
+        </Alert>
+      ) : lookup.hasPreviousProjectHistory && lookup.lastRepaired ? (
+        <Alert tone="info" title={tt('previousProjectNotice')}>
           {tt('lastRepairedOn', {
             date: formatDateForLocale(lookup.lastRepaired.date, locale),
           })}

@@ -3,7 +3,17 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
-import { Alert, Button, Card, CardHeader, Field, Input, Select } from './ui';
+import { JalaliDateInput } from './JalaliDateInput';
+import { Alert, Button, Card, CardHeader, Field, Select } from './ui';
+
+export type ExportContentScope = 'MAIN' | 'RE_REPAIR' | 'ALL';
+
+export interface ExportProjectOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  phases: Array<{ id: string; name: string }>;
+}
 
 /**
  * §7/§8 — date-range exports. Both downloads are plain GETs against a route handler, so
@@ -11,8 +21,15 @@ import { Alert, Button, Card, CardHeader, Field, Input, Select } from './ui';
  */
 export function ExportPanel({
   cities,
+  projects = [],
+  fixedScope,
+  showPartsReport = true,
 }: {
   cities: Array<{ id: string; name: string }>;
+  projects?: ExportProjectOption[];
+  /** Locks the panel to one half of the split — used by the re-repair page. */
+  fixedScope?: ExportContentScope;
+  showPartsReport?: boolean;
 }) {
   const t = useTranslations('exports');
   const tc = useTranslations('common');
@@ -21,7 +38,14 @@ export function ExportPanel({
   const [to, setTo] = useState('');
   const [scope, setScope] = useState<'combined' | 'perCity' | 'single'>('combined');
   const [cityId, setCityId] = useState('');
-  const [includeReRepairs, setIncludeReRepairs] = useState(true);
+  const [contentScope, setContentScope] = useState<ExportContentScope>(
+    fixedScope ?? 'MAIN',
+  );
+  const [projectId, setProjectId] = useState(
+    projects.find((p) => p.isActive)?.id ?? '',
+  );
+  const [phaseId, setPhaseId] = useState('');
+  const phases = projects.find((p) => p.id === projectId)?.phases ?? [];
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -70,21 +94,43 @@ export function ExportPanel({
         <CardHeader title={t('jtiTitle')} description={t('jtiHelp')} />
         <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label={tc('from')}>
-            <Input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="dir-ltr"
-            />
+            <JalaliDateInput value={from} onChange={setFrom} ariaLabel={tc('from')} />
           </Field>
           <Field label={tc('to')}>
-            <Input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="dir-ltr"
-            />
+            <JalaliDateInput value={to} onChange={setTo} ariaLabel={tc('to')} />
           </Field>
+
+          {projects.length ? (
+            <Field label={tc('project')}>
+              <Select
+                value={projectId}
+                onChange={(e) => {
+                  setProjectId(e.target.value);
+                  setPhaseId('');
+                }}
+              >
+                <option value="">{tc('allProjects')}</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+
+          {phases.length ? (
+            <Field label={tc('phase')}>
+              <Select value={phaseId} onChange={(e) => setPhaseId(e.target.value)}>
+                <option value="">{tc('allPhases')}</option>
+                {phases.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label={t('scope')}>
             <Select
               value={scope}
@@ -108,22 +154,22 @@ export function ExportPanel({
             </Field>
           ) : null}
 
-          <div className="sm:col-span-2 lg:col-span-4">
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={includeReRepairs}
-                onChange={(e) => setIncludeReRepairs(e.target.checked)}
-                className="mt-1"
-              />
-              <span>
-                <span className="font-medium">{t('includeReRepairs')}</span>
-                <span className="block text-xs text-[var(--muted)]">
-                  {t('includeReRepairsHelp')}
-                </span>
-              </span>
-            </label>
-          </div>
+          {!fixedScope ? (
+            <div className="sm:col-span-2 lg:col-span-2">
+              <Field label={t('contentScope')} hint={t('contentScopeHelp')}>
+                <Select
+                  value={contentScope}
+                  onChange={(e) =>
+                    setContentScope(e.target.value as ExportContentScope)
+                  }
+                >
+                  <option value="MAIN">{t('scopeMain')}</option>
+                  <option value="RE_REPAIR">{t('scopeReRepair')}</option>
+                  <option value="ALL">{t('scopeAll')}</option>
+                </Select>
+              </Field>
+            </div>
+          ) : null}
 
           <div className="sm:col-span-2 lg:col-span-4">
             <Button
@@ -132,9 +178,11 @@ export function ExportPanel({
               onClick={() =>
                 download(
                   `/api/manager/exports/jti?${query({
-                    scope: scope === 'single' ? 'combined' : scope,
+                    layout: scope === 'single' ? 'combined' : scope,
                     cityId: scope === 'single' ? cityId : '',
-                    includeReRepairs: includeReRepairs ? 'true' : 'false',
+                    scope: contentScope,
+                    projectId,
+                    phaseId,
                   })}`,
                 )
               }
@@ -145,19 +193,25 @@ export function ExportPanel({
         </div>
       </Card>
 
-      <Card>
-        <CardHeader title={t('partsTitle')} description={t('partsHelp')} />
-        <div className="p-4">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy}
-            onClick={() => download(`/api/manager/exports/parts?${query()}`)}
-          >
-            {busy ? t('generating') : t('downloadParts')}
-          </Button>
-        </div>
-      </Card>
+      {showPartsReport ? (
+        <Card>
+          <CardHeader title={t('partsTitle')} description={t('partsHelp')} />
+          <div className="p-4">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                download(
+                  `/api/manager/exports/parts?${query({ projectId, phaseId })}`,
+                )
+              }
+            >
+              {busy ? t('generating') : t('downloadParts')}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {error ? <Alert tone="danger">{error}</Alert> : null}
     </div>
