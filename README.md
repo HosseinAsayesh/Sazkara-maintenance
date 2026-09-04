@@ -111,12 +111,13 @@ technician code is assigned.
 | `npm run db:seed` | Seed catalogue, cities, settings, manager |
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:reset` | Drop, re-migrate and re-seed |
+| `npm run smoke` | End-to-end business-rule checks (**wipes transactional data**) |
 
 There is also an end-to-end check of the business rules in `scripts/smoke.ts`. **It wipes
 all transactional data**, so only run it against a scratch database:
 
 ```bash
-npx tsx --conditions=react-server scripts/smoke.ts
+npm run smoke
 ```
 
 (The `--conditions` flag makes the `server-only` guard a no-op outside the Next runtime.)
@@ -134,10 +135,20 @@ Spec section references are in the code comments.
   order; the stand is created with `confirmation = PENDING` and appears under
   **شناسه‌های در انتظار تأیید** until the manager admits it. Manually-added UIDs from the
   manager go through the same gate.
-- **§6.3 Re-repair.** A repair within 14 days of a previous repair of the same stand is
-  flagged `isReRepair`, linked to the earlier form, and listed separately. It is
-  **excluded from the "stands repaired" count** but its parts **do** count toward usage
-  totals.
+- **Projects and phases.** A project is one Jti campaign, subdivided into phases; an
+  order belongs to a phase, and every repair form records the campaign it belongs to.
+  One project is *active* and is where stray field-found UIDs and new imports are filed.
+  The project is the primary filter on the dashboard, analytics, exports and evidence.
+- **§6.3 Re-repair — scoped to the project.** The same stand repaired **twice inside one
+  project** is a re-repair, however far apart the two visits fall. The same stand
+  repaired in a **later** project is ordinary recurring work and is *not* a re-repair —
+  it stays in the main export, marked `hasPreviousProjectHistory` so the manager can pick
+  it out (a tinted row in the workbook, since the sheet must stay exactly 43 columns).
+  Re-repairs are **excluded from the "stands repaired" count**, get their own Excel and
+  evidence pack, but their parts **do** count toward usage totals.
+  The 14-day window survives only as `isQuickReRepair`, a severity flag on the re-repair
+  page: a stand that failed again that fast is a different problem from one that lasted
+  the whole campaign.
 - **§6.4 Duplicate orders.** Every incoming UID is cross-checked against all stands ever
   repaired, in any batch or year. Matches are shown in the import review with the date,
   city and form code, and default to *excluded* — but nothing is dropped or admitted
@@ -148,6 +159,17 @@ Spec section references are in the code comments.
   beyond `thirdPlusStandRate`. Returning to a stand already serviced that day does not
   push it into a lower tier. All rates are editable in Settings; none are hardcoded.
   Each form snapshots the wage it was paid, so editing a rate never rewrites history.
+- **Unsuccessful visits are paid.** Every visit that produced no repair earns the flat
+  `unrepairedVisitRate` the manager sets, whatever the reason — the technician travelled
+  either way. A call-out does **not** consume a wage tier, so a wasted trip can never
+  demote a stand repaired later at the same store to the reduced second-stand rate. If a
+  temporarily-closed store is revisited and the stand is then repaired, that visit is
+  priced normally by the tier rules.
+- **Part units.** Everything is counted in pieces except the two SMD strips, which are
+  cut to length and recorded in **centimetres in 50 cm steps** (50, 100, 150 …). The unit
+  lives on the catalogue item, so the technician's picker, the analytics and export
+  column all agree; the server rejects a quantity that is not a whole step rather than
+  silently rounding a number that ends up on a parts bill.
 - **§6.7 Per-UID history.** `Stand` is keyed globally on the UID, so every form ever filed
   against it is one query — independent of which order batch it arrived in.
 - **§6.8 Parts for accounting.** Only **replaced** parts count as consumed inventory;
@@ -168,17 +190,18 @@ affect what Jti receives.
    and the evidence PDFs.
 2. **Columns 5–34 hold replaced quantities only.** Repaired-in-place parts export as `0`
    there and are described in column 37 instead, so the information is not lost.
-3. **Re-repairs are included by default**, with a toggle on the export screen. The stand
-   is not double-counted in the repaired *statistic* (§6.3), but the parts really were
-   consumed. Turn it off if Jti should not see those rows.
+3. **The export is split in two.** *Main* carries every stand repaired in the range
+   except within-project re-repairs, including stands that were also repaired in earlier
+   projects (those are legitimate recurring work, tinted rather than removed).
+   *Re-repairs* is a separate workbook, reachable from the re-repair page along with its
+   own evidence pack. A combined option is available for a manager who wants one sheet.
 4. **Column 2 uses the Jalali calendar** (e.g. `1405/06/13`), per the client's decision.
    Timestamps are stored as UTC and converted only at export/display time. The app UI
    shows Jalali under `fa` and Gregorian under `en`.
 5. **Column 37 (`Maintenance detail`)** is free text, formatted as
    `تعویض: <part> (<qty>)، … | تعمیر: <part> (<qty>)، … | توضیحات: <notes>`.
-6. **Wages are paid on visits that produced a repair**, including re-repairs. A visit
-   where nothing was repaired records a zero wage, since nothing is billable to Jti for
-   it. Flip `PAY_UNREPAIRED_VISITS` in `lib/wages.ts` if travel should be paid regardless.
+6. **Quantities are in the part's own unit.** Columns 25 and 26 (the SMD strips) carry
+   centimetres, not piece counts; every other part column is a piece count.
 7. **Historical imports carry no wage.** The rates in effect before this system existed
    are unknown, and inventing them would corrupt payroll reporting, so those rows record
    `0` and are attributed to a dedicated non-login "legacy" account.
@@ -203,6 +226,7 @@ lib/
   repair-forms.ts      §6.1/6.2/6.3/6.6 — form submission, the heart of the app
   imports.ts           §5/§6.4 — Excel parsing, column mapping, duplicate detection
   wages.ts             §6.6 — wage tiers
+  projects.ts          campaigns, phases, and the re-repair scope
   analytics.ts         §7/§10 — dashboard aggregates, part rates, forecasting
   exports/jti.ts       §8 — the 43-column file
   exports/parts-usage.ts §6.8 — accounting report
