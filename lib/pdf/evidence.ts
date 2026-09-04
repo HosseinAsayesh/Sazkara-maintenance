@@ -86,7 +86,7 @@ export async function collectEvidenceData({
       },
       orderBy: { formCode: 'asc' },
       include: {
-        stand: { select: { uid: true } },
+        stand: { select: { standIndexAtStore: true } },
         technician: { select: { name: true, technicianCode: true, phone: true } },
         parts: { include: { part: { select: { nameFa: true } } } },
         photos: { orderBy: { index: 'asc' } },
@@ -133,7 +133,9 @@ async function renderFormPage(
   <section class="page">
     <header class="page-head">
       <div>
-        <div class="uid">شناسه: ${esc(form.stand.uid)}</div>
+        <div class="uid">شناسه: ${esc(form.uid)}${
+          form.standIndex > 1 ? ` — استند ${form.standIndex}` : ''
+        }</div>
         <div class="muted">${esc(form.storeName ?? '')}</div>
       </div>
       <div class="page-head-left">
@@ -377,8 +379,10 @@ export async function generateAndStoreEvidencePdf(
 
   const storage = getStorage();
   const fileRef = await storage.put(buffer, {
+    // Storage path stays Gregorian so day folders sort naturally on disk; the visible
+    // file name carries the Shamsi date, which is the one the manager recognises.
     prefix: `evidence/${localDayKey(params.date)}`,
-    filename: `${cityName}-${localDayKey(params.date)}.pdf`,
+    filename: `${cityName}-${formatJalali(params.date).replace(/\//g, '-')}.pdf`,
   });
 
   if (existing) {

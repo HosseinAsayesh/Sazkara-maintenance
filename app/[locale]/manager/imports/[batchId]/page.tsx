@@ -28,12 +28,12 @@ export default async function OrderDetailPage({
   const uids = batch.lines.map((l) => l.uid);
   const reported = uids.length
     ? await prisma.repairForm.findMany({
-        where: { stand: { uid: { in: uids } } },
-        select: { stand: { select: { uid: true } } },
-        distinct: ['standId'],
+        where: { uid: { in: uids } },
+        select: { uid: true },
+        distinct: ['uid'],
       })
     : [];
-  const reportedUids = new Set(reported.map((r) => r.stand.uid));
+  const reportedUids = new Set(reported.map((r) => r.uid));
 
   const lines: OrderLineRow[] = batch.lines.map((line) => ({
     id: line.id,

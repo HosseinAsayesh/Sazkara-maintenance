@@ -17,7 +17,6 @@ const NOT_REPAIRED_REASONS = [
 ] as const;
 
 export interface ExtraStandValue {
-  uid: string;
   replaced: PartSelection;
   repaired: PartSelection;
   quality: number | null;
@@ -25,7 +24,6 @@ export interface ExtraStandValue {
 }
 
 export const emptyExtraStand = (): ExtraStandValue => ({
-  uid: '',
   replaced: {},
   repaired: {},
   quality: null,
@@ -35,23 +33,30 @@ export const emptyExtraStand = (): ExtraStandValue => ({
 /**
  * One additional stand at the same store ("double stands", §6.6).
  *
- * A store can carry two or three stands, each with its own Jti uid, and the technician
- * services them on a single trip. Rather than making them re-enter the store details and
- * sign again for each, this panel captures only what is genuinely per-stand: the uid, the
- * parts, the quality score and its own before/after photos. The store block, both
- * signatures and the store photo are shared with the primary stand.
+ * A store can carry two or three stands, and they all SHARE the store's single Jti uid —
+ * the uid names the location, not the cabinet. So this panel never asks for a uid: the
+ * stand is identified by its position at the store (stand 2, stand 3 ...), which is also
+ * what re-repair detection keys on.
  *
- * On the server each of these still becomes its own RepairForm, because the Jti export is
- * one row per stand and the wage tier depends on service order.
+ * It captures only what is genuinely per-stand: parts, quality, notes and its own
+ * before/after photos. The store block, both signatures and the store photo are shared
+ * with the first stand.
+ *
+ * On the server each still becomes its own RepairForm, because the Jti export is one row
+ * per stand and the wage tier depends on service order.
  */
 export function ExtraStandSection({
   index,
+  uid,
   parts,
   value,
   onChange,
   onRemove,
 }: {
+  /** 0-based; the stand's position at the store is index + 2. */
   index: number;
+  /** The store's uid, shared by every stand here. Shown, never edited. */
+  uid: string;
   parts: PartOption[];
   value: ExtraStandValue;
   onChange: (next: ExtraStandValue) => void;
@@ -80,16 +85,10 @@ export function ExtraStandSection({
       />
 
       <div className="space-y-4 p-4">
-        <Field label={tc('uid')} required>
-          <Input
-            name={`extra_${index}_uid`}
-            value={value.uid}
-            onChange={(e) => set('uid', e.target.value)}
-            dir="ltr"
-            className="dir-ltr"
-            required
-          />
-        </Field>
+        {/* The uid is the store's and is submitted once with the first stand. */}
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-[var(--muted)]">
+          {t('sharedUidNote', { uid, n: index + 2 })}
+        </p>
 
         <PartPicker
           parts={parts}

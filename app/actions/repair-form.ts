@@ -113,6 +113,7 @@ export async function submitRepairFormAction(
 
     const result = await createRepairForm({
       uid,
+      standIndex: 1,
       technicianId: user.id,
       ...sharedStore,
       parts,
@@ -133,17 +134,15 @@ export async function submitRepairFormAction(
     // many stands the technician has already serviced at this store today — creating
     // them in parallel would race and hand two stands the same tier.
     //
-    // What they share with the primary visit: the store details, both signatures, and
-    // the store photo. What is theirs alone: uid, parts, quality, notes, and their own
-    // before/after photos, since those are evidence about a specific stand.
+    // They share the location's uid — it names the store, not the cabinet — plus the
+    // store details, both signatures and the store photo. What is theirs alone: their
+    // position, parts, quality, notes and their own before/after photos, since those are
+    // evidence about one specific stand.
     const extraCount = Math.min(Number(formData.get('extraStandCount') ?? 0) || 0, 10);
     const storePhotoRef = photos.find((p) => p.type === 'STORE')?.fileRef;
     const extraFormCodes: string[] = [];
 
     for (let i = 0; i < extraCount; i++) {
-      const extraUid = String(formData.get(`extra_${i}_uid`) ?? '').trim();
-      if (!extraUid) continue;
-
       const extraPhotos: PhotoInput[] = [];
       if (storePhotoRef) extraPhotos.push({ type: 'STORE', fileRef: storePhotoRef });
       for (const [field, type] of [
@@ -162,7 +161,9 @@ export async function submitRepairFormAction(
       const extraTime = formData.get(`extra_${i}_time`);
 
       const extra = await createRepairForm({
-        uid: extraUid,
+        // Same location, next stand along: the uid is shared, the position is not.
+        uid,
+        standIndex: i + 2,
         technicianId: user.id,
         ...sharedStore,
         parts: parsePartEntries(formData.getAll(`extra_${i}_parts`)),

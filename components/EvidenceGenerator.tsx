@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 
 import { generateEvidenceAction, type EvidenceState } from '@/app/actions/evidence';
 
-import { Alert, Button, Card, CardHeader, Field, Input, Select } from './ui';
+import { JalaliDateInput } from './JalaliDateInput';
+import { Alert, Button, Card, CardHeader, Field, Select } from './ui';
 
 export function EvidenceGenerator({
   locale,
@@ -21,6 +22,9 @@ export function EvidenceGenerator({
     {},
   );
   const [force, setForce] = useState(false);
+  // Held in state and submitted through a hidden field: the server action still receives
+  // a plain ISO day, the manager still picks it on a Shamsi calendar.
+  const [date, setDate] = useState('');
 
   return (
     <Card>
@@ -29,8 +33,9 @@ export function EvidenceGenerator({
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="force" value={force ? 'true' : 'false'} />
 
+        <input type="hidden" name="date" value={date} />
         <Field label={t('selectDate')} required>
-          <Input type="date" name="date" required className="dir-ltr" />
+          <JalaliDateInput value={date} onChange={setDate} ariaLabel={t('selectDate')} />
         </Field>
 
         <Field label={t('selectCity')} required>
@@ -47,7 +52,7 @@ export function EvidenceGenerator({
         </Field>
 
         <div className="flex items-end gap-2">
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending || !date}>
             {pending ? tc('loading') : force ? t('regenerate') : t('generate')}
           </Button>
         </div>

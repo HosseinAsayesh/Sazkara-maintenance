@@ -1,10 +1,11 @@
 // Sazkara Maintenance — data model
 //
 // Design notes that matter for correctness:
-//  * A Stand is keyed by its Jti `uid` and is GLOBAL, not per-import. Every RepairForm
-//    ever submitted against that uid hangs off it, so per-UID history (§6.7) and
-//    duplicate-order detection (§6.4) are both plain lookups against Stand/RepairForm
-//    and never depend on which ImportBatch a row arrived in.
+//  * The Jti `uid` identifies a STORE (a location), not an individual stand. One uid can
+//    carry several stands, so Store.uid is unique and a Stand is identified by
+//    (store, standIndexAtStore). Stores are GLOBAL, not per-import: per-UID history
+//    (§6.7) and duplicate-order detection (§6.4) are plain lookups that never depend on
+//    which ImportBatch a row arrived in.
 //  * OrderLine keeps a *snapshot* of the store metadata that arrived with a given
 //    import, so re-importing or editing a Store later never rewrites history.
 //  * RepairForm likewise snapshots store info + city at submit time; reports are built
@@ -97,7 +98,7 @@ model User {
 
   repairForms       RepairForm[]
   importBatches     ImportBatch[]
-  standsCreated     Stand[]            @relation("StandCreatedBy")
+  storesCreated     Store[]            @relation("StoreCreatedBy")
   evidencePdfBatchs EvidencePdfBatch[]
 
   @@index([role, status])
@@ -121,8 +122,14 @@ model City {
   evidencePdfBatchs EvidencePdfBatch[]
 }
 
+/// A store is a LOCATION, and the Jti uid identifies it. One uid can carry several
+/// stands ("double stands"), which is why the uid lives here and not on Stand.
 model Store {
-  id             String  @id @default(cuid())
+  id String @id @default(cuid())
+
+  /// The identifier Jti uses. This is the spine of the whole system.
+  uid String @unique
+
   name           String
   address        String?
   /// Google Maps link.
@@ -136,42 +143,48 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// Normalised name used to match incoming import rows to an existing store.
+  /// Normalised name, kept only as a fallback for legacy rows that predate uid
+  /// matching. New imports match on `uid`, which is exact.
   matchKey String
 
-  stands      Stand[]
-  repairForms RepairForm[]
-
-  @@unique([cityId, matchKey])
-  @@index([cityId])
-}
-
-model Stand {
-  id  String @id @default(cuid())
-  /// The identifier Jti uses. Globally unique — this is the spine of the whole system.
-  uid String @unique
-
-  storeId String?
-  store   Store?  @relation(fields: [storeId], references: [id])
-
-  /// §6.6 — 1 for the first stand registered at a store, 2/3/... for "double stands".
-  /// This is the catalogue ordinal shown in the UI. The *wage* tier is computed from
-  /// the order stands were actually serviced in on the day (see lib/wages.ts).
-  standIndexAtStore Int @default(1)
-
+  /// §6.2 — a uid added outside the official order stays PENDING until a manager
+  /// admits it. The flag sits on the location, because that is what was added.
   confirmation ConfirmationStatus @default(CONFIRMED)
 
   createdById String?
-  createdBy   User?   @relation("StandCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?   @relation("StoreCreatedBy", fields: [createdById], references: [id])
+
+  stands      Stand[]
+  repairForms RepairForm[]
+  orderLines  OrderLine[]
+
+  @@index([cityId])
+  @@index([matchKey])
+  @@index([confirmation])
+}
+
+/// One physical stand at a store. Stands do NOT have their own uid — they share their
+/// store's — so a stand is identified by (store, position). The technician enters one uid
+/// and reports on stand 1, 2, 3 ... at that location.
+model Stand {
+  id String @id @default(cuid())
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// §6.6 — 1 for the first stand at a store, 2/3/... for the "double stands".
+  /// Also the wage tier: the first stand serviced earns the full city rate and each
+  /// additional stand at the same location earns the reduced rate, since no travel is
+  /// involved. Re-repair detection is per stand, so this number is the stand's identity.
+  standIndexAtStore Int @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   repairForms RepairForm[]
-  orderLines  OrderLine[]
 
+  @@unique([storeId, standIndexAtStore])
   @@index([storeId])
-  @@index([confirmation])
 }
 
 /// A Jti campaign. The repair manager's attention is almost entirely on the current
@@ -266,8 +279,8 @@ model OrderLine {
 
   uid String
 
-  standId String?
-  stand   Stand?  @relation(fields: [standId], references: [id])
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
 
   // Snapshot of whatever metadata arrived on this row.
   storeName      String?
@@ -329,6 +342,11 @@ model RepairForm {
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
 
+  /// Snapshot of the store's uid at submit time — export column 4 reads this.
+  uid              String
+  /// Which stand at that location this form covers (1, 2, 3 ...).
+  standIndex       Int     @default(1)
+
   storeName        String?
   storeAddress     String?
   storeManagerName String?
@@ -387,6 +405,7 @@ model RepairForm {
   @@index([cityId, date])
   @@index([technicianId, date])
   @@index([standId, date])
+  @@index([uid, date])
   @@index([outcome])
   @@index([projectId, date])
   @@index([phaseId])

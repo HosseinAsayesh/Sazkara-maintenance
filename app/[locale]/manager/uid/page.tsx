@@ -41,10 +41,11 @@ export default async function UidSearchPage({
   const uid = query ? normaliseUid(query) : '';
 
   const stand = uid
-    ? await prisma.stand.findUnique({
+    ? await prisma.store.findUnique({
         where: { uid },
         include: {
-          store: { include: { city: true } },
+          city: true,
+          stands: { orderBy: { standIndexAtStore: 'asc' } },
           createdBy: { select: { name: true } },
           orderLines: {
             orderBy: { createdAt: 'desc' },
@@ -90,23 +91,23 @@ export default async function UidSearchPage({
             <dl className="grid gap-x-4 gap-y-3 p-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-xs text-[var(--muted)]">{tc('store')}</dt>
-                <dd className="font-medium">{stand.store?.name ?? '—'}</dd>
+                <dd className="font-medium">{stand.name ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-xs text-[var(--muted)]">{tc('city')}</dt>
-                <dd className="font-medium">{stand.store?.city.name ?? '—'}</dd>
+                <dd className="font-medium">{stand.city.name ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-xs text-[var(--muted)]">{tc('phone')}</dt>
-                <dd className="dir-ltr font-medium">{stand.store?.phone ?? '—'}</dd>
+                <dd className="dir-ltr font-medium">{stand.phone ?? '—'}</dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs text-[var(--muted)]">{tc('address')}</dt>
-                <dd>{stand.store?.address ?? '—'}</dd>
+                <dd>{stand.address ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-[var(--muted)]">{t('standIndexHeader')}</dt>
-                <dd className="font-medium">{stand.standIndexAtStore}</dd>
+                <dt className="text-xs text-[var(--muted)]">{t('standCountHeader')}</dt>
+                <dd className="font-medium">{stand.stands.length}</dd>
               </div>
             </dl>
           </Card>

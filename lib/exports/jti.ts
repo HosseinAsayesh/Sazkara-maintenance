@@ -3,7 +3,7 @@ import 'server-only';
 import ExcelJS from 'exceljs';
 
 import { formatJalali } from '../dates';
-import { JTI_EXPORT_HEADERS, PART_CATALOG } from '../parts';
+import { JTI_EXPORT_COLUMN_COUNT, JTI_EXPORT_HEADERS, PART_CATALOG } from '../parts';
 import { prisma } from '../prisma';
 import { projectScopeWhere } from '../projects';
 
@@ -19,6 +19,7 @@ import { projectScopeWhere } from '../projects';
  *   5..34                the 30 parts, each holding the QUANTITY REPLACED (0 if none)
  *   35..43               digital address, address, maintenance detail, tel, store name,
  *                        manager's name, technician code, form code, stand quality
+ *   44                   repair status in words, with the reason when it failed
  *
  * Stated assumptions (see README §"Export assumptions"):
  *  - Only REPAIRED visits produce rows — the spec says "one row per repaired stand", and
@@ -26,6 +27,15 @@ import { projectScopeWhere } from '../projects';
  *  - Columns 5–34 count REPLACED parts only. Parts repaired in place are not consumed
  *    inventory (§6.8); they are described in column 37 instead so the information is not
  *    lost.
+ *  - Rows are per STAND, not per uid. A store with three stands produces three rows all
+ *    carrying the same شناسه, because the parts and quality are per-stand facts. Those
+ *    rows are tinted BLUE so Jti can see at a glance they are one location's double
+ *    stands rather than duplicated records.
+ *  - Unsuccessful visits DO appear, tinted RED (client ruling). They carry zeroes in the
+ *    part columns, no quality score, and the reason in column 37, so Jti sees the whole
+ *    visit list rather than only completed work.
+ *  - Tint precedence, most severe first: red (not repaired) > blue (double stand) >
+ *    cream (repaired in an earlier project). A row can qualify for several.
  *  - Scope (client ruling, revised §6.3). Every stand repaired during the project goes
  *    into the MAIN workbook, including stands that were already repaired in earlier
  *    projects — a uid recurring across campaigns is normal work, not a duplicate. Only
@@ -69,15 +79,31 @@ export interface JtiExportRow {
   technicianCode: string;
   formCode: string;
   standQuality: number | null;
+  /** Column 44 — "تعمیر شد", or "تعمیر نشد — <reason>". */
+  repairStatus: string;
   /** Repaired in an earlier campaign. Marked in the sheet, but still a main-export row. */
   hasPreviousProjectHistory: boolean;
   isReRepair: boolean;
+  /** The visit produced no repair — row is tinted red. */
+  notRepaired: boolean;
+  /** This location had more than one stand serviced — rows tinted blue. */
+  isDoubleStand: boolean;
+  /** 1-based position of this stand at its location. */
+  standIndex: number;
 }
 
 /**
  * Column 37. Free text, so it is built to stay readable in the Persian sheet while
  * keeping the replaced/repaired distinction that columns 5–34 cannot express.
  */
+const NOT_REPAIRED_LABELS_FA: Record<string, string> = {
+  MANAGER_NOT_AUTHORIZED: 'مدیر فروشگاه اجازه‌ی تعمیر نداد',
+  STORE_OR_STAND_REMOVED: 'فروشگاه یا استند جمع‌آوری شده بود',
+  ALREADY_HEALTHY: 'استند سالم بود و نیاز به تعمیر نداشت',
+  STORE_TEMPORARILY_CLOSED: 'فروشگاه موقتاً تعطیل بود',
+  CONDITION_TOO_POOR: 'وضعیت استند برای تعمیر بسیار نامناسب بود',
+};
+
 function buildMaintenanceDetail(
   parts: Array<{ action: string; quantity: number; part: { nameFa: string } }>,
   notes: string | null,
@@ -104,7 +130,9 @@ function buildMaintenanceDetail(
 export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExportRow[]> {
   const forms = await prisma.repairForm.findMany({
     where: {
-      outcome: 'REPAIRED',
+      // Unsuccessful visits are included so Jti sees the full visit list; they are
+      // tinted red in the sheet. Re-repair scoping only applies to actual repairs.
+      ...(filters.scope === 'RE_REPAIR' ? { outcome: 'REPAIRED' as const } : {}),
       ...(filters.scope === 'RE_REPAIR'
         ? { isReRepair: true }
         : filters.scope === 'ALL'
@@ -123,12 +151,21 @@ export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExpo
     },
     orderBy: [{ date: 'asc' }, { formCode: 'asc' }],
     include: {
-      stand: { select: { uid: true } },
       city: { select: { id: true, name: true } },
       technician: { select: { technicianCode: true, name: true } },
       parts: { include: { part: { select: { nameFa: true, exportColumnKey: true } } } },
     },
   });
+
+  // A location whose visit covered more than one stand: those rows get the blue tint.
+  // Counted per (uid, day) so a genuine return trip months later is not mislabelled.
+  const standsPerVisit = new Map<string, Set<number>>();
+  for (const form of forms) {
+    const key = `${form.uid}|${form.date.toISOString().slice(0, 10)}`;
+    const set = standsPerVisit.get(key) ?? new Set<number>();
+    set.add(form.standIndex);
+    standsPerVisit.set(key, set);
+  }
 
   return forms.map((form) => {
     const replaced: Record<string, number> = {};
@@ -143,19 +180,50 @@ export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExpo
       cityName: form.city?.name ?? '',
       cityId: form.cityId,
       date: form.date,
-      uid: form.stand.uid,
+      uid: form.uid,
       replaced,
       digitalAddress: form.digitalAddress ?? '',
       address: form.storeAddress ?? '',
-      maintenanceDetail: buildMaintenanceDetail(form.parts, form.notes),
+      // An unsuccessful visit has no parts to describe, so column 37 carries the fixed
+      // reason instead — otherwise the red row would arrive at Jti with no explanation.
+      maintenanceDetail:
+        form.outcome === 'NOT_REPAIRED'
+          ? [
+              form.notRepairedReason
+                ? NOT_REPAIRED_LABELS_FA[form.notRepairedReason] ?? form.notRepairedReason
+                : 'تعمیر انجام نشد',
+              form.notes?.trim() ? `توضیحات: ${form.notes.trim()}` : '',
+            ]
+              .filter(Boolean)
+              .join(' | ')
+          : buildMaintenanceDetail(form.parts, form.notes),
       tel: form.storePhone ?? '',
       storeName: form.storeName ?? '',
       managerName: form.storeManagerName ?? '',
       technicianCode: form.technician.technicianCode ?? '',
       formCode: form.formCode,
       standQuality: form.qualityScore,
+      // Stated in words as well as colour: a fill does not survive a copy-paste into
+      // another sheet, and this is the column Jti will filter on.
+      repairStatus:
+        form.outcome === 'REPAIRED'
+          ? form.isReRepair
+            ? 'تعمیر شد (تعمیر مجدد)'
+            : 'تعمیر شد'
+          : `تعمیر نشد — ${
+              form.notRepairedReason
+                ? (NOT_REPAIRED_LABELS_FA[form.notRepairedReason] ??
+                  form.notRepairedReason)
+                : 'دلیل ثبت نشده'
+            }`,
       hasPreviousProjectHistory: form.hasPreviousProjectHistory,
       isReRepair: form.isReRepair,
+      notRepaired: form.outcome === 'NOT_REPAIRED',
+      isDoubleStand:
+        (standsPerVisit.get(
+          `${form.uid}|${form.date.toISOString().slice(0, 10)}`,
+        )?.size ?? 1) > 1,
+      standIndex: form.standIndex,
     };
   });
 }
@@ -209,19 +277,26 @@ export async function buildJtiWorkbook(
       row.technicianCode, // 41
       row.formCode, // 42
       row.standQuality ?? '', // 43
+      row.repairStatus, // 44
     ]);
 
-    // A uid repaired in an EARLIER campaign is legitimate work and keeps its place in
-    // the main sheet, but the manager asked to be able to tell those rows apart. The
-    // sheet must stay exactly 43 columns wide for Jti, so the marker is a row tint
-    // rather than an extra column.
-    if (row.hasPreviousProjectHistory) {
+    // The sheet must stay exactly 43 columns wide for Jti, so every marker is a row
+    // tint rather than an extra column. A row can qualify for more than one, so the
+    // most consequential wins:
+    //   red   — the visit produced no repair
+    //   blue  — one of several stands at the same uid (a "double stand")
+    //   cream — this uid was already repaired in an earlier campaign
+    const tint = row.notRepaired
+      ? 'FFFCE4E4'
+      : row.isDoubleStand
+        ? 'FFDDEBF7'
+        : row.hasPreviousProjectHistory
+          ? 'FFFFF6E0'
+          : null;
+
+    if (tint) {
       added.eachCell({ includeEmpty: true }, (cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFF6E0' },
-        };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tint } };
       });
     }
   });
@@ -230,7 +305,7 @@ export async function buildJtiWorkbook(
   const widths = [
     6, 12, 14, 16,
     ...PART_CATALOG.map(() => 9),
-    28, 34, 46, 14, 24, 18, 14, 14, 12,
+    28, 34, 46, 14, 24, 18, 14, 14, 12, 34,
   ];
   widths.forEach((w, i) => {
     sheet.getColumn(i + 1).width = w;
@@ -246,7 +321,34 @@ export async function buildJtiWorkbook(
   sheet.getColumn(43).alignment = { horizontal: 'center' };
   sheet.getColumn(37).alignment = { wrapText: true, vertical: 'top' };
 
-  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 43 } };
+  sheet.getColumn(JTI_EXPORT_COLUMN_COUNT).alignment = { wrapText: true, vertical: 'top' };
+  sheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: JTI_EXPORT_COLUMN_COUNT },
+  };
+
+  // Colour alone is not self-describing once the file leaves this app, so the workbook
+  // carries a short legend on its own sheet.
+  const legend = workbook.addWorksheet('راهنما', { views: [{ rightToLeft: true }] });
+  legend.getColumn(1).width = 12;
+  legend.getColumn(2).width = 70;
+  legend.addRow(['رنگ', 'معنی']);
+  legend.getRow(1).font = { bold: true };
+
+  for (const [argb, meaning] of [
+    ['FFFCE4E4', 'تعمیر انجام نشد — دلیل در ستون Maintenance detail آمده است'],
+    ['FFDDEBF7', 'استند دوم یا سوم همان شناسه (چند استند در یک فروشگاه)'],
+    ['FFFFF6E0', 'این شناسه در پروژه‌های قبلی هم تعمیر شده است'],
+  ] as Array<[string, string]>) {
+    const row = legend.addRow(['', meaning]);
+    row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+    row.getCell(1).border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' },
+    };
+  }
 
   const out = await workbook.xlsx.writeBuffer();
   return Buffer.from(out);

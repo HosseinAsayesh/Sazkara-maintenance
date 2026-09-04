@@ -21,7 +21,10 @@ export interface PhotoInput {
 }
 
 export interface CreateRepairFormInput {
+  /** The store's Jti uid. Shared by every stand at that location. */
   uid: string;
+  /** Which stand at that location, 1-based. Defaults to the first. */
+  standIndex?: number;
   technicianId: string;
   date?: Date;
 
@@ -59,70 +62,79 @@ export async function lookupUid(uidRaw: string) {
   const uid = normaliseUid(uidRaw);
   if (!uid) throw new RepairFormError('UID_REQUIRED');
 
-  const stand = await prisma.stand.findUnique({
+  // The uid names a location. Its stands come back in position order so the technician
+  // sees "this store has 3 stands" and reports on each of them in one visit.
+  const store = await prisma.store.findUnique({
     where: { uid },
     include: {
-      store: { include: { city: true } },
-      repairForms: {
-        orderBy: { date: 'desc' },
-        include: {
-          technician: { select: { name: true, technicianCode: true } },
-          city: true,
-          parts: { include: { part: true } },
-        },
-      },
+      city: true,
+      stands: { orderBy: { standIndexAtStore: 'asc' } },
     },
   });
 
   // Most recent order row carrying metadata for this uid — this is what pre-fills the
-  // store fields when the stand itself has no store attached yet.
+  // store fields when the location is not on file yet.
   const orderLine = await prisma.orderLine.findFirst({
     where: { uid, status: { not: 'EXCLUDED' } },
     orderBy: { createdAt: 'desc' },
     include: { batch: { select: { name: true, importedAt: true, source: true } } },
   });
 
-  const lastRepaired = stand?.repairForms.find((f) => f.outcome === 'REPAIRED') ?? null;
+  // History is per uid: every form ever filed at this location, whichever stand.
+  const history = await prisma.repairForm.findMany({
+    where: { uid },
+    orderBy: { date: 'desc' },
+    include: {
+      technician: { select: { name: true, technicianCode: true } },
+      city: true,
+      parts: { include: { part: true } },
+    },
+  });
 
-  // Warn the technician only when a repair now really would be a re-repair, i.e. this
-  // stand was already repaired inside the SAME campaign the uid resolves to. A stand
-  // last touched in an earlier project shows history but no warning.
   const { projectId } = await resolveProjectForUid(prisma, uid);
-  const previousInProject =
-    projectId && stand
-      ? (stand.repairForms.find(
-          (f) => f.outcome === 'REPAIRED' && f.projectId === projectId,
-        ) ?? null)
-      : null;
 
-  const wouldBeReRepair = !!previousInProject;
-  const hasPreviousProjectHistory =
-    !!stand?.repairForms.some(
-      (f) => f.outcome === 'REPAIRED' && f.projectId !== projectId,
-    );
+  // Re-repair is tracked per stand (client ruling): stand 2 being repaired twice in this
+  // campaign is a re-repair, while stand 3's first repair is not. Map the stand positions
+  // already repaired in this project so the form can warn per stand.
+  const repairedThisProjectByStand = new Map<number, (typeof history)[number]>();
+  for (const form of history) {
+    if (form.outcome !== 'REPAIRED' || form.projectId !== projectId) continue;
+    if (!repairedThisProjectByStand.has(form.standIndex)) {
+      repairedThisProjectByStand.set(form.standIndex, form);
+    }
+  }
+
+  const lastRepaired = history.find((f) => f.outcome === 'REPAIRED') ?? null;
+  const hasPreviousProjectHistory = history.some(
+    (f) => f.outcome === 'REPAIRED' && f.projectId !== projectId,
+  );
 
   return {
     uid,
-    stand,
+    store,
+    /** Stands already on file at this location, in position order. */
+    stands: store?.stands ?? [],
+    /** How many stands the technician should expect to find. At least one. */
+    standCount: Math.max(1, store?.stands.length ?? 0),
     orderLine,
     /** §4.3 — no import row anywhere: the form will be flagged unmatched. */
     isUnmatched: !orderLine,
     /** §6.2 — added outside the official order and not yet confirmed by a manager. */
-    isPendingConfirmation: stand?.confirmation === 'PENDING',
-    history: stand?.repairForms ?? [],
+    isPendingConfirmation: store?.confirmation === 'PENDING',
+    history,
     lastRepaired,
-    wouldBeReRepair,
+    /** standIndex -> the earlier form in THIS project, if any. */
+    repairedThisProjectByStand,
     /** Repaired in an earlier campaign — shown as history, never as a re-repair. */
     hasPreviousProjectHistory,
-    previousInProject,
     prefill: {
-      storeName: stand?.store?.name ?? orderLine?.storeName ?? '',
-      storeAddress: stand?.store?.address ?? orderLine?.address ?? '',
-      storeManagerName: stand?.store?.managerName ?? orderLine?.managerName ?? '',
-      storePhone: stand?.store?.phone ?? orderLine?.phone ?? '',
-      digitalAddress: stand?.store?.digitalAddress ?? orderLine?.digitalAddress ?? '',
-      cityId: stand?.store?.cityId ?? null,
-      cityName: stand?.store?.city.name ?? orderLine?.cityName ?? '',
+      storeName: store?.name ?? orderLine?.storeName ?? '',
+      storeAddress: store?.address ?? orderLine?.address ?? '',
+      storeManagerName: store?.managerName ?? orderLine?.managerName ?? '',
+      storePhone: store?.phone ?? orderLine?.phone ?? '',
+      digitalAddress: store?.digitalAddress ?? orderLine?.digitalAddress ?? '',
+      cityId: store?.cityId ?? null,
+      cityName: store?.city.name ?? orderLine?.cityName ?? '',
     },
   };
 }
@@ -226,78 +238,65 @@ export async function createRepairForm(input: CreateRepairFormInput) {
         orderBy: { createdAt: 'desc' },
       });
 
-      let stand = await tx.stand.findUnique({ where: { uid } });
-
       const cityId = await resolveCityId(
         tx,
         input.cityId,
         orderLine?.cityName ?? undefined,
       );
 
-      // --- Store resolution -----------------------------------------------------
-      // Editing the pre-filled store fields is how technicians correct stale Jti data,
-      // so non-blank values are written back to the Store record. Blank fields never
-      // erase what we already have.
-      let storeId = stand?.storeId ?? null;
+      // --- Store (the location the uid names) -----------------------------------
+      // Editing the pre-filled fields is how technicians correct stale Jti data, so
+      // non-blank values are written back. Blank fields never erase what we already have.
       const storeName = input.storeName?.trim();
+      const storeData = {
+        ...(storeName ? { name: storeName, matchKey: makeStoreMatchKey(storeName) } : {}),
+        ...(input.storeAddress?.trim() ? { address: input.storeAddress.trim() } : {}),
+        ...(input.storeManagerName?.trim()
+          ? { managerName: input.storeManagerName.trim() }
+          : {}),
+        ...(input.storePhone?.trim() ? { phone: input.storePhone.trim() } : {}),
+        ...(input.digitalAddress?.trim()
+          ? { digitalAddress: input.digitalAddress.trim() }
+          : {}),
+        ...(cityId ? { cityId } : {}),
+      };
 
-      if (!storeId && storeName && cityId) {
-        const matchKey = makeStoreMatchKey(storeName);
-        const store = await tx.store.upsert({
-          where: { cityId_matchKey: { cityId, matchKey } },
-          create: {
-            name: storeName,
-            matchKey,
+      let store = await tx.store.findUnique({ where: { uid } });
+
+      if (!store) {
+        if (!cityId) throw new RepairFormError('CITY_REQUIRED');
+        // §6.2 — a uid nobody ordered. The technician may still file the report, but the
+        // location stays PENDING until a manager admits it to the official record.
+        store = await tx.store.create({
+          data: {
+            uid,
+            name: storeName || uid,
+            matchKey: makeStoreMatchKey(storeName || uid),
             cityId,
             address: input.storeAddress?.trim() || null,
             managerName: input.storeManagerName?.trim() || null,
             phone: input.storePhone?.trim() || null,
             digitalAddress: input.digitalAddress?.trim() || null,
-          },
-          update: {},
-        });
-        storeId = store.id;
-      } else if (storeId) {
-        await tx.store.update({
-          where: { id: storeId },
-          data: {
-            ...(storeName ? { name: storeName, matchKey: makeStoreMatchKey(storeName) } : {}),
-            ...(input.storeAddress?.trim() ? { address: input.storeAddress.trim() } : {}),
-            ...(input.storeManagerName?.trim()
-              ? { managerName: input.storeManagerName.trim() }
-              : {}),
-            ...(input.storePhone?.trim() ? { phone: input.storePhone.trim() } : {}),
-            ...(input.digitalAddress?.trim()
-              ? { digitalAddress: input.digitalAddress.trim() }
-              : {}),
-          },
-        });
-      }
-
-      // --- Stand ----------------------------------------------------------------
-      if (!stand) {
-        // §6.2 — a uid nobody ordered. The technician may still file the report, but
-        // the stand stays PENDING until a manager admits it to the official record.
-        const siblings = storeId
-          ? await tx.stand.count({ where: { storeId } })
-          : 0;
-
-        stand = await tx.stand.create({
-          data: {
-            uid,
-            storeId,
-            standIndexAtStore: siblings + 1,
             confirmation: orderLine ? 'CONFIRMED' : 'PENDING',
             createdById: input.technicianId,
           },
         });
-      } else if (!stand.storeId && storeId) {
-        const siblings = await tx.stand.count({ where: { storeId } });
-        stand = await tx.stand.update({
-          where: { id: stand.id },
-          data: { storeId, standIndexAtStore: siblings + 1 },
-        });
+      } else if (Object.keys(storeData).length) {
+        store = await tx.store.update({ where: { id: store.id }, data: storeData });
       }
+
+      const storeId = store.id;
+
+      // --- Stand (a position at that location) ----------------------------------
+      // Stands share their store's uid, so position is their identity. Upserting on
+      // (storeId, index) means a store quietly grows from one stand to three the first
+      // time a technician reports on the extra ones.
+      const standIndex = Math.max(1, Math.floor(input.standIndex ?? 1));
+      const stand = await tx.stand.upsert({
+        where: { storeId_standIndexAtStore: { storeId, standIndexAtStore: standIndex } },
+        create: { storeId, standIndexAtStore: standIndex },
+        update: {},
+      });
 
       // --- Project scope --------------------------------------------------------
       const { projectId, phaseId } = await resolveProjectForUid(tx, uid);
@@ -319,6 +318,8 @@ export async function createRepairForm(input: CreateRepairFormInput) {
         const previousInProject = projectId
           ? await tx.repairForm.findFirst({
               where: {
+                // Per stand, not per uid: stand 2 coming back is a re-repair, while
+                // stand 3's first repair at the same location is not.
                 standId: stand.id,
                 outcome: 'REPAIRED',
                 projectId,
@@ -359,7 +360,10 @@ export async function createRepairForm(input: CreateRepairFormInput) {
       }
 
       // --- Wage (§6.6) ----------------------------------------------------------
-      const city = cityId ? await tx.city.findUnique({ where: { id: cityId } }) : null;
+      // Fall back to the location's own city: a technician who leaves the city select
+      // untouched must still be paid at the right rate.
+      const effectiveCityId = cityId ?? store.cityId;
+      const city = await tx.city.findUnique({ where: { id: effectiveCityId } });
       const wage = await computeWage({
         technicianId: input.technicianId,
         storeId,
@@ -377,8 +381,11 @@ export async function createRepairForm(input: CreateRepairFormInput) {
           formCode,
           standId: stand.id,
           technicianId: input.technicianId,
-          cityId,
+          cityId: effectiveCityId,
           storeId,
+
+          uid,
+          standIndex,
 
           storeName: storeName || null,
           storeAddress: input.storeAddress?.trim() || null,
@@ -430,10 +437,10 @@ export async function createRepairForm(input: CreateRepairFormInput) {
       // Close out every outstanding order row for this uid, whichever batch it sits in.
       await tx.orderLine.updateMany({
         where: { uid, status: 'PENDING' },
-        data: { status: 'DONE', standId: stand.id },
+        data: { status: 'DONE', storeId },
       });
 
-      return { form, stand, isReRepair, outcome, wage };
+      return { form, store, stand, isReRepair, outcome, wage };
     },
     { timeout: 20_000 },
   );

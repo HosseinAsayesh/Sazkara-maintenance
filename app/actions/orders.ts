@@ -98,7 +98,7 @@ export async function deleteOrderLineAction(
 
   // A row a technician has already worked is history, not a pending request.
   const reported = await prisma.repairForm.findFirst({
-    where: { stand: { uid: line.uid } },
+    where: { uid: line.uid },
     select: { id: true },
   });
   if (reported) return { error: 'lineHasForms' };
@@ -137,7 +137,7 @@ export async function addOrderLineAction(
   // §6.4 — a manually added row gets the same "already serviced" check as an imported
   // one, so the manager sees the history before committing to the work.
   const previous = await prisma.repairForm.findFirst({
-    where: { stand: { uid }, outcome: 'REPAIRED' },
+    where: { uid, outcome: 'REPAIRED' },
     orderBy: { date: 'desc' },
     select: { date: true, city: { select: { name: true } } },
   });
@@ -184,7 +184,7 @@ export async function deleteOrderAction(
   // Refuse if any uid in this order has a report — deleting would orphan real fieldwork.
   if (batch.lines.length) {
     const reported = await prisma.repairForm.findFirst({
-      where: { stand: { uid: { in: batch.lines.map((l) => l.uid) } } },
+      where: { uid: { in: batch.lines.map((l) => l.uid) } },
       select: { id: true },
     });
     if (reported) return { error: 'cannotDeleteWithForms' };

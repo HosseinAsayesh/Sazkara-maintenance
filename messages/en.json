@@ -141,7 +141,10 @@
       "totalVisits": "Total visits",
       "estimatedWage": "Estimated wage"
     },
-    "previousProjectNotice": "This stand was repaired in an earlier project. This report is not a re-repair and goes in the main export."
+    "previousProjectNotice": "This stand was repaired in an earlier project. This report is not a re-repair and goes in the main export.",
+    "standRepairedOn": "stand {n} on {date}",
+    "standsAtStore": "This store has {n} stands",
+    "standLabel": "Stand {n}"
   },
   "form": {
     "title": "Stand repair form",
@@ -213,7 +216,8 @@
     "extraStandHelp": "If this store has more than one stand, enter each UID and its repair details separately here.",
     "replacedSection": "Replaced parts",
     "repairedSection": "Repaired parts",
-    "cmHint": "in centimetres (steps of 50)"
+    "cmHint": "in centimetres (steps of 50)",
+    "sharedUidNote": "Stand {n} at the same UID ({uid}) — it has no separate UID."
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
@@ -431,7 +435,8 @@
     "orderHistory": "Appearances in orders",
     "formHistory": "Repair history",
     "viewForm": "View form",
-    "standIndexHeader": "Stand number at store"
+    "standIndexHeader": "Stand number at store",
+    "standCountHeader": "Stands at this location"
   },
   "formView": {
     "title": "Form {code}",

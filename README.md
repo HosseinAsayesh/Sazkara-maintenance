@@ -170,8 +170,13 @@ Spec section references are in the code comments.
   lives on the catalogue item, so the technician's picker, the analytics and export
   column all agree; the server rejects a quantity that is not a whole step rather than
   silently rounding a number that ends up on a parts bill.
-- **§6.7 Per-UID history.** `Stand` is keyed globally on the UID, so every form ever filed
-  against it is one query — independent of which order batch it arrived in.
+- **The UID identifies a STORE, not a stand.** A location has one Jti uid, and the 1, 2 or
+  3 stands standing in it all share it — the technician enters a single uid and reports on
+  each stand in the same visit. So `Store.uid` is the unique key and a stand is identified
+  by `(store, standIndexAtStore)`. Re-repair detection keys on that stand position.
+- **§6.7 Per-UID history.** History belongs to the location: every form ever filed at that
+  uid, across all of its stands, is one query — independent of which order batch it
+  arrived in.
 - **§6.8 Parts for accounting.** Only **replaced** parts count as consumed inventory;
   parts repaired in place are excluded from the totals and appear only in the description
   column. Prices don't vary by city, so the accounting figure is a straight sum across all
@@ -184,10 +189,12 @@ Spec section references are in the code comments.
 These were judgement calls where the spec left room. They are stated here because they
 affect what Jti receives.
 
-1. **Only repaired stands produce rows** in the Jti export — the spec says "one row per
-   repaired stand", and an unsuccessful visit has no parts or quality score to report.
-   Unsuccessful visits are still fully recorded in the app, the dashboard, the analytics
-   and the evidence PDFs.
+1. **One row per stand, and unsuccessful visits are included.** A location with three
+   stands produces three rows carrying the same شناسه, because parts and quality are
+   per-stand facts. Visits that produced no repair appear too. Rows are colour-coded, with
+   the most consequential winning: **red** = not repaired, **blue** = one of several
+   stands at the same uid, **cream** = this uid was also repaired in an earlier project.
+   The workbook carries a legend sheet explaining the colours.
 2. **Columns 5–34 hold replaced quantities only.** Repaired-in-place parts export as `0`
    there and are described in column 37 instead, so the information is not lost.
 3. **The export is split in two.** *Main* carries every stand repaired in the range
@@ -202,6 +209,10 @@ affect what Jti receives.
    `تعویض: <part> (<qty>)، … | تعمیر: <part> (<qty>)، … | توضیحات: <notes>`.
 6. **Quantities are in the part's own unit.** Columns 25 and 26 (the SMD strips) carry
    centimetres, not piece counts; every other part column is a piece count.
+7. **The sheet is 44 columns, not 43.** Column 44 (`Repair status`) states in words
+   whether the visit ended in a repair and, when it did not, which of the five fixed
+   reasons applied — colour alone does not survive a copy-paste. Columns 1–43 are
+   unchanged, so archives exported before this column existed still import correctly.
 7. **Historical imports carry no wage.** The rates in effect before this system existed
    are unknown, and inventing them would corrupt payroll reporting, so those rows record
    `0` and are attributed to a dedicated non-login "legacy" account.

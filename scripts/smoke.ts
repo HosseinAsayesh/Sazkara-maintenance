@@ -154,10 +154,15 @@ async function main() {
   assert.equal(batch.created, 3);
   ok('order committed', `${batch.created} lines`);
 
-  const store = await prisma.store.findFirstOrThrow({ where: { cityId: tehran.id } });
-  const standsAtStore = await prisma.stand.count({ where: { storeId: store.id } });
-  assert.equal(standsAtStore, 2);
-  ok('§6.6 two stands share one store ("double stand")', `${store.name}: ${standsAtStore}`);
+  // Each row in Jti's sheet is a LOCATION, so three rows create three stores, each
+  // starting with a single stand. Extra stands are discovered in the field, not here.
+  const importedStores = await prisma.store.findMany({
+    where: { uid: { in: ['SZ1001', 'SZ1002', 'SZ1003'] } },
+    include: { stands: true },
+  });
+  assert.equal(importedStores.length, 3);
+  assert.ok(importedStores.every((st) => st.stands.length === 1));
+  ok('each imported uid becomes one location with one stand', `${importedStores.length} locations`);
 
   /* ---------------------------------------------------------------- */
   section('§4.3 uid lookup pre-fill');
@@ -229,8 +234,11 @@ async function main() {
   assert.equal(first.wage.amount, 150000);
   ok('outcome derived from parts; first stand paid the Tehran rate', `tier 1 = ${first.wage.amount}`);
 
+  // The SAME uid, second stand at that location: stands share their store's uid, so the
+  // double-stand case is one uid with two positions rather than two uids.
   const second = await createRepairForm({
-    uid: 'SZ1002',
+    uid: 'SZ1001',
+    standIndex: 2,
     technicianId: tech.id,
     cityId: tehran.id,
     date: visitDay,
@@ -242,7 +250,16 @@ async function main() {
   });
   assert.equal(second.wage.tier, 2);
   assert.equal(second.wage.amount, 90000);
-  ok('§6.6 second stand at the same store paid the reduced rate', `tier 2 = ${second.wage.amount}`);
+  assert.equal(second.form.uid, 'SZ1001');
+  assert.equal(second.form.standIndex, 2);
+  ok('§6.6 second stand shares the uid and takes the reduced rate', `tier 2 = ${second.wage.amount}`);
+
+  const sharedStore = await prisma.store.findUniqueOrThrow({
+    where: { uid: 'SZ1001' },
+    include: { stands: true },
+  });
+  assert.equal(sharedStore.stands.length, 2);
+  ok('one uid now carries two stands', `${sharedStore.stands.length} stands at SZ1001`);
 
   const notRepaired = await createRepairForm({
     uid: 'SZ1003',
@@ -313,7 +330,8 @@ async function main() {
   // Same project, but far outside the old 14-day window: still a re-repair, because the
   // project boundary — not the gap — is what decides.
   const slowReRepair = await createRepairForm({
-    uid: 'SZ1002',
+    uid: 'SZ1001',
+    standIndex: 2,
     technicianId: tech.id,
     cityId: tehran.id,
     date: new Date(Date.now() + 40 * DAY_MS),
@@ -373,8 +391,10 @@ async function main() {
   const review = await buildReview(rows2, 0);
   const flagged = Object.keys(review.previouslyRepaired);
   assert.ok(flagged.includes('SZ1001'));
-  assert.ok(flagged.includes('SZ1002'));
-  assert.ok(!flagged.includes('SZ1003')); // never successfully repaired
+  // SZ1002 was imported but never worked, and SZ1003's only visit found the store shut,
+  // so neither counts as previously repaired.
+  assert.ok(!flagged.includes('SZ1002'));
+  assert.ok(!flagged.includes('SZ1003'));
   ok('previously-repaired uids surfaced for a decision', flagged.join(', '));
 
   const batch2 = await commitImport(rows2, {
@@ -393,8 +413,11 @@ async function main() {
   /* ---------------------------------------------------------------- */
   section('§6.7 per-uid history');
   const history = await lookupUid('SZ1001');
-  // Two repairs in project 1 (original + re-repair) and one in project 2.
-  assert.equal(history.history.length, 3);
+  // History is per LOCATION, so it spans both stands: stand 1 (repair, re-repair,
+  // project-2 repair) plus stand 2 (repair, re-repair).
+  assert.equal(history.history.length, 5);
+  assert.equal(history.standCount, 2);
+  ok('history covers every stand at the location', `${history.history.length} forms`);
   ok('stand accumulates every form ever filed against it', `${history.history.length} forms`);
 
   /* ---------------------------------------------------------------- */
@@ -405,9 +428,9 @@ async function main() {
   assert.equal(overview.totals.reRepairs, 2);
   assert.equal(overview.totals.repaired, 3);
   assert.equal(overview.totals.notRepaired, 1);
-  // Distinct uids visited: SZ1001, SZ1002, SZ1003.
-  assert.equal(overview.totals.totalUids, 3);
-  // Only the second stand of the shared-store visit was serviced as a sub-stand.
+  // Distinct uids (locations) visited: SZ1001 and SZ1003.
+  assert.equal(overview.totals.totalUids, 2);
+  // One sub-stand: SZ1001's stand 2. Counted once however often it was serviced.
   assert.equal(overview.totals.subStands, 1);
   ok('distinct uids and sub-stands counted apart', `uids=${overview.totals.totalUids}, sub=${overview.totals.subStands}`);
   ok('re-repair excluded from the repaired count', `repaired=${overview.totals.repaired}, reRepairs=${overview.totals.reRepairs}`);
@@ -436,19 +459,40 @@ async function main() {
 
   /* ---------------------------------------------------------------- */
   section('§8 Jti export format');
-  // Default scope is MAIN: every stand repaired in the range EXCEPT within-project
-  // re-repairs, which get their own workbook.
+  // Default scope is MAIN: everything in the range EXCEPT within-project re-repairs.
+  // Unsuccessful visits are included (client ruling) and tinted red in the sheet.
   const exportRows = await collectJtiRows({});
-  assert.equal(exportRows.length, 3);
+  assert.equal(exportRows.length, 4); // 3 repairs + 1 unsuccessful visit
+  assert.equal(exportRows.filter((r) => r.notRepaired).length, 1);
   ok('main export excludes within-project re-repairs', `${exportRows.length} rows`);
+  ok('unsuccessful visits appear in the sheet', '1 red row');
+
+  // Stands sharing a uid must repeat that uid, one row each, flagged as double stands.
+  const allRows = await collectJtiRows({ scope: 'ALL' });
+  const sz1001Rows = allRows.filter((r) => r.uid === 'SZ1001');
+  assert.ok(sz1001Rows.length >= 2);
+  assert.deepEqual(
+    [...new Set(sz1001Rows.map((r) => r.uid))],
+    ['SZ1001'],
+    'every stand at a location carries the same uid',
+  );
+  assert.ok(sz1001Rows.some((r) => r.standIndex === 2));
+  const sameVisit = sz1001Rows.filter((r) => r.isDoubleStand);
+  assert.ok(sameVisit.length >= 2, 'stands serviced on one visit are flagged as doubles');
+  ok('one uid produces one row per stand, marked as double stands', `${sz1001Rows.length} SZ1001 rows`);
+
+  const failedRow = exportRows.find((r) => r.notRepaired)!;
+  assert.match(failedRow.repairStatus, /^تعمیر نشد — /);
+  assert.match(failedRow.repairStatus, /تعطیل/);
+  assert.equal(failedRow.standQuality, null);
+  ok('column 44 states the outcome and the reason', failedRow.repairStatus);
 
   const reRepairRows = await collectJtiRows({ scope: 'RE_REPAIR' });
   assert.equal(reRepairRows.length, 2);
-  assert.ok(reRepairRows.every((r) => r.isReRepair));
+  assert.ok(reRepairRows.every((r) => r.isReRepair && !r.notRepaired));
   ok('re-repair export carries only the repeats', `${reRepairRows.length} rows`);
 
-  const allRows = await collectJtiRows({ scope: 'ALL' });
-  assert.equal(allRows.length, 5);
+  assert.equal(allRows.length, 6); // 4 main + 2 re-repairs
   ok('combined scope returns both halves', `${allRows.length} rows`);
 
   // A uid repaired in an earlier project stays in the MAIN sheet and is only marked.
@@ -466,9 +510,13 @@ async function main() {
   sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
     headerValues[col - 1] = String(cell.value ?? '');
   });
-  assert.equal(headerValues.length, 43);
+  assert.equal(headerValues.length, 44);
   assert.deepEqual(headerValues, JTI_EXPORT_HEADERS);
-  ok('43 columns with the exact Persian headers', `1="${headerValues[0]}" 4="${headerValues[3]}" 43="${headerValues[42]}"`);
+  ok(
+    '44 columns with the exact Persian headers',
+    `1="${headerValues[0]}" 4="${headerValues[3]}" 43="${headerValues[42]}" 44="${headerValues[43]}"`,
+  );
+  assert.equal(headerValues[43], 'Repair status');
   assert.equal(headerValues[4], 'پلکسی شلف');
   assert.equal(headerValues[33], 'درب');
   ok('columns 5–34 are the 30 parts in catalogue order');
@@ -490,6 +538,7 @@ async function main() {
       assert.equal(row.getCell(transformerCol).value, 1);
       assert.equal(row.getCell(springCol).value, 0, 'repaired-only part must export as 0');
       assert.equal(row.getCell(43).value, 4); // quality
+      assert.equal(row.getCell(44).value, 'تعمیر شد'); // repair status, column 44
       assert.match(String(row.getCell(37).value), /تعویض:/);
       assert.match(String(row.getCell(37).value), /تعمیر:/);
       checkedQuantities = true;
@@ -524,7 +573,7 @@ async function main() {
 
   const archive = await buildJtiWorkbook(exportRows);
   const preview = await previewHistorical(archive);
-  assert.equal(preview.rows, 3);
+  assert.equal(preview.rows, 4);
   ok('a previous Jti export is readable as historical data', `${preview.rows} rows`);
 
   const beforeForms = await prisma.repairForm.count();
@@ -534,7 +583,7 @@ async function main() {
   });
   // Every row carries a form code that already exists, so all are skipped as duplicates.
   assert.equal(historical.imported, 0);
-  assert.equal(historical.skipped, 3);
+  assert.equal(historical.skipped, 4);
   assert.equal(await prisma.repairForm.count(), beforeForms);
   ok('re-importing the same archive is idempotent', `${historical.skipped} rows skipped`);
 

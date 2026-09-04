@@ -106,6 +106,8 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
       select: {
         cityId: true,
         standId: true,
+        uid: true,
+        standIndex: true,
         outcome: true,
         isReRepair: true,
         notRepairedReason: true,
@@ -162,9 +164,9 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
 
   const reasonCounts = new Map<NotRepairedReason, number>();
 
-  // A stand revisited twice in the range is still ONE uid visited, so distinctness is
-  // tracked per city rather than counting forms. Sub-stands are the wage tiers above 1:
-  // the second and later stand serviced at the same store on the same visit.
+  // Stands share their store's uid, so "uids visited" counts distinct LOCATIONS while
+  // "sub-stands" counts the individual stands beyond the first at those locations. A
+  // three-stand store visited once is 1 uid and 2 sub-stands.
   const uidsSeen = new Map<string | null, Set<string>>();
   const subStandsSeen = new Map<string | null, Set<string>>();
   const track = (map: Map<string | null, Set<string>>, key: string | null, id: string) => {
@@ -175,8 +177,8 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
 
   for (const form of forms) {
     const bucket = bucketFor(form.cityId);
-    track(uidsSeen, form.cityId, form.standId);
-    if (form.wageTier >= 2) track(subStandsSeen, form.cityId, form.standId);
+    track(uidsSeen, form.cityId, form.uid);
+    if (form.standIndex >= 2) track(subStandsSeen, form.cityId, form.standId);
     if (form.outcome === 'REPAIRED') {
       if (form.isReRepair) bucket.reRepairs++;
       else bucket.repaired++;

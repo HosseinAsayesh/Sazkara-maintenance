@@ -72,8 +72,7 @@ export default async function ReRepairsPage({
       orderBy: { date: 'desc' },
       take: 200,
       include: {
-        stand: { select: { uid: true } },
-        city: { select: { name: true } },
+                city: { select: { name: true } },
         project: { select: { name: true } },
         technician: { select: { name: true, technicianCode: true } },
         parts: { include: { part: { select: { nameFa: true, nameEn: true } } } },
@@ -149,11 +148,11 @@ export default async function ReRepairsPage({
                           <Link
                             href={{
                               pathname: '/manager/uid',
-                              query: { q: form.stand.uid },
+                              query: { q: form.uid },
                             }}
                             className="text-brand-700 hover:underline"
                           >
-                            {form.stand.uid}
+                            {form.uid}
                           </Link>
                         </Td>
                         <Td className="max-w-[14rem] truncate">{form.storeName ?? '—'}</Td>

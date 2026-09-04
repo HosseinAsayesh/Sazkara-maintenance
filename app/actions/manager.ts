@@ -56,16 +56,18 @@ export async function reviewStandAction(
 ): Promise<ActionState> {
   await requireActionManager();
 
-  const standId = String(formData.get('standId') ?? '');
+  const storeId = String(formData.get('standId') ?? '');
   const decision = String(formData.get('decision') ?? '');
   const locale = String(formData.get('locale') || 'fa');
 
-  if (!standId || (decision !== 'CONFIRM' && decision !== 'REJECT')) {
+  if (!storeId || (decision !== 'CONFIRM' && decision !== 'REJECT')) {
     return { error: 'generic' };
   }
 
-  await prisma.stand.update({
-    where: { id: standId },
+  // §6.2 admits (or rejects) the whole location, since the uid names a store rather
+  // than an individual stand.
+  await prisma.store.update({
+    where: { id: storeId },
     data: { confirmation: decision === 'CONFIRM' ? 'CONFIRMED' : 'REJECTED' },
   });
 

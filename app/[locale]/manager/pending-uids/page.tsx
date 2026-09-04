@@ -30,13 +30,13 @@ export default async function PendingUidsPage({
     getTranslations({ locale, namespace: 'common' }),
   ]);
 
-  const stands = await prisma.stand.findMany({
+  const stands = await prisma.store.findMany({
     where: { confirmation: 'PENDING' },
     orderBy: { createdAt: 'desc' },
     include: {
-      store: { include: { city: true } },
+      city: true,
       createdBy: { select: { name: true, technicianCode: true } },
-      _count: { select: { repairForms: true } },
+      _count: { select: { repairForms: true, stands: true } },
     },
   });
 
@@ -74,8 +74,8 @@ export default async function PendingUidsPage({
                           {stand.uid}
                         </Link>
                       </Td>
-                      <Td className="max-w-[16rem] truncate">{stand.store?.name ?? '—'}</Td>
-                      <Td>{stand.store?.city.name ?? '—'}</Td>
+                      <Td className="max-w-[16rem] truncate">{stand.name ?? '—'}</Td>
+                      <Td>{stand.city.name ?? '—'}</Td>
                       <Td>
                         {stand.createdBy
                           ? `${stand.createdBy.name}${

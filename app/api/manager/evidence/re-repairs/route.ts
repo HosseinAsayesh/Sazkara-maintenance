@@ -1,5 +1,5 @@
 import { getCurrentUser } from '@/lib/auth';
-import { localDayKey } from '@/lib/dates';
+import { formatJalali } from '@/lib/dates';
 import { safeFilename } from '@/lib/exports/jti';
 import { generateEvidencePdf } from '@/lib/pdf/evidence';
 
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     return Response.json({ error: 'NO_VISITS' }, { status: 404 });
   }
 
-  const name = safeFilename(`${cityName} - ${localDayKey(date)} - تعمیرات مجدد`);
+  const name = safeFilename(`${cityName} - ${formatJalali(date)} - تعمیرات مجدد`);
 
   return new Response(new Uint8Array(buffer), {
     headers: {

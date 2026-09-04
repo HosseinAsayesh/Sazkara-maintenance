@@ -183,23 +183,23 @@ export async function findPreviouslyRepaired(uids: string[]): Promise<Map<string
   if (uids.length === 0) return new Map();
 
   const forms = await prisma.repairForm.findMany({
-    where: { outcome: 'REPAIRED', stand: { uid: { in: uids } } },
+    where: { outcome: 'REPAIRED', uid: { in: uids } },
     orderBy: { date: 'desc' },
     select: {
       id: true,
       formCode: true,
       date: true,
+      uid: true,
       city: { select: { name: true } },
-      stand: { select: { uid: true } },
     },
   });
 
   const out = new Map<string, DuplicateInfo>();
   for (const form of forms) {
     // findMany is ordered newest-first, so the first hit per uid is the latest repair.
-    if (out.has(form.stand.uid)) continue;
-    out.set(form.stand.uid, {
-      uid: form.stand.uid,
+    if (out.has(form.uid)) continue;
+    out.set(form.uid, {
+      uid: form.uid,
       lastRepairedAt: form.date,
       cityName: form.city?.name ?? null,
       formCode: form.formCode,
@@ -299,9 +299,15 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
         },
       });
 
-      // City + store caches keep this to a handful of queries on a 2000-row sheet.
+      // City cache keeps this to a handful of queries on a 2000-row sheet.
       const cityCache = new Map<string, string>();
-      const storeCache = new Map<string, string>();
+
+      // Store rows require a city. Jti sheets occasionally omit it, so fall back to a
+      // placeholder rather than dropping the row — the manager can correct it later.
+      const anyCity =
+        (await tx.city.findFirst({ orderBy: { createdAt: 'asc' } })) ??
+        (await tx.city.create({ data: { name: 'نامشخص' } }));
+      const fallbackCityId = anyCity.id;
 
       let created = 0;
       let excludedCount = 0;
@@ -332,71 +338,49 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
           }
         }
 
-        // --- Store ---
-        let storeId: string | null = null;
-        if (row.storeName && cityId) {
-          const matchKey = makeStoreMatchKey(row.storeName);
-          const cacheKey = `${cityId}:${matchKey}`;
-          if (storeCache.has(cacheKey)) {
-            storeId = storeCache.get(cacheKey)!;
-          } else {
-            const store = await tx.store.upsert({
-              where: { cityId_matchKey: { cityId, matchKey } },
-              create: {
-                name: row.storeName,
-                matchKey,
-                cityId,
-                address: row.address ?? null,
-                managerName: row.managerName ?? null,
-                phone: row.phone ?? null,
-                digitalAddress: row.digitalAddress ?? null,
-              },
-              // Fill gaps from the new sheet without clobbering better existing data.
-              update: {
-                address: row.address ?? undefined,
-                managerName: row.managerName ?? undefined,
-                phone: row.phone ?? undefined,
-                digitalAddress: row.digitalAddress ?? undefined,
-              },
-            });
-            storeId = store.id;
-            storeCache.set(cacheKey, store.id);
-          }
-        }
+        // --- Store (the location the uid names) ---
+        // The uid is the key now, so matching is exact — no more fuzzy name matching,
+        // which used to merge two Jti locations that happened to share a shop name.
+        const store = await tx.store.upsert({
+          where: { uid: row.uid },
+          create: {
+            uid: row.uid,
+            name: row.storeName || row.uid,
+            matchKey: makeStoreMatchKey(row.storeName || row.uid),
+            cityId: cityId ?? fallbackCityId,
+            address: row.address ?? null,
+            managerName: row.managerName ?? null,
+            phone: row.phone ?? null,
+            digitalAddress: row.digitalAddress ?? null,
+            // §6.2 — a uid the manager typed in by hand is provisional until confirmed;
+            // one that arrived in an official Jti sheet is not.
+            confirmation:
+              opts.source === 'MANUAL' && !opts.confirmStands ? 'PENDING' : 'CONFIRMED',
+            createdById: opts.importedById,
+          },
+          // Fill gaps from the new sheet without clobbering better existing data.
+          update: {
+            ...(row.storeName
+              ? { name: row.storeName, matchKey: makeStoreMatchKey(row.storeName) }
+              : {}),
+            address: row.address ?? undefined,
+            managerName: row.managerName ?? undefined,
+            phone: row.phone ?? undefined,
+            digitalAddress: row.digitalAddress ?? undefined,
+            ...(cityId ? { cityId } : {}),
+            // Appearing in an official order admits a previously-pending location (§6.2).
+            ...(opts.source !== 'MANUAL' ? { confirmation: 'CONFIRMED' as const } : {}),
+          },
+        });
+        const storeId = store.id;
 
-        // --- Stand (created once, ever, per uid) ---
-        const existingStand = await tx.stand.findUnique({ where: { uid: row.uid } });
-        let standId: string;
-        if (existingStand) {
-          standId = existingStand.id;
-          if (!existingStand.storeId && storeId) {
-            const siblings = await tx.stand.count({ where: { storeId } });
-            await tx.stand.update({
-              where: { id: standId },
-              data: { storeId, standIndexAtStore: siblings + 1 },
-            });
-          }
-          // Appearing in an official order confirms a previously-pending stand (§6.2).
-          if (existingStand.confirmation === 'PENDING' && opts.source !== 'MANUAL') {
-            await tx.stand.update({
-              where: { id: standId },
-              data: { confirmation: 'CONFIRMED' },
-            });
-          }
-        } else {
-          const siblings = storeId ? await tx.stand.count({ where: { storeId } }) : 0;
-          const stand = await tx.stand.create({
-            data: {
-              uid: row.uid,
-              storeId,
-              standIndexAtStore: siblings + 1,
-              confirmation:
-                opts.source === 'MANUAL' && !opts.confirmStands ? 'PENDING' : 'CONFIRMED',
-              createdById: opts.importedById,
-            },
-          });
-          standId = stand.id;
-        }
+        // Every location has at least one stand; the extras are discovered in the field
+        // when a technician reports on them, so only stand 1 is created here.
+        await tx.stand.upsert({
+          where: { storeId_standIndexAtStore: { storeId, standIndexAtStore: 1 } },
+          create: { storeId, standIndexAtStore: 1 },
+          update: {},
+        });
 
         const dup = duplicateInfo.get(row.uid);
 
@@ -404,7 +388,7 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
           data: {
             batchId: batch.id,
             uid: row.uid,
-            standId,
+            storeId,
             storeName: row.storeName,
             address: row.address,
             digitalAddress: row.digitalAddress,

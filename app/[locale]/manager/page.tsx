@@ -56,8 +56,7 @@ export default async function ManagerDashboard({
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
-        stand: { select: { uid: true } },
-        city: { select: { name: true } },
+                city: { select: { name: true } },
         technician: { select: { name: true } },
       },
     }),
@@ -253,10 +252,10 @@ export default async function ManagerDashboard({
                     <tr key={form.id}>
                       <Td className="dir-ltr font-medium">
                         <Link
-                          href={{ pathname: '/manager/uid', query: { q: form.stand.uid } }}
+                          href={{ pathname: '/manager/uid', query: { q: form.uid } }}
                           className="text-brand-700 hover:underline"
                         >
-                          {form.stand.uid}
+                          {form.uid}
                         </Link>
                       </Td>
                       <Td className="max-w-[14rem] truncate">{form.storeName ?? '—'}</Td>

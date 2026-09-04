@@ -11,7 +11,10 @@ import { cleanOptional, makeStoreMatchKey, normaliseUid, toLatinDigits } from '.
  * §7 — import previously-completed Jti export files (from before this system existed)
  * so historical work counts toward stats and analytics.
  *
- * Input is the same 43-column layout this app *produces* (§8), which is what the repair
+ * Input is the same layout this app *produces* (§8). Columns are read by position and
+ * the repair-status column was appended at 44, so archives exported before it existed
+ * still import unchanged — which is the point, since those are the old files.
+ * This is the layout the repair
  * manager has archived. Columns are located by position, not by header text, because
  * older files were hand-maintained and their headers drifted; the header row is only
  * used to detect how many rows to skip.
@@ -205,11 +208,12 @@ export async function previewHistorical(buffer: Buffer): Promise<HistoricalPrevi
   const { rows, skipped } = await readRows(buffer);
 
   const uids = [...new Set(rows.map((r) => r.uid))];
-  const existingStands = await prisma.stand.findMany({
+  // Locations, not stands, are what a uid identifies now.
+  const existingStores = await prisma.store.findMany({
     where: { uid: { in: uids } },
     select: { uid: true },
   });
-  const known = new Set(existingStands.map((s) => s.uid));
+  const known = new Set(existingStores.map((s) => s.uid));
 
   const storeKeys = new Set(
     rows.filter((r) => r.storeName).map((r) => `${r.cityName}::${makeStoreMatchKey(r.storeName!)}`),
@@ -308,43 +312,37 @@ export async function commitHistorical(
             },
           });
 
-          let storeId: string | null = null;
-          if (row.storeName) {
-            const matchKey = makeStoreMatchKey(row.storeName);
-            const store = await tx.store.upsert({
-              where: { cityId_matchKey: { cityId: city.id, matchKey } },
-              create: {
-                name: row.storeName,
-                matchKey,
-                cityId: city.id,
-                address: row.address ?? null,
-                managerName: row.managerName ?? null,
-                phone: row.phone ?? null,
-                digitalAddress: row.digitalAddress ?? null,
-              },
-              update: {},
-            });
-            storeId = store.id;
-          }
+          // The uid keys the location, so a historical sheet lands on the same store
+          // record a live import would.
+          const store = await tx.store.upsert({
+            where: { uid: row.uid },
+            create: {
+              uid: row.uid,
+              name: row.storeName || row.uid,
+              matchKey: makeStoreMatchKey(row.storeName || row.uid),
+              cityId: city.id,
+              address: row.address ?? null,
+              managerName: row.managerName ?? null,
+              phone: row.phone ?? null,
+              digitalAddress: row.digitalAddress ?? null,
+              confirmation: 'CONFIRMED',
+            },
+            update: {},
+          });
+          const storeId = store.id;
 
-          let stand = await tx.stand.findUnique({ where: { uid: row.uid } });
-          if (!stand) {
-            const siblings = storeId ? await tx.stand.count({ where: { storeId } }) : 0;
-            stand = await tx.stand.create({
-              data: {
-                uid: row.uid,
-                storeId,
-                standIndexAtStore: siblings + 1,
-                confirmation: 'CONFIRMED',
-              },
-            });
-          }
+          // Archived rows carry no stand position, so they are attributed to stand 1.
+          const stand = await tx.stand.upsert({
+            where: { storeId_standIndexAtStore: { storeId, standIndexAtStore: 1 } },
+            create: { storeId, standIndexAtStore: 1 },
+            update: {},
+          });
 
           await tx.orderLine.create({
             data: {
               batchId: batch.id,
               uid: row.uid,
-              standId: stand.id,
+              storeId,
               storeName: row.storeName,
               address: row.address,
               cityName: row.cityName,
@@ -361,6 +359,8 @@ export async function commitHistorical(
               technicianId,
               cityId: city.id,
               storeId,
+              uid: row.uid,
+              standIndex: 1,
               storeName: row.storeName ?? null,
               storeAddress: row.address ?? null,
               storeManagerName: row.managerName ?? null,

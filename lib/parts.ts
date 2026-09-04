@@ -113,15 +113,27 @@ export const JTI_TRAILING_HEADERS = [
   'Technician code',
   'Form code',
   'Stand quality',
+  /**
+   * Column 44, added at the client's request. The original spec fixed the sheet at 43
+   * columns; this one states in words whether the visit ended in a repair and, when it
+   * did not, which of the five fixed reasons applied — so a red row is readable without
+   * relying on the fill colour surviving a copy-paste.
+   */
+  'Repair status',
 ] as const;
 
-/** All 43 headers in order. */
+/** All 44 headers in order. */
 export const JTI_EXPORT_HEADERS: string[] = [
   ...JTI_LEADING_HEADERS,
   ...PART_CATALOG.map((p) => p.nameFa),
   ...JTI_TRAILING_HEADERS,
 ];
 
-if (JTI_EXPORT_HEADERS.length !== 43) {
-  throw new Error(`Jti export must have exactly 43 columns, got ${JTI_EXPORT_HEADERS.length}`);
+/** 43 from the original spec plus the client-requested repair-status column. */
+export const JTI_EXPORT_COLUMN_COUNT = 44;
+
+if (JTI_EXPORT_HEADERS.length !== JTI_EXPORT_COLUMN_COUNT) {
+  throw new Error(
+    `Jti export must have exactly ${JTI_EXPORT_COLUMN_COUNT} columns, got ${JTI_EXPORT_HEADERS.length}`,
+  );
 }

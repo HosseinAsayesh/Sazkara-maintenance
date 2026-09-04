@@ -44,7 +44,10 @@ export interface RepairFormProps {
     cityId: string | null;
   };
   isUnmatched: boolean;
-  wouldBeReRepair: boolean;
+  /** Stands already on file at this location — the form starts pre-expanded to match. */
+  knownStandCount: number;
+  /** Stand positions already repaired in this campaign; reporting them again is a re-repair. */
+  repairedStandIndexes: number[];
 }
 
 export function RepairFormClient(props: RepairFormProps) {
@@ -66,8 +69,15 @@ export function RepairFormClient(props: RepairFormProps) {
   const [digitalAddress, setDigitalAddress] = useState(props.prefill.digitalAddress);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
-  /** §6.6 — additional stands at this same store, each reported independently. */
-  const [extraStands, setExtraStands] = useState<ExtraStandValue[]>([]);
+  /**
+   * §6.6 — the other stands at this same location. They share the store's uid, so they
+   * are identified by position. The form opens with one block per stand already on file,
+   * so a technician arriving at a known three-stand store does not have to remember to
+   * add them.
+   */
+  const [extraStands, setExtraStands] = useState<ExtraStandValue[]>(() =>
+    Array.from({ length: Math.max(0, props.knownStandCount - 1) }, emptyExtraStand),
+  );
 
   const techSig = useRef<SignaturePadHandle | null>(null);
   const mgrSig = useRef<SignaturePadHandle | null>(null);
@@ -121,10 +131,6 @@ export function RepairFormClient(props: RepairFormProps) {
     for (const [i, stand] of extraStands.entries()) {
       const standHasParts =
         Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0;
-      if (!stand.uid.trim()) {
-        setClientError(t('errors.extraUidRequired', { n: i + 2 }));
-        return;
-      }
       if (!standHasParts && !stand.reason) {
         setClientError(t('errors.partsOrReason'));
         return;
@@ -379,6 +385,7 @@ export function RepairFormClient(props: RepairFormProps) {
           <ExtraStandSection
             key={i}
             index={i}
+            uid={props.uid}
             parts={props.parts}
             value={stand}
             onChange={(next) =>

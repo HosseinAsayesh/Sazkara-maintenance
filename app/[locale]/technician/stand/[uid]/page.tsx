@@ -22,6 +22,12 @@ export default async function StandFormPage({
 
   const lookup = await lookupUid(decodeURIComponent(rawUid));
 
+  // Stand positions already repaired in this campaign — reporting on one of them again
+  // is what makes a form a re-repair (the rule is per stand, not per uid).
+  const repairedThisProject = [...lookup.repairedThisProjectByStand.values()].sort(
+    (a, b) => a.standIndex - b.standIndex,
+  );
+
   const [parts, cities] = await Promise.all([
     prisma.partCatalogItem.findMany({
       where: { active: true },
@@ -60,11 +66,16 @@ export default async function StandFormPage({
           trigger is the project boundary, so the two cases read differently: a repeat
           inside this campaign is a re-repair, while history from an earlier campaign is
           context the technician should see but is not a re-repair. */}
-      {lookup.wouldBeReRepair && lookup.previousInProject ? (
+      {repairedThisProject.length ? (
         <Alert tone="warning" title={tt('reRepairWarning')}>
-          {tt('lastRepairedOn', {
-            date: formatDateForLocale(lookup.previousInProject.date, locale),
-          })}
+          {repairedThisProject
+            .map((f) =>
+              tt('standRepairedOn', {
+                n: f.standIndex,
+                date: formatDateForLocale(f.date, locale),
+              }),
+            )
+            .join(' · ')}
         </Alert>
       ) : lookup.hasPreviousProjectHistory && lookup.lastRepaired ? (
         <Alert tone="info" title={tt('previousProjectNotice')}>
@@ -95,7 +106,8 @@ export default async function StandFormPage({
           cityId: lookup.prefill.cityId,
         }}
         isUnmatched={lookup.isUnmatched}
-        wouldBeReRepair={lookup.wouldBeReRepair}
+        knownStandCount={lookup.standCount}
+        repairedStandIndexes={repairedThisProject.map((f) => f.standIndex)}
       />
     </div>
   );

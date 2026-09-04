@@ -17,7 +17,7 @@ export default async function ManagerLayout({
   // Badge counts for the two things that block the manager's workflow.
   const [pendingTechnicians, pendingStands] = await Promise.all([
     prisma.user.count({ where: { role: 'TECHNICIAN', status: 'PENDING' } }),
-    prisma.stand.count({ where: { confirmation: 'PENDING' } }),
+    prisma.store.count({ where: { confirmation: 'PENDING' } }),
   ]);
 
   return (
