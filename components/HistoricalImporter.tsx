@@ -1,0 +1,172 @@
+'use client';
+
+import { useActionState, useState } from 'react';
+import { useTranslations } from 'next-intl';
+
+import {
+  commitHistoricalAction,
+  previewHistoricalAction,
+  type HistoricalState,
+} from '@/app/actions/historical';
+
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  Input,
+  Table,
+  TableWrap,
+  Td,
+  Th,
+} from './ui';
+
+/** §7 — bring pre-system Jti exports into the stats. */
+export function HistoricalImporter({ locale }: { locale: string }) {
+  const t = useTranslations('historical');
+  const ti = useTranslations('imports');
+  const tc = useTranslations('common');
+
+  const [previewState, previewAction, previewing] = useActionState<HistoricalState, FormData>(
+    previewHistoricalAction,
+    {},
+  );
+  const [commitState, commitAction, committing] = useActionState<HistoricalState, FormData>(
+    commitHistoricalAction,
+    {},
+  );
+  const [name, setName] = useState('');
+
+  const preview = previewState.preview;
+
+  if (commitState.imported) {
+    return (
+      <Card className="p-6 text-center">
+        <div className="text-3xl">✓</div>
+        <h2 className="mt-2 text-lg font-bold text-emerald-700">
+          {t('imported', { count: commitState.imported.count })}
+        </h2>
+        {commitState.imported.skipped > 0 ? (
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {ti('excluded')}: {commitState.imported.skipped}
+          </p>
+        ) : null}
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader title={t('help')} description={t('expectedFormat')} />
+        <form action={previewAction} className="grid gap-4 p-4 sm:grid-cols-2">
+          <Field label={ti('batchName')}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} name="name" />
+          </Field>
+          <Field label={tc('upload')} required>
+            <input
+              type="file"
+              name="file"
+              accept=".xlsx,.xls"
+              required
+              className="block w-full text-sm file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={previewing}>
+              {previewing ? tc('loading') : t('dryRun')}
+            </Button>
+          </div>
+          {previewState.error ? (
+            <div className="sm:col-span-2">
+              <Alert tone="danger">
+                {ti.has(`errors.${previewState.error}`)
+                  ? ti(`errors.${previewState.error}`)
+                  : tc('error')}
+              </Alert>
+            </div>
+          ) : null}
+        </form>
+      </Card>
+
+      {preview ? (
+        <Card>
+          <CardHeader title={t('dryRun')} />
+          <form
+            action={(fd) => {
+              fd.set('fileRef', preview.fileRef);
+              fd.set('name', name || 'Historical import');
+              fd.set('locale', locale);
+              commitAction(fd);
+            }}
+            className="space-y-4 p-4"
+          >
+            <Alert tone="info">
+              {t('willCreate', {
+                forms: preview.rows,
+                stands: preview.newStands,
+                stores: preview.newStores,
+              })}
+            </Alert>
+
+            <div className="flex flex-wrap gap-2">
+              {preview.skipped > 0 ? (
+                <Badge tone="warning">
+                  {ti('invalidRows', { count: preview.skipped })}
+                </Badge>
+              ) : null}
+              {preview.firstDate ? (
+                <Badge tone="neutral">
+                  {new Date(preview.firstDate).toLocaleDateString(
+                    locale === 'fa' ? 'fa-IR' : 'en-GB',
+                  )}
+                  {' — '}
+                  {preview.lastDate
+                    ? new Date(preview.lastDate).toLocaleDateString(
+                        locale === 'fa' ? 'fa-IR' : 'en-GB',
+                      )
+                    : ''}
+                </Badge>
+              ) : null}
+            </div>
+
+            <TableWrap>
+              <Table className="min-w-0">
+                <thead>
+                  <tr>
+                    <Th>{tc('uid')}</Th>
+                    <Th>{tc('date')}</Th>
+                    <Th>{tc('city')}</Th>
+                    <Th>{tc('quantity')}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.sample.map((row, i) => (
+                    <tr key={`${row.uid}-${i}`}>
+                      <Td className="dir-ltr">{row.uid}</Td>
+                      <Td>
+                        {new Date(row.date).toLocaleDateString(
+                          locale === 'fa' ? 'fa-IR' : 'en-GB',
+                        )}
+                      </Td>
+                      <Td>{row.city}</Td>
+                      <Td className="tabular-nums">{row.parts}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableWrap>
+
+            <Button type="submit" size="lg" disabled={committing}>
+              {committing ? tc('submitting') : t('importNow')}
+            </Button>
+
+            {commitState.error ? <Alert tone="danger">{tc('error')}</Alert> : null}
+          </form>
+        </Card>
+      ) : null}
+    </div>
+  );
+}

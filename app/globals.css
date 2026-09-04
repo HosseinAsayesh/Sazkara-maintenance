@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+
+/*
+ * Fonts are a system stack rather than a webfont on purpose: this deployment runs on
+ * localhost, often on machines with no reliable internet, and Tahoma/Segoe UI shape
+ * Persian correctly on Windows. Vazirmatn is picked up automatically if the user has it
+ * installed.
+ */
+@theme {
+  --font-sans:
+    'Vazirmatn', 'IRANSans', Tahoma, 'Segoe UI', 'Noto Naskh Arabic', system-ui,
+    sans-serif;
+
+  --color-brand-50: #eef4fb;
+  --color-brand-100: #d7e5f5;
+  --color-brand-200: #b3cbe9;
+  --color-brand-400: #4b7fbd;
+  --color-brand-600: #1f4f8a;
+  --color-brand-700: #17406f;
+  --color-brand-900: #0f2947;
+}
+
+:root {
+  --background: #f4f6fa;
+  --foreground: #16202e;
+  --surface: #ffffff;
+  --border: #dfe5ee;
+  --muted: #64748b;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  /* Persian numerals read better with proportional lining figures off. */
+  font-variant-numeric: normal;
+}
+
+/* Signature/photo canvases must not be dragged around on touch devices. */
+.touch-none {
+  touch-action: none;
+}
+
+/* Inputs inherit direction from <html dir>, but numeric fields read better as LTR
+   even in an RTL page — a phone number or uid is not a Persian sentence. */
+.dir-ltr {
+  direction: ltr;
+}
+html[dir='rtl'] .dir-ltr {
+  text-align: right;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

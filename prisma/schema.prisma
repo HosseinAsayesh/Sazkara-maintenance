@@ -1,0 +1,379 @@
+// Sazkara Maintenance — data model
+//
+// Design notes that matter for correctness:
+//  * A Stand is keyed by its Jti `uid` and is GLOBAL, not per-import. Every RepairForm
+//    ever submitted against that uid hangs off it, so per-UID history (§6.7) and
+//    duplicate-order detection (§6.4) are both plain lookups against Stand/RepairForm
+//    and never depend on which ImportBatch a row arrived in.
+//  * OrderLine keeps a *snapshot* of the store metadata that arrived with a given
+//    import, so re-importing or editing a Store later never rewrites history.
+//  * RepairForm likewise snapshots store info + city at submit time; reports are built
+//    from the snapshot, not from a join that could drift.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TECHNICIAN
+  MANAGER
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ImportSource {
+  JTI_EXCEL
+  MANUAL
+  HISTORICAL
+}
+
+enum PartAction {
+  REPLACED
+  REPAIRED
+}
+
+enum RepairOutcome {
+  REPAIRED
+  NOT_REPAIRED
+}
+
+/// §6.5 — fixed list, extensible only by a developer (never free text).
+enum NotRepairedReason {
+  MANAGER_NOT_AUTHORIZED
+  STORE_OR_STAND_REMOVED
+  ALREADY_HEALTHY
+  STORE_TEMPORARILY_CLOSED
+  CONDITION_TOO_POOR
+}
+
+enum PhotoType {
+  STORE
+  BEFORE
+  AFTER
+  OTHER
+}
+
+/// §6.2 — a uid added outside the official order stays PENDING until a manager confirms it.
+enum ConfirmationStatus {
+  CONFIRMED
+  PENDING
+  REJECTED
+}
+
+enum OrderLineStatus {
+  PENDING
+  DONE
+  EXCLUDED
+}
+
+model User {
+  id             String     @id @default(cuid())
+  name           String
+  phone          String     @unique
+  passwordHash   String
+  role           Role       @default(TECHNICIAN)
+  status         UserStatus @default(PENDING)
+  /// Human-facing code printed on forms and exported in column 41.
+  technicianCode String?    @unique
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  repairForms       RepairForm[]
+  importBatches     ImportBatch[]
+  standsCreated     Stand[]            @relation("StandCreatedBy")
+  evidencePdfBatchs EvidencePdfBatch[]
+
+  @@index([role, status])
+}
+
+model City {
+  id String @id @default(cuid())
+
+  name   String  @unique
+  nameEn String?
+
+  /// §6.6 — Tehran is priced separately from "all other cities combined" everywhere
+  /// in the app. Kept as a flag rather than a name comparison so the reporting split
+  /// survives renames and transliteration differences.
+  isTehran Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  stores            Store[]
+  repairForms       RepairForm[]
+  evidencePdfBatchs EvidencePdfBatch[]
+}
+
+model Store {
+  id             String  @id @default(cuid())
+  name           String
+  address        String?
+  /// Google Maps link.
+  digitalAddress String?
+  managerName    String?
+  phone          String?
+
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Normalised name used to match incoming import rows to an existing store.
+  matchKey String
+
+  stands      Stand[]
+  repairForms RepairForm[]
+
+  @@unique([cityId, matchKey])
+  @@index([cityId])
+}
+
+model Stand {
+  id  String @id @default(cuid())
+  /// The identifier Jti uses. Globally unique — this is the spine of the whole system.
+  uid String @unique
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  /// §6.6 — 1 for the first stand registered at a store, 2/3/... for "double stands".
+  /// This is the catalogue ordinal shown in the UI. The *wage* tier is computed from
+  /// the order stands were actually serviced in on the day (see lib/wages.ts).
+  standIndexAtStore Int @default(1)
+
+  confirmation ConfirmationStatus @default(CONFIRMED)
+
+  createdById String?
+  createdBy   User?   @relation("StandCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  repairForms RepairForm[]
+  orderLines  OrderLine[]
+
+  @@index([storeId])
+  @@index([confirmation])
+}
+
+model ImportBatch {
+  id     String       @id @default(cuid())
+  name   String
+  source ImportSource
+
+  importedAt   DateTime @default(now())
+  importedById String
+  importedBy   User     @relation(fields: [importedById], references: [id])
+
+  /// Storage ref of the uploaded original, kept for audit.
+  fileRef String?
+
+  /// The header -> system-field mapping actually used for this import.
+  columnMapping Json?
+
+  mappingProfileId String?
+  mappingProfile   ColumnMappingProfile? @relation(fields: [mappingProfileId], references: [id])
+
+  lines OrderLine[]
+}
+
+/// §5 — a saved mapping so a similarly-shaped re-upload can reuse it. `signature` is a
+/// hash of the sorted header row, used to auto-suggest the profile on the next upload.
+model ColumnMappingProfile {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  signature String
+  mapping   Json
+  createdAt DateTime @default(now())
+
+  batches ImportBatch[]
+
+  @@index([signature])
+}
+
+model OrderLine {
+  id      String      @id @default(cuid())
+  batchId String
+  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  uid String
+
+  standId String?
+  stand   Stand?  @relation(fields: [standId], references: [id])
+
+  // Snapshot of whatever metadata arrived on this row.
+  storeName      String?
+  address        String?
+  digitalAddress String?
+  managerName    String?
+  phone          String?
+  cityName       String?
+
+  status OrderLineStatus @default(PENDING)
+
+  /// §6.4 — set at import when this uid was already serviced previously.
+  isDuplicate       Boolean @default(false)
+  duplicateNote     String?
+  duplicateOfFormId String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([batchId, uid])
+  @@index([uid])
+  @@index([status])
+}
+
+/// §8 — the 30 parts, in the exact order they occupy in export columns 5..34.
+model PartCatalogItem {
+  id     String @id @default(cuid())
+  nameFa String @unique
+  nameEn String
+
+  /// Stable key tied to the export column ("col05" .. "col34"). Never reordered.
+  exportColumnKey String @unique
+  /// 1..30, the position within columns 5..34.
+  sortOrder       Int    @unique
+
+  active Boolean @default(true)
+
+  usages PartUsage[]
+}
+
+model RepairForm {
+  id       String @id @default(cuid())
+  formCode String @unique
+
+  standId String
+  stand   Stand  @relation(fields: [standId], references: [id])
+
+  technicianId String
+  technician   User   @relation(fields: [technicianId], references: [id])
+
+  // Snapshots — reporting reads these, never a live join.
+  cityId  String?
+  city    City?   @relation(fields: [cityId], references: [id])
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  storeName        String?
+  storeAddress     String?
+  storeManagerName String?
+  storePhone       String?
+  digitalAddress   String?
+
+  date             DateTime
+  timeSpentMinutes Int?
+  /// 0..5. Null on an unrepaired visit.
+  qualityScore     Int?
+  notes            String?
+
+  technicianSignature   String?
+  storeManagerSignature String?
+
+  outcome           RepairOutcome
+  notRepairedReason NotRepairedReason?
+
+  /// §6.3 — repaired again within 14 days of a previous repair. Excluded from the
+  /// "stands repaired" headline count; its parts still count toward usage totals.
+  isReRepair     Boolean @default(false)
+  previousFormId String?
+
+  /// §4.3 — submitted for a uid with no matching order row.
+  isUnmatched Boolean @default(false)
+
+  // §6.6 wage snapshot, frozen at submit time so later rate edits don't rewrite history.
+  wageAmount      Decimal? @db.Decimal(14, 2)
+  wageTier        Int      @default(1)
+  wageRateApplied Decimal? @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parts  PartUsage[]
+  photos Photo[]
+
+  @@index([date])
+  @@index([cityId, date])
+  @@index([technicianId, date])
+  @@index([standId, date])
+  @@index([outcome])
+}
+
+model PartUsage {
+  id String @id @default(cuid())
+
+  repairFormId String
+  repairForm   RepairForm @relation(fields: [repairFormId], references: [id], onDelete: Cascade)
+
+  partCatalogItemId String
+  part              PartCatalogItem @relation(fields: [partCatalogItemId], references: [id])
+
+  action   PartAction
+  quantity Int        @default(1)
+
+  @@unique([repairFormId, partCatalogItemId, action])
+  @@index([partCatalogItemId, action])
+}
+
+model Photo {
+  id String @id @default(cuid())
+
+  repairFormId String
+  repairForm   RepairForm @relation(fields: [repairFormId], references: [id], onDelete: Cascade)
+
+  type    PhotoType
+  fileRef String
+  index   Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([repairFormId, index])
+}
+
+/// §6.6 — manager-editable rates. Never hardcode these anywhere in the app.
+model WageSetting {
+  key       String   @id
+  value     Decimal  @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt
+}
+
+/// Non-numeric app settings (PDF cover email, company name, logo ref...).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// §9 — cached generated evidence PDFs, one per (city, day).
+model EvidencePdfBatch {
+  id String @id @default(cuid())
+
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id])
+
+  date       DateTime @db.Date
+  fileRef    String
+  standCount Int
+
+  generatedAt   DateTime @default(now())
+  generatedById String
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+
+  @@unique([cityId, date])
+}
+
+/// Atomic sequence source for human-readable codes (form codes, technician codes).
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
