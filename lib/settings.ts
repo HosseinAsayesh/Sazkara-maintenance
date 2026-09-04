@@ -11,6 +11,7 @@ export const WAGE_KEYS = [
   'otherCityStandRate',
   'secondStandRate',
   'thirdPlusStandRate',
+  'unrepairedVisitRate',
 ] as const;
 
 export type WageKey = (typeof WAGE_KEYS)[number];
@@ -26,6 +27,13 @@ export const WAGE_DEFAULTS: Record<WageKey, number> = {
   otherCityStandRate: 0,
   secondStandRate: 0,
   thirdPlusStandRate: 0,
+  /**
+   * Paid for a visit that produced no repair. The technician travelled to the store
+   * regardless — a closed shutter still costs them the trip — so the manager sets a flat
+   * call-out rate here. If a temporarily-closed store is revisited later and the stand
+   * is actually repaired, that second visit is priced normally by the tier rules.
+   */
+  unrepairedVisitRate: 0,
 };
 
 export type WageSettings = Record<WageKey, number>;

@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import { formatJalali } from '../dates';
 import { JTI_EXPORT_HEADERS, PART_CATALOG } from '../parts';
 import { prisma } from '../prisma';
+import { projectScopeWhere } from '../projects';
 
 /**
  * The Jti export (§8) — 43 columns, in this exact order, with the Persian headers
@@ -25,16 +26,31 @@ import { prisma } from '../prisma';
  *  - Columns 5–34 count REPLACED parts only. Parts repaired in place are not consumed
  *    inventory (§6.8); they are described in column 37 instead so the information is not
  *    lost.
- *  - Re-repairs are included by default: the stand isn't counted twice in the repaired
- *    *statistic* (§6.3), but the parts really were consumed and Jti is owed the row. The
- *    manager can toggle this off per export.
+ *  - Scope (client ruling, revised §6.3). Every stand repaired during the project goes
+ *    into the MAIN workbook, including stands that were already repaired in earlier
+ *    projects — a uid recurring across campaigns is normal work, not a duplicate. Only
+ *    a stand repaired twice INSIDE the same project is a re-repair, and those rows are
+ *    split out into their own workbook so Jti's main sheet stays one-row-per-stand.
+ *    `scope` selects which of the two you get.
+ *  - Quantities in columns 5-34 are in the part's own unit: pieces for everything except
+ *    the two SMD strips, which are recorded in centimetres (50, 100, 150, ...).
  */
+
+/** Which half of the split a workbook covers. */
+export type JtiExportScope = 'MAIN' | 'RE_REPAIR' | 'ALL';
 
 export interface JtiExportFilters {
   from?: Date;
   to?: Date;
   cityId?: string;
-  includeReRepairs?: boolean;
+  projectId?: string | null;
+  phaseId?: string | null;
+  /**
+   * MAIN      — everything repaired in the range except within-project re-repairs.
+   * RE_REPAIR — only the within-project re-repairs.
+   * ALL       — both, for a manager who wants one combined sheet.
+   */
+  scope?: JtiExportScope;
 }
 
 export interface JtiExportRow {
@@ -53,6 +69,9 @@ export interface JtiExportRow {
   technicianCode: string;
   formCode: string;
   standQuality: number | null;
+  /** Repaired in an earlier campaign. Marked in the sheet, but still a main-export row. */
+  hasPreviousProjectHistory: boolean;
+  isReRepair: boolean;
 }
 
 /**
@@ -86,7 +105,12 @@ export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExpo
   const forms = await prisma.repairForm.findMany({
     where: {
       outcome: 'REPAIRED',
-      ...(filters.includeReRepairs === false ? { isReRepair: false } : {}),
+      ...(filters.scope === 'RE_REPAIR'
+        ? { isReRepair: true }
+        : filters.scope === 'ALL'
+          ? {}
+          : { isReRepair: false }),
+      ...projectScopeWhere(filters.projectId, filters.phaseId),
       ...(filters.cityId ? { cityId: filters.cityId } : {}),
       ...(filters.from || filters.to
         ? {
@@ -130,16 +154,21 @@ export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExpo
       technicianCode: form.technician.technicianCode ?? '',
       formCode: form.formCode,
       standQuality: form.qualityScore,
+      hasPreviousProjectHistory: form.hasPreviousProjectHistory,
+      isReRepair: form.isReRepair,
     };
   });
 }
 
-export async function buildJtiWorkbook(rows: JtiExportRow[]): Promise<Buffer> {
+export async function buildJtiWorkbook(
+  rows: JtiExportRow[],
+  scope: JtiExportScope = 'MAIN',
+): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Sazkara Maintenance';
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet('گزارش', {
+  const sheet = workbook.addWorksheet(scope === 'RE_REPAIR' ? 'تعمیرات مجدد' : 'گزارش', {
     // Persian sheet: read right-to-left, matching the paper form it replaces.
     views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }],
   });
@@ -165,7 +194,7 @@ export async function buildJtiWorkbook(rows: JtiExportRow[]): Promise<Buffer> {
   });
 
   rows.forEach((row, i) => {
-    sheet.addRow([
+    const added = sheet.addRow([
       i + 1, // 1  رقم
       formatJalali(row.date), // 2  تاریخ
       row.cityName, // 3  شهر
@@ -181,6 +210,20 @@ export async function buildJtiWorkbook(rows: JtiExportRow[]): Promise<Buffer> {
       row.formCode, // 42
       row.standQuality ?? '', // 43
     ]);
+
+    // A uid repaired in an EARLIER campaign is legitimate work and keeps its place in
+    // the main sheet, but the manager asked to be able to tell those rows apart. The
+    // sheet must stay exactly 43 columns wide for Jti, so the marker is a row tint
+    // rather than an extra column.
+    if (row.hasPreviousProjectHistory) {
+      added.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFF6E0' },
+        };
+      });
+    }
   });
 
   // Widths: identifiers and free text need room; the 30 part columns stay narrow.
@@ -243,6 +286,7 @@ export function safeFilename(input: string): string {
 export async function buildJtiWorkbooksPerCity(
   rows: JtiExportRow[],
   labelForRange: string,
+  scope: JtiExportScope = 'MAIN',
 ): Promise<CityBundle[]> {
   const byCity = new Map<string, JtiExportRow[]>();
   for (const row of rows) {
@@ -254,10 +298,11 @@ export async function buildJtiWorkbooksPerCity(
 
   const bundles: CityBundle[] = [];
   for (const [cityName, cityRows] of byCity) {
+    const suffix = scope === 'RE_REPAIR' ? ' - تعمیرات مجدد' : '';
     bundles.push({
       cityName,
-      filename: `${safeFilename(cityName)} - ${labelForRange}.xlsx`,
-      buffer: await buildJtiWorkbook(cityRows),
+      filename: `${safeFilename(cityName)} - ${labelForRange}${suffix}.xlsx`,
+      buffer: await buildJtiWorkbook(cityRows, scope),
       rowCount: cityRows.length,
     });
   }

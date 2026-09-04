@@ -36,6 +36,14 @@ enum ImportSource {
   HISTORICAL
 }
 
+/// Parts are counted in pieces, except the SMD strips which are cut to length and
+/// consumed in centimetres (50, 100, 150, ...). The unit travels with the catalogue item
+/// so the technician's quantity picker, the analytics and the Jti export all agree.
+enum PartUnit {
+  PIECE
+  CENTIMETER
+}
+
 enum PartAction {
   REPLACED
   REPAIRED
@@ -166,10 +174,60 @@ model Stand {
   @@index([confirmation])
 }
 
+/// A Jti campaign. The repair manager's attention is almost entirely on the current
+/// project, so it is the primary filter across the dashboard, exports and analytics.
+///
+/// The project boundary is also what defines a re-repair (§6.3, revised): the same uid
+/// serviced in two different projects is normal recurring work, while the same uid
+/// serviced twice inside one project is a re-repair.
+model Project {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  /// Short label used in file names and chips, e.g. "P-1404-1".
+  code      String?
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date
+  /// Exactly one project is the default selection on the dashboard.
+  isActive  Boolean   @default(false)
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  phases      Phase[]
+  batches     ImportBatch[]
+  repairForms RepairForm[]
+
+  @@index([isActive])
+}
+
+/// A phase within a project. Jti sends work in waves; a phase is one wave, and an
+/// import batch belongs to exactly one of them.
+model Phase {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name      String
+  sortOrder Int      @default(1)
+  createdAt DateTime @default(now())
+
+  batches     ImportBatch[]
+  repairForms RepairForm[]
+
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder])
+}
+
 model ImportBatch {
   id     String       @id @default(cuid())
   name   String
   source ImportSource
+
+  /// Null only for historical imports that predate the project register.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  phaseId   String?
+  phase     Phase?   @relation(fields: [phaseId], references: [id])
 
   importedAt   DateTime @default(now())
   importedById String
@@ -244,6 +302,12 @@ model PartCatalogItem {
   /// 1..30, the position within columns 5..34.
   sortOrder       Int    @unique
 
+  /// PIECE for everything except the two SMD strips, which are cut to length.
+  unit         PartUnit @default(PIECE)
+  /// Increment the technician's quantity picker steps in: 1 for pieces, 50 for the
+  /// SMD strips (50/100/150/200 cm ...).
+  quantityStep Int      @default(1)
+
   active Boolean @default(true)
 
   usages PartUsage[]
@@ -283,10 +347,27 @@ model RepairForm {
   outcome           RepairOutcome
   notRepairedReason NotRepairedReason?
 
-  /// §6.3 — repaired again within 14 days of a previous repair. Excluded from the
-  /// "stands repaired" headline count; its parts still count toward usage totals.
+  /// Which campaign this visit belongs to. Set from the matched order line's batch, or
+  /// from the active project when the uid arrived outside any order.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  phaseId   String?
+  phase     Phase?   @relation(fields: [phaseId], references: [id])
+
+  /// §6.3 (revised) — the stand was already repaired EARLIER IN THE SAME PROJECT.
+  /// Excluded from the "stands repaired" headline count and from the main Jti export;
+  /// its parts still count toward usage totals, and it gets its own export + evidence.
   isReRepair     Boolean @default(false)
   previousFormId String?
+
+  /// True when the re-repair followed the previous repair within 14 days. Purely a
+  /// quality signal shown on the re-repair page — it does NOT define `isReRepair`.
+  isQuickReRepair Boolean @default(false)
+
+  /// The uid was serviced in an EARLIER project. Flagged so the manager can see the
+  /// stand has history, but explicitly not treated as a re-repair of this project: the
+  /// row still belongs in the main Jti export.
+  hasPreviousProjectHistory Boolean @default(false)
 
   /// §4.3 — submitted for a uid with no matching order row.
   isUnmatched Boolean @default(false)
@@ -307,6 +388,10 @@ model RepairForm {
   @@index([technicianId, date])
   @@index([standId, date])
   @@index([outcome])
+  @@index([projectId, date])
+  @@index([phaseId])
+  // Drives re-repair detection: "has this stand been repaired in this project before?"
+  @@index([standId, projectId, outcome])
 }
 
 model PartUsage {

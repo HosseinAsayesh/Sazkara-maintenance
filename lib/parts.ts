@@ -13,6 +13,8 @@
 export const PART_EXPORT_FIRST_COLUMN = 5;
 export const PART_EXPORT_LAST_COLUMN = 34;
 
+export type PartUnitName = 'PIECE' | 'CENTIMETER';
+
 export interface PartCatalogSeed {
   /** 1-based position within the 30 parts. */
   sortOrder: number;
@@ -21,7 +23,20 @@ export interface PartCatalogSeed {
   exportColumnKey: string;
   nameFa: string;
   nameEn: string;
+  unit: PartUnitName;
+  /** Step for the technician's quantity picker. */
+  quantityStep: number;
 }
+
+/**
+ * The SMD light strips are cut from a reel rather than fitted as units: they are
+ * consumed in centimetres, in 50 cm increments (50, 100, 150, 200, ...). Everything else
+ * is a discrete piece. Keyed by Persian name because that is the catalogue's identity.
+ */
+export const CENTIMETER_PARTS = new Set(['نوار SMD سفید', 'نوار SMD آبی']);
+
+/** How much one tap adds for a centimetre-measured part. */
+export const CENTIMETER_STEP = 50;
 
 const NAMES: Array<[fa: string, en: string]> = [
   ['پلکسی شلف', 'Plexiglass shelf'],
@@ -58,14 +73,24 @@ const NAMES: Array<[fa: string, en: string]> = [
 
 export const PART_CATALOG: PartCatalogSeed[] = NAMES.map(([nameFa, nameEn], i) => {
   const exportColumn = PART_EXPORT_FIRST_COLUMN + i;
+  const isCm = CENTIMETER_PARTS.has(nameFa);
   return {
     sortOrder: i + 1,
     exportColumn,
     exportColumnKey: `col${String(exportColumn).padStart(2, '0')}`,
     nameFa,
     nameEn,
+    unit: isCm ? 'CENTIMETER' : 'PIECE',
+    quantityStep: isCm ? CENTIMETER_STEP : 1,
   };
 });
+
+if (PART_CATALOG.filter((p) => p.unit === 'CENTIMETER').length !== CENTIMETER_PARTS.size) {
+  throw new Error(
+    'A centimetre-measured part name no longer matches the catalogue. ' +
+      'CENTIMETER_PARTS must use the exact Persian names from the Jti sheet.',
+  );
+}
 
 if (PART_CATALOG.length !== PART_EXPORT_LAST_COLUMN - PART_EXPORT_FIRST_COLUMN + 1) {
   throw new Error(

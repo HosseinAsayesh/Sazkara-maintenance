@@ -7,6 +7,11 @@ import { useTranslations } from 'next-intl';
 import { submitRepairFormAction, type RepairFormState } from '@/app/actions/repair-form';
 import { Link } from '@/i18n/navigation';
 
+import {
+  ExtraStandSection,
+  emptyExtraStand,
+  type ExtraStandValue,
+} from './ExtraStandSection';
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { ExtraPhotoInput, PhotoInput } from './PhotoInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
@@ -61,6 +66,8 @@ export function RepairFormClient(props: RepairFormProps) {
   const [digitalAddress, setDigitalAddress] = useState(props.prefill.digitalAddress);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
+  /** §6.6 — additional stands at this same store, each reported independently. */
+  const [extraStands, setExtraStands] = useState<ExtraStandValue[]>([]);
 
   const techSig = useRef<SignaturePadHandle | null>(null);
   const mgrSig = useRef<SignaturePadHandle | null>(null);
@@ -111,6 +118,30 @@ export function RepairFormClient(props: RepairFormProps) {
       }
     }
 
+    for (const [i, stand] of extraStands.entries()) {
+      const standHasParts =
+        Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0;
+      if (!stand.uid.trim()) {
+        setClientError(t('errors.extraUidRequired', { n: i + 2 }));
+        return;
+      }
+      if (!standHasParts && !stand.reason) {
+        setClientError(t('errors.partsOrReason'));
+        return;
+      }
+      if (standHasParts && stand.quality === null) {
+        setClientError(t('errors.qualityRequired'));
+        return;
+      }
+      for (const field of [`extra_${i}_photoBefore`, `extra_${i}_photoAfter`]) {
+        const file = formData.get(field);
+        if (!(file instanceof File) || file.size === 0) {
+          setClientError(t('errors.photosRequired'));
+          return;
+        }
+      }
+    }
+
     const [techBlob, mgrBlob] = await Promise.all([
       techSig.current?.toBlob() ?? Promise.resolve(null),
       mgrSig.current?.toBlob() ?? Promise.resolve(null),
@@ -123,6 +154,7 @@ export function RepairFormClient(props: RepairFormProps) {
     formData.set('technicianSignature', techBlob, 'technician-signature.png');
     formData.set('storeManagerSignature', mgrBlob, 'manager-signature.png');
     formData.set('digitalAddress', digitalAddress);
+    formData.set('extraStandCount', String(extraStands.length));
     if (quality !== null) formData.set('qualityScore', String(quality));
 
     startTransition(() => formAction(formData));
@@ -136,6 +168,11 @@ export function RepairFormClient(props: RepairFormProps) {
         <p className="mt-1 text-sm text-slate-700">
           {t('submittedCode', { code: state.success.formCode })}
         </p>
+        {state.success.extraFormCodes?.length ? (
+          <p className="mt-1 text-xs text-slate-600">
+            {state.success.extraFormCodes.join(' · ')}
+          </p>
+        ) : null}
         {state.success.isReRepair ? (
           <p className="mt-2 text-xs text-amber-700">{tt('reRepairWarning', { days: 14 })}</p>
         ) : null}
@@ -335,6 +372,39 @@ export function RepairFormClient(props: RepairFormProps) {
           </div>
         </div>
       </Card>
+
+      {/* ---------------- additional stands at this store ---------------- */}
+      <div className="space-y-4">
+        {extraStands.map((stand, i) => (
+          <ExtraStandSection
+            key={i}
+            index={i}
+            parts={props.parts}
+            value={stand}
+            onChange={(next) =>
+              setExtraStands((prev) => prev.map((s, j) => (j === i ? next : s)))
+            }
+            onRemove={() =>
+              setExtraStands((prev) => prev.filter((_, j) => j !== i))
+            }
+          />
+        ))}
+
+        <Card className="border-dashed">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-4">
+            <p className="text-xs text-[var(--muted)]">{t('extraStandHelp')}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                setExtraStands((prev) => [...prev, emptyExtraStand()])
+              }
+            >
+              + {t('addStand')}
+            </Button>
+          </div>
+        </Card>
+      </div>
 
       {/* ---------------- photos ---------------- */}
       <Card>

@@ -16,7 +16,13 @@ import { getStorage } from '@/lib/storage';
 export interface RepairFormState {
   /** Translation key under `form.errors`, or `common.error`. */
   error?: string;
-  success?: { formCode: string; outcome: string; isReRepair: boolean };
+  success?: {
+    formCode: string;
+    outcome: string;
+    isReRepair: boolean;
+    /** Form codes for the additional stands serviced at the same store (§6.6). */
+    extraFormCodes?: string[];
+  };
 }
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -42,7 +48,9 @@ function parsePartEntries(values: FormDataEntryValue[]): PartEntryInput[] {
     if (action !== 'REPLACED' && action !== 'REPAIRED') continue;
     if (!partCatalogItemId) continue;
     const quantity = Number(qty);
-    if (!Number.isFinite(quantity) || quantity < 1 || quantity > 99) continue;
+    // Upper bound covers the centimetre-measured SMD strips; the exact step/unit rule is
+    // enforced against the catalogue in createRepairForm.
+    if (!Number.isFinite(quantity) || quantity < 1 || quantity > 5000) continue;
     out.push({ partCatalogItemId, action: action as PartAction, quantity });
   }
   return out;
@@ -94,15 +102,19 @@ export async function submitRepairFormAction(
     const timeRaw = formData.get('timeSpentMinutes');
     const reason = formData.get('notRepairedReason');
 
-    const result = await createRepairForm({
-      uid,
-      technicianId: user.id,
+    const sharedStore = {
       cityId: (formData.get('cityId') as string) || null,
       storeName: String(formData.get('storeName') ?? ''),
       storeAddress: String(formData.get('storeAddress') ?? ''),
       storeManagerName: String(formData.get('storeManagerName') ?? ''),
       storePhone: String(formData.get('storePhone') ?? ''),
       digitalAddress: String(formData.get('digitalAddress') ?? ''),
+    };
+
+    const result = await createRepairForm({
+      uid,
+      technicianId: user.id,
+      ...sharedStore,
       parts,
       notRepairedReason: reason ? (String(reason) as NotRepairedReason) : null,
       qualityScore: qualityRaw !== null && qualityRaw !== '' ? Number(qualityRaw) : null,
@@ -113,6 +125,64 @@ export async function submitRepairFormAction(
       photos,
     });
 
+    // --- Additional stands at the same store (§6.6, "double stands") ---------
+    //
+    // Each extra stand becomes its OWN RepairForm: the Jti export is one row per stand,
+    // and parts, quality and outcome are all per-stand facts. They are created strictly
+    // after the primary and one at a time, because the wage tier is derived from how
+    // many stands the technician has already serviced at this store today — creating
+    // them in parallel would race and hand two stands the same tier.
+    //
+    // What they share with the primary visit: the store details, both signatures, and
+    // the store photo. What is theirs alone: uid, parts, quality, notes, and their own
+    // before/after photos, since those are evidence about a specific stand.
+    const extraCount = Math.min(Number(formData.get('extraStandCount') ?? 0) || 0, 10);
+    const storePhotoRef = photos.find((p) => p.type === 'STORE')?.fileRef;
+    const extraFormCodes: string[] = [];
+
+    for (let i = 0; i < extraCount; i++) {
+      const extraUid = String(formData.get(`extra_${i}_uid`) ?? '').trim();
+      if (!extraUid) continue;
+
+      const extraPhotos: PhotoInput[] = [];
+      if (storePhotoRef) extraPhotos.push({ type: 'STORE', fileRef: storePhotoRef });
+      for (const [field, type] of [
+        [`extra_${i}_photoBefore`, 'BEFORE'],
+        [`extra_${i}_photoAfter`, 'AFTER'],
+      ] as Array<[string, PhotoType]>) {
+        const ref = await storeImage(
+          formData.get(field) as File | null,
+          `photos/${dayPrefix}`,
+        );
+        if (ref) extraPhotos.push({ type, fileRef: ref });
+      }
+
+      const extraQuality = formData.get(`extra_${i}_quality`);
+      const extraReason = formData.get(`extra_${i}_reason`);
+      const extraTime = formData.get(`extra_${i}_time`);
+
+      const extra = await createRepairForm({
+        uid: extraUid,
+        technicianId: user.id,
+        ...sharedStore,
+        parts: parsePartEntries(formData.getAll(`extra_${i}_parts`)),
+        notRepairedReason: extraReason
+          ? (String(extraReason) as NotRepairedReason)
+          : null,
+        qualityScore:
+          extraQuality !== null && extraQuality !== ''
+            ? Number(extraQuality)
+            : null,
+        timeSpentMinutes: extraTime ? Number(extraTime) : null,
+        notes: String(formData.get(`extra_${i}_notes`) ?? ''),
+        technicianSignature,
+        storeManagerSignature,
+        photos: extraPhotos,
+      });
+
+      extraFormCodes.push(extra.form.formCode);
+    }
+
     // The manager dashboard must reflect a submission immediately (§7 "near-real-time").
     revalidatePath(`/${locale}/manager`, 'layout');
     revalidatePath(`/${locale}/technician`, 'layout');
@@ -122,6 +192,7 @@ export async function submitRepairFormAction(
         formCode: result.form.formCode,
         outcome: result.outcome,
         isReRepair: result.isReRepair,
+        extraFormCodes,
       },
     };
   } catch (err) {
@@ -135,6 +206,8 @@ export async function submitRepairFormAction(
         PHOTOS_REQUIRED: 'photosRequired',
         INVALID_IMAGE_TYPE: 'photosRequired',
         IMAGE_TOO_LARGE: 'photosRequired',
+        INVALID_QUANTITY: 'invalidQuantity',
+        UNKNOWN_PART: 'submitFailed',
       };
       return { error: map[err.code] ?? 'submitFailed' };
     }

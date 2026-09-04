@@ -9,18 +9,33 @@ export interface PartOption {
   nameFa: string;
   nameEn: string;
   sortOrder: number;
+  /** PIECE for most parts; CENTIMETER for the two SMD strips. */
+  unit: 'PIECE' | 'CENTIMETER';
+  /** 1 for pieces, 50 for the SMD strips (50/100/150/200 cm ...). */
+  quantityStep: number;
 }
 
 export type PartSelection = Record<string, number>;
 
+/** Upper bounds are generous but finite, to catch a stuck finger on the + button. */
+const MAX_PIECES = 99;
+const MAX_CENTIMETERS = 5000;
+
 /**
  * Tap-to-select part picker (§4.4 — "favor tap-to-select over free typing everywhere
- * possible"). Two independent instances are rendered: one for replaced parts, one for
- * repaired parts, because the same part can legitimately appear in both lists on one
- * visit and they are billed differently (§6.8).
+ * possible").
  *
- * Selections are mirrored into hidden inputs so the whole form still submits as plain
- * multipart — no client-side JSON assembly to get out of sync with the server.
+ * Two instances are rendered per stand: one for REPLACED parts, one for REPAIRED. They
+ * are styled as visibly separate panels — different accent colour, own header band and
+ * a heavier border — because the same part can legitimately appear in both on one visit
+ * and the two are billed completely differently (§6.8: only replaced parts are consumed
+ * inventory). A technician mistaking one panel for the other corrupts the parts bill, so
+ * the distinction is carried by colour and layout rather than by a caption alone.
+ *
+ * Quantities step in the part's own unit: pieces one at a time, SMD strip in 50 cm cuts.
+ *
+ * Selections mirror into hidden inputs so the form still submits as plain multipart —
+ * no client-side JSON assembly to drift out of sync with the server.
  */
 export function PartPicker({
   parts,
@@ -40,8 +55,11 @@ export function PartPicker({
   onChange: (next: PartSelection) => void;
 }) {
   const t = useTranslations('form');
+  const tc = useTranslations('common');
   const locale = useLocale();
   const [query, setQuery] = useState('');
+
+  const isReplace = action === 'REPLACED';
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,89 +71,170 @@ export function PartPicker({
 
   const selectedCount = Object.keys(value).length;
 
-  const toggle = (id: string) => {
+  const stepOf = (part: PartOption) => Math.max(1, part.quantityStep || 1);
+  const maxOf = (part: PartOption) =>
+    part.unit === 'CENTIMETER' ? MAX_CENTIMETERS : MAX_PIECES;
+
+  const toggle = (part: PartOption) => {
     const next = { ...value };
-    if (next[id]) delete next[id];
-    else next[id] = 1;
+    if (next[part.id]) delete next[part.id];
+    else next[part.id] = stepOf(part);
     onChange(next);
   };
 
-  const setQty = (id: string, qty: number) => {
-    const clamped = Math.max(1, Math.min(99, qty));
-    onChange({ ...value, [id]: clamped });
+  const setQty = (part: PartOption, qty: number) => {
+    const step = stepOf(part);
+    // Snap to the nearest whole step so a typed "137" becomes a cuttable 150 cm.
+    const snapped = Math.round(qty / step) * step;
+    const clamped = Math.max(step, Math.min(maxOf(part), snapped));
+    onChange({ ...value, [part.id]: clamped });
   };
 
   const nameOf = (p: PartOption) => (locale === 'fa' ? p.nameFa : p.nameEn);
+  const unitLabel = (p: PartOption) =>
+    p.unit === 'CENTIMETER' ? tc('centimeter') : tc('piece');
 
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-brand-900">{title}</h3>
-        <span className="text-xs text-[var(--muted)]">
+    <section
+      className={clsx(
+        'overflow-hidden rounded-xl border-2 bg-[var(--surface)]',
+        isReplace ? 'border-amber-300' : 'border-teal-300',
+      )}
+    >
+      <header
+        className={clsx(
+          'flex flex-wrap items-baseline justify-between gap-2 border-b-2 px-4 py-2.5',
+          isReplace
+            ? 'border-amber-300 bg-amber-50'
+            : 'border-teal-300 bg-teal-50',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={clsx(
+              'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white',
+              isReplace ? 'bg-amber-500' : 'bg-teal-600',
+            )}
+            aria-hidden
+          >
+            {isReplace ? '⇄' : '✚'}
+          </span>
+          <h3
+            className={clsx(
+              'text-sm font-bold',
+              isReplace ? 'text-amber-900' : 'text-teal-900',
+            )}
+          >
+            {title}
+          </h3>
+        </div>
+        <span
+          className={clsx(
+            'rounded-full px-2 py-0.5 text-xs font-medium',
+            isReplace ? 'bg-amber-200 text-amber-900' : 'bg-teal-200 text-teal-900',
+          )}
+        >
           {t('selectedCount', { count: selectedCount })}
         </span>
-      </div>
-      <p className="mb-3 text-xs text-[var(--muted)]">{help}</p>
+      </header>
 
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={t('tapToSelect')}
-        className="mb-3 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
-      />
+      <div className="p-4">
+        <p className="mb-3 text-xs text-[var(--muted)]">{help}</p>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {filtered.map((part) => {
-          const qty = value[part.id];
-          const selected = qty !== undefined;
-          return (
-            <div
-              key={part.id}
-              className={clsx(
-                'rounded-lg border p-2 transition-colors',
-                selected
-                  ? 'border-brand-400 bg-brand-50'
-                  : 'border-[var(--border)] bg-white',
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => toggle(part.id)}
-                className="block w-full text-start text-xs font-medium leading-5 text-slate-800"
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('tapToSelect')}
+          className="mb-3 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        />
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {filtered.map((part) => {
+            const qty = value[part.id];
+            const selected = qty !== undefined;
+            const step = stepOf(part);
+            const isCm = part.unit === 'CENTIMETER';
+
+            return (
+              <div
+                key={part.id}
+                className={clsx(
+                  'rounded-lg border p-2 transition-colors',
+                  selected
+                    ? isReplace
+                      ? 'border-amber-400 bg-amber-50'
+                      : 'border-teal-400 bg-teal-50'
+                    : 'border-[var(--border)] bg-white',
+                )}
               >
-                {nameOf(part)}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggle(part)}
+                  className="block w-full text-start text-xs font-medium leading-5 text-slate-800"
+                >
+                  {nameOf(part)}
+                  {isCm ? (
+                    <span className="mt-0.5 block text-[10px] font-normal text-[var(--muted)]">
+                      {t('cmHint')}
+                    </span>
+                  ) : null}
+                </button>
 
-              {selected ? (
-                <div className="mt-2 flex items-center justify-between gap-1">
-                  <button
-                    type="button"
-                    aria-label="-"
-                    onClick={() => setQty(part.id, qty - 1)}
-                    className="h-7 w-7 rounded-md border border-brand-200 bg-white text-sm font-bold text-brand-700"
-                  >
-                    −
-                  </button>
-                  <input
-                    inputMode="numeric"
-                    value={qty}
-                    onChange={(e) => setQty(part.id, Number(e.target.value.replace(/\D/g, '')) || 1)}
-                    className="dir-ltr h-7 w-10 rounded-md border border-brand-200 text-center text-sm tabular-nums"
-                  />
-                  <button
-                    type="button"
-                    aria-label="+"
-                    onClick={() => setQty(part.id, qty + 1)}
-                    className="h-7 w-7 rounded-md border border-brand-200 bg-white text-sm font-bold text-brand-700"
-                  >
-                    +
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+                {selected ? (
+                  <div className="mt-2 flex items-center justify-between gap-1">
+                    <button
+                      type="button"
+                      aria-label="-"
+                      onClick={() => setQty(part, qty - step)}
+                      className={clsx(
+                        'h-7 w-7 rounded-md border bg-white text-sm font-bold',
+                        isReplace
+                          ? 'border-amber-300 text-amber-700'
+                          : 'border-teal-300 text-teal-700',
+                      )}
+                    >
+                      −
+                    </button>
+                    <span className="flex items-baseline gap-0.5">
+                      <input
+                        inputMode="numeric"
+                        value={qty}
+                        aria-label={`${nameOf(part)} — ${unitLabel(part)}`}
+                        onChange={(e) =>
+                          setQty(part, Number(e.target.value.replace(/\D/g, '')) || step)
+                        }
+                        className={clsx(
+                          'dir-ltr h-7 rounded-md border text-center text-sm tabular-nums',
+                          isCm ? 'w-12' : 'w-10',
+                          isReplace ? 'border-amber-300' : 'border-teal-300',
+                        )}
+                      />
+                      {isCm ? (
+                        <span className="text-[10px] text-[var(--muted)]">
+                          {tc('centimeter')}
+                        </span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="+"
+                      onClick={() => setQty(part, qty + step)}
+                      className={clsx(
+                        'h-7 w-7 rounded-md border bg-white text-sm font-bold',
+                        isReplace
+                          ? 'border-amber-300 text-amber-700'
+                          : 'border-teal-300 text-teal-700',
+                      )}
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {Object.entries(value).map(([partId, qty]) => (

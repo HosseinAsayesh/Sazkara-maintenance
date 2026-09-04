@@ -64,7 +64,15 @@
     "close": "Close",
     "today": "Today",
     "refresh": "Refresh",
-    "part": "Part"
+    "part": "Part",
+    "applyFilter": "Apply filter",
+    "project": "Project",
+    "phase": "Phase",
+    "allProjects": "All projects",
+    "allPhases": "All phases",
+    "add": "Add",
+    "centimeter": "cm",
+    "piece": "pcs"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -80,7 +88,8 @@
     "pendingUids": "Pending UIDs",
     "historical": "Historical data",
     "newReport": "New report",
-    "myProfile": "My stats"
+    "myProfile": "My stats",
+    "projects": "Projects"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -190,10 +199,20 @@
       "reasonRequired": "Pick a reason when no parts were recorded",
       "qualityRequired": "Pick a quality score",
       "partsOrReason": "Either record parts, or pick a reason the stand was not repaired",
-      "invalidQuantity": "Quantity must be between 1 and 99",
+      "invalidQuantity": "One of the part quantities is not valid.",
       "uidRequired": "A stand UID is required",
-      "submitFailed": "Could not submit the report"
-    }
+      "submitFailed": "Could not submit the report",
+      "extraUidRequired": "Enter the UID for stand {n}."
+    },
+    "secondStand": "Another stand at this store",
+    "addStand": "Add another stand",
+    "removeStand": "Remove this stand",
+    "standNumber": "Stand {n}",
+    "primaryStand": "Primary stand",
+    "extraStandHelp": "If this store has more than one stand, enter each UID and its repair details separately here.",
+    "replacedSection": "Replaced parts",
+    "repairedSection": "Repaired parts",
+    "cmHint": "in centimetres (steps of 50)"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
@@ -228,7 +247,18 @@
     "recentForms": "Latest reports",
     "pendingTechnicians": "{count, number} technicians awaiting approval",
     "pendingUids": "{count, number} UIDs awaiting confirmation",
-    "noData": "No data for this range"
+    "noData": "No data for this range",
+    "totalUids": "Total UIDs",
+    "totalUidsHelp": "Distinct UIDs visited",
+    "subStands": "Secondary stands",
+    "subStandsHelp": "Second and later stand at the same store",
+    "addCity": "Add city",
+    "cityName": "City name",
+    "cityNameEn": "English name (optional)",
+    "isTehran": "Apply the Tehran wage rate to this city",
+    "cityAdded": "City added",
+    "cityExists": "That city already exists",
+    "manageCities": "Manage cities"
   },
   "imports": {
     "title": "Jti orders",
@@ -290,7 +320,17 @@
       "noRows": "No rows found in this sheet",
       "parseFailed": "Could not read the file"
     },
-    "duplicateHeader": "Previous repair"
+    "duplicateHeader": "Previous repair",
+    "editOrder": "Edit order",
+    "deleteOrder": "Delete order",
+    "deleteOrderConfirm": "Delete this order and all of its rows? Submitted repair reports are kept.",
+    "deleteLine": "Delete row",
+    "lineSaved": "Row saved",
+    "orderDeleted": "Order deleted",
+    "cannotDeleteWithForms": "This order has repair reports against it and cannot be deleted.",
+    "addLine": "Add row",
+    "saveLine": "Save",
+    "editLines": "Edit rows"
   },
   "pendingUids": {
     "title": "UIDs awaiting confirmation",
@@ -355,7 +395,7 @@
     "successRateTitle": "Successful repair rate",
     "successRateHelp": "Share of visited stands that were repaired.",
     "reasonsTitle": "Reasons not repaired",
-    "partsRateTitle": "Share of stands needing each part",
+    "partsRateTitle": "Part replacements per stand",
     "partsRateHelp": "For example \"53% of stands needed a transformer replaced\".",
     "forecastTitle": "Parts forecast",
     "forecastHelp": "Estimate parts needed for the next phase from historical consumption.",
@@ -399,7 +439,13 @@
     "help": "Stands that needed repair again within {days, number} days. They are not counted a second time in the repaired-stand total, but their parts do count toward overall usage.",
     "daysAfter": "{days, number} days after the previous repair",
     "empty": "Nothing recorded",
-    "gapHeader": "Gap since previous repair"
+    "gapHeader": "Gap since previous repair",
+    "quick": "Quick re-repair",
+    "quickHelp": "Within 14 days of the previous repair",
+    "exportTitle": "Re-repair exports",
+    "exportHelp": "Excel and evidence PDFs for re-repairs, separate from the main repairs",
+    "previousProject": "History in earlier projects",
+    "previousProjectHelp": "This UID was repaired in a different project; it does not count as a re-repair of this one."
   },
   "settings": {
     "title": "Settings",
@@ -418,7 +464,9 @@
     "addCity": "Add city",
     "cityName": "City name",
     "isTehran": "Price as Tehran",
-    "saved": "Settings saved"
+    "saved": "Settings saved",
+    "unrepairedVisitRate": "Unsuccessful visit rate",
+    "unrepairedVisitRateHelp": "Paid for any visit that produced no repair (store closed, permission refused, ...). If the same stand is repaired on a later visit, that visit is priced at the normal rate."
   },
   "parts": {
     "title": "Part catalogue",
@@ -443,6 +491,35 @@
     "generic": "Something went wrong. Please try again.",
     "notFound": "Page not found",
     "forbidden": "You do not have access",
-    "unauthorized": "Please sign in to continue"
+    "unauthorized": "Please sign in to continue",
+    "nameRequired": "A name is required.",
+    "startDateRequired": "Pick a start date.",
+    "exists": "That already exists.",
+    "uidRequired": "A stand UID is required.",
+    "duplicateUid": "That UID is already in this order.",
+    "lineHasForms": "A repair report exists for this UID, so the row cannot be deleted.",
+    "cannotDeleteWithForms": "This order has repair reports against it and cannot be deleted.",
+    "phaseMismatch": "The selected phase does not belong to this project."
+  },
+  "projects": {
+    "title": "Projects and phases",
+    "description": "A project is one Jti campaign. The project boundary is what defines a re-repair.",
+    "newProject": "New project",
+    "name": "Project name",
+    "code": "Short code",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "phases": "Phases",
+    "phaseNames": "Phase names (comma separated)",
+    "makeActive": "Make this the current project",
+    "active": "Current",
+    "setActive": "Make current",
+    "addPhase": "Add phase",
+    "phaseName": "Phase name",
+    "created": "Project created",
+    "forms": "reports",
+    "batches": "orders",
+    "none": "No projects yet",
+    "assignToProject": "Project and phase"
   }
 }

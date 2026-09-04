@@ -5,6 +5,7 @@ import type { NotRepairedReason, PartAction, PhotoType, Prisma } from '@prisma/c
 import { nextFormCode } from './codes';
 import { DAY_MS, RE_REPAIR_WINDOW_DAYS } from './dates';
 import { prisma } from './prisma';
+import { resolveProjectForUid } from './projects';
 import { makeStoreMatchKey, normaliseUid } from './text';
 import { computeWage } from './wages';
 
@@ -82,9 +83,23 @@ export async function lookupUid(uidRaw: string) {
   });
 
   const lastRepaired = stand?.repairForms.find((f) => f.outcome === 'REPAIRED') ?? null;
-  const wouldBeReRepair =
-    !!lastRepaired &&
-    Date.now() - lastRepaired.date.getTime() <= RE_REPAIR_WINDOW_DAYS * DAY_MS;
+
+  // Warn the technician only when a repair now really would be a re-repair, i.e. this
+  // stand was already repaired inside the SAME campaign the uid resolves to. A stand
+  // last touched in an earlier project shows history but no warning.
+  const { projectId } = await resolveProjectForUid(prisma, uid);
+  const previousInProject =
+    projectId && stand
+      ? (stand.repairForms.find(
+          (f) => f.outcome === 'REPAIRED' && f.projectId === projectId,
+        ) ?? null)
+      : null;
+
+  const wouldBeReRepair = !!previousInProject;
+  const hasPreviousProjectHistory =
+    !!stand?.repairForms.some(
+      (f) => f.outcome === 'REPAIRED' && f.projectId !== projectId,
+    );
 
   return {
     uid,
@@ -97,6 +112,9 @@ export async function lookupUid(uidRaw: string) {
     history: stand?.repairForms ?? [],
     lastRepaired,
     wouldBeReRepair,
+    /** Repaired in an earlier campaign — shown as history, never as a re-repair. */
+    hasPreviousProjectHistory,
+    previousInProject,
     prefill: {
       storeName: stand?.store?.name ?? orderLine?.storeName ?? '',
       storeAddress: stand?.store?.address ?? orderLine?.address ?? '',
@@ -150,6 +168,30 @@ export async function createRepairForm(input: CreateRepairFormInput) {
     else merged.set(key, { ...p });
   }
   const parts = [...merged.values()];
+
+  // Quantities are validated against the catalogue, not trusted from the client: the
+  // SMD strips are cut to length and must arrive as whole 50 cm steps, while everything
+  // else is a discrete piece. The picker already enforces this, so a violation means a
+  // tampered or buggy request — reject it rather than silently snapping a number that
+  // ends up on a parts bill.
+  if (parts.length) {
+    const catalogue = await prisma.partCatalogItem.findMany({
+      where: { id: { in: parts.map((p) => p.partCatalogItemId) } },
+      select: { id: true, unit: true, quantityStep: true },
+    });
+    const byId = new Map(catalogue.map((c) => [c.id, c]));
+
+    for (const entry of parts) {
+      const item = byId.get(entry.partCatalogItemId);
+      if (!item) throw new RepairFormError('UNKNOWN_PART');
+
+      const step = Math.max(1, item.quantityStep);
+      const max = item.unit === 'CENTIMETER' ? 5000 : 99;
+      if (entry.quantity % step !== 0 || entry.quantity > max) {
+        throw new RepairFormError('INVALID_QUANTITY');
+      }
+    }
+  }
 
   // §6.1 — a stand counts as repaired if at least one part was replaced OR repaired.
   // The technician never picks the outcome directly.
@@ -257,26 +299,63 @@ export async function createRepairForm(input: CreateRepairFormInput) {
         });
       }
 
-      // --- §6.3 re-repair detection --------------------------------------------
-      // Only a *repair* can be a re-repair: an unsuccessful visit inside the window is
-      // just an unsuccessful visit.
+      // --- Project scope --------------------------------------------------------
+      const { projectId, phaseId } = await resolveProjectForUid(tx, uid);
+
+      // --- §6.3 re-repair detection (revised) ------------------------------------
+      // The PROJECT is what defines a re-repair, not elapsed time: the same stand
+      // repaired twice inside one campaign is a re-repair however far apart the visits
+      // fall, while the same stand repaired in a later campaign is normal recurring
+      // work and belongs in the main export.
+      //
+      // Only a *repair* can be a re-repair — an unsuccessful revisit is just an
+      // unsuccessful visit.
       let isReRepair = false;
+      let isQuickReRepair = false;
       let previousFormId: string | null = null;
+      let hasPreviousProjectHistory = false;
 
       if (outcome === 'REPAIRED') {
-        const previous = await tx.repairForm.findFirst({
+        const previousInProject = projectId
+          ? await tx.repairForm.findFirst({
+              where: {
+                standId: stand.id,
+                outcome: 'REPAIRED',
+                projectId,
+                date: { lte: date },
+              },
+              orderBy: { date: 'desc' },
+              select: { id: true, date: true },
+            })
+          : null;
+
+        if (previousInProject) {
+          isReRepair = true;
+          previousFormId = previousInProject.id;
+          // 14 days is now only a quality signal on the re-repair page: a stand that
+          // failed again this fast is a different problem from one that lasted months.
+          isQuickReRepair =
+            date.getTime() - previousInProject.date.getTime() <=
+            RE_REPAIR_WINDOW_DAYS * DAY_MS;
+        }
+
+        // Serviced in an EARLIER campaign: worth surfacing to the manager, but
+        // deliberately not a re-repair of this one, so the row stays in the main export.
+        //
+        // `{ not: projectId }` alone would silently drop rows whose projectId is NULL
+        // (SQL `<>` is never true against NULL), so unassigned historical repairs are
+        // matched explicitly.
+        const earlierProject = await tx.repairForm.findFirst({
           where: {
             standId: stand.id,
             outcome: 'REPAIRED',
-            date: { gte: new Date(date.getTime() - RE_REPAIR_WINDOW_DAYS * DAY_MS), lte: date },
+            ...(projectId
+              ? { OR: [{ projectId: null }, { projectId: { not: projectId } }] }
+              : {}),
           },
-          orderBy: { date: 'desc' },
           select: { id: true },
         });
-        if (previous) {
-          isReRepair = true;
-          previousFormId = previous.id;
-        }
+        hasPreviousProjectHistory = !!earlierProject;
       }
 
       // --- Wage (§6.6) ----------------------------------------------------------
@@ -318,8 +397,13 @@ export async function createRepairForm(input: CreateRepairFormInput) {
           outcome,
           notRepairedReason: outcome === 'NOT_REPAIRED' ? input.notRepairedReason : null,
 
+          projectId,
+          phaseId,
+
           isReRepair,
           previousFormId,
+          isQuickReRepair,
+          hasPreviousProjectHistory,
           isUnmatched: !orderLine,
 
           wageAmount: wage.amount,

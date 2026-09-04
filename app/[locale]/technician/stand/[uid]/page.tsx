@@ -26,7 +26,14 @@ export default async function StandFormPage({
     prisma.partCatalogItem.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
-      select: { id: true, nameFa: true, nameEn: true, sortOrder: true },
+      select: {
+        id: true,
+        nameFa: true,
+        nameEn: true,
+        sortOrder: true,
+        unit: true,
+        quantityStep: true,
+      },
     }),
     prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);

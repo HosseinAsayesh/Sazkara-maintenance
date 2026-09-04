@@ -21,15 +21,19 @@ type Db = Prisma.TransactionClient | typeof prisma;
  *
  * Tehran has its own base rate; every other city shares one rate (§6.6).
  *
- * ASSUMPTION (stated in the README): a wage is earned on visits that resulted in a
- * repair, including re-repairs. A visit that produced no repair (store closed, owner
- * refused, ...) records a zero wage — nothing is billable to Jti for it. Flip
- * `PAY_UNREPAIRED_VISITS` if the client wants travel paid regardless.
+ * UNSUCCESSFUL VISITS (client ruling): the technician travelled either way, so every
+ * visit that produced no repair earns the flat `unrepairedVisitRate` the manager sets —
+ * whatever the reason. A temporarily-closed store is still expected to be revisited, and
+ * when that later visit does produce a repair it is priced normally by the tier rules
+ * below; the call-out rate for the wasted trip is not deducted from it.
  */
-export const PAY_UNREPAIRED_VISITS = false;
+export const PAY_UNREPAIRED_VISITS = true;
 
 export interface WageResult {
-  /** 1 = first stand at this store today, 2 = second, 3+ = third or later. */
+  /**
+   * 1 = first stand at this store today, 2 = second, 3+ = third or later.
+   * 0 marks a flat call-out payment, which sits outside the tier ladder entirely.
+   */
   tier: number;
   /** The rate that tier resolved to. */
   rate: number;
@@ -72,7 +76,9 @@ async function priorStandsAtStoreToday(params: {
       storeId,
       standId: { not: standId },
       date: { gte: startOfLocalDay(date), lt: endOfLocalDayExclusive(date) },
-      ...(PAY_UNREPAIRED_VISITS ? {} : { outcome: 'REPAIRED' as const }),
+      // Only actual repairs occupy a tier slot. An unsuccessful visit is paid the flat
+      // call-out rate and must not demote a stand repaired later at the same store.
+      outcome: 'REPAIRED',
       ...(excludeFormId ? { id: { not: excludeFormId } } : {}),
     },
     select: { standId: true },
@@ -95,8 +101,12 @@ export async function computeWage(params: {
   const settings = params.settings ?? (await getWageSettings());
   const db = params.db ?? prisma;
 
-  if (params.outcome !== 'REPAIRED' && !PAY_UNREPAIRED_VISITS) {
-    return { tier: 1, rate: 0, amount: 0 };
+  // A wasted trip is paid at a flat rate and never consumes a tier slot: it must not
+  // push a stand the technician *does* repair at the same store down to the reduced
+  // second-stand rate, so it is priced and returned before the tier lookup.
+  if (params.outcome !== 'REPAIRED') {
+    const rate = PAY_UNREPAIRED_VISITS ? settings.unrepairedVisitRate : 0;
+    return { tier: 0, rate, amount: rate };
   }
 
   // With no store on record (an unmatched stray uid) there is no "same store" to

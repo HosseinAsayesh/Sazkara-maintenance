@@ -4,6 +4,7 @@ import type { NotRepairedReason } from '@prisma/client';
 
 import { prisma } from './prisma';
 import { buildPartsUsageReport } from './exports/parts-usage';
+import { projectScopeWhere } from './projects';
 
 /**
  * Dashboard (§7) and analytics (§10).
@@ -17,10 +18,14 @@ export interface RangeFilters {
   from?: Date;
   to?: Date;
   cityId?: string;
+  /** Campaign scope — the manager's primary lens once a project is running. */
+  projectId?: string | null;
+  phaseId?: string | null;
 }
 
 function dateWhere(filters: RangeFilters) {
   return {
+    ...projectScopeWhere(filters.projectId, filters.phaseId),
     ...(filters.cityId ? { cityId: filters.cityId } : {}),
     ...(filters.from || filters.to
       ? {
@@ -45,6 +50,17 @@ export interface CityStats {
   remaining: number;
   totalOrdered: number;
   wageTotal: number;
+  /**
+   * Distinct UIDs visited. This is the headline the manager tracks: one row of fieldwork
+   * per UID, whatever the outcome.
+   */
+  totalUids: number;
+  /**
+   * Of those, the ones serviced as the second-or-later stand at the same store on the
+   * same visit ("double stands"). They are real work but need no extra travel, which is
+   * why they are counted — and paid — apart from the primary UIDs.
+   */
+  subStands: number;
 }
 
 export interface OverviewStats {
@@ -56,6 +72,8 @@ export interface OverviewStats {
     remaining: number;
     totalOrdered: number;
     wageTotal: number;
+    totalUids: number;
+    subStands: number;
     successRate: number;
   };
   /** §7 — technician pay is split this way, so the dashboard tracks both in parallel. */
@@ -74,6 +92,8 @@ const EMPTY_BUCKET = {
   remaining: 0,
   totalOrdered: 0,
   wageTotal: 0,
+  totalUids: 0,
+  subStands: 0,
 };
 
 export async function getOverview(filters: RangeFilters): Promise<OverviewStats> {
@@ -85,10 +105,12 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
       where,
       select: {
         cityId: true,
+        standId: true,
         outcome: true,
         isReRepair: true,
         notRepairedReason: true,
         wageAmount: true,
+        wageTier: true,
       },
     }),
     // Outstanding work is a property of the order book, not of a date range — a line
@@ -96,7 +118,20 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
     prisma.orderLine.groupBy({
       by: ['cityName', 'status'],
       _count: { _all: true },
-      where: { status: { not: 'EXCLUDED' } },
+      where: {
+        status: { not: 'EXCLUDED' },
+        // Outstanding work belongs to the campaign that ordered it.
+        ...(filters.projectId && filters.projectId !== 'all'
+          ? {
+              batch: {
+                projectId: filters.projectId === '__none__' ? null : filters.projectId,
+                ...(filters.phaseId && filters.phaseId !== 'all'
+                  ? { phaseId: filters.phaseId }
+                  : {}),
+              },
+            }
+          : {}),
+      },
     }),
   ]);
 
@@ -127,8 +162,21 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
 
   const reasonCounts = new Map<NotRepairedReason, number>();
 
+  // A stand revisited twice in the range is still ONE uid visited, so distinctness is
+  // tracked per city rather than counting forms. Sub-stands are the wage tiers above 1:
+  // the second and later stand serviced at the same store on the same visit.
+  const uidsSeen = new Map<string | null, Set<string>>();
+  const subStandsSeen = new Map<string | null, Set<string>>();
+  const track = (map: Map<string | null, Set<string>>, key: string | null, id: string) => {
+    const set = map.get(key) ?? new Set<string>();
+    set.add(id);
+    map.set(key, set);
+  };
+
   for (const form of forms) {
     const bucket = bucketFor(form.cityId);
+    track(uidsSeen, form.cityId, form.standId);
+    if (form.wageTier >= 2) track(subStandsSeen, form.cityId, form.standId);
     if (form.outcome === 'REPAIRED') {
       if (form.isReRepair) bucket.reRepairs++;
       else bucket.repaired++;
@@ -144,6 +192,9 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
     bucket.wageTotal += Number(form.wageAmount ?? 0);
   }
 
+  for (const [cityId, set] of uidsSeen) bucketFor(cityId).totalUids = set.size;
+  for (const [cityId, set] of subStandsSeen) bucketFor(cityId).subStands = set.size;
+
   for (const group of orderLines) {
     const city = group.cityName ? cityByName.get(group.cityName) : undefined;
     const bucket = bucketFor(city?.id ?? null);
@@ -154,7 +205,12 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
 
   const list = [...byCityId.values()].filter(
     (c) =>
-      c.repaired || c.notRepaired || c.reRepairs || c.totalOrdered || c.remaining,
+      c.repaired ||
+      c.notRepaired ||
+      c.reRepairs ||
+      c.totalOrdered ||
+      c.remaining ||
+      c.totalUids,
   );
 
   const sum = (pick: (c: CityStats) => number, filter?: (c: CityStats) => boolean) =>
@@ -167,6 +223,8 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
     remaining: sum((c) => c.remaining, filter),
     totalOrdered: sum((c) => c.totalOrdered, filter),
     wageTotal: sum((c) => c.wageTotal, filter),
+    totalUids: sum((c) => c.totalUids, filter),
+    subStands: sum((c) => c.subStands, filter),
   });
 
   const totalRepaired = sum((c) => c.repaired);
@@ -182,6 +240,8 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
       remaining: sum((c) => c.remaining),
       totalOrdered: sum((c) => c.totalOrdered),
       wageTotal: sum((c) => c.wageTotal),
+      totalUids: sum((c) => c.totalUids),
+      subStands: sum((c) => c.subStands),
       successRate: visited > 0 ? Math.round((totalRepaired / visited) * 1000) / 10 : 0,
     },
     split: {

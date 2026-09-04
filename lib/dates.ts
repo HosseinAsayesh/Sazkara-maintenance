@@ -162,5 +162,100 @@ export function localDayKey(date: Date, timeZone = APP_TIMEZONE): string {
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** §6.3 — the re-repair window. */
+/**
+ * §6.3 — no longer the definition of a re-repair (the project boundary is), but kept as
+ * the "quick re-repair" threshold: a stand that failed again this fast is a different
+ * quality signal from one that lasted the whole campaign.
+ */
 export const RE_REPAIR_WINDOW_DAYS = 14;
+
+/* ------------------------------------------------------------------ *
+ * Jalali → Gregorian
+ *
+ * The forward direction above goes through Intl. Rather than add a second, independent
+ * calendar algorithm that could disagree with it at the edges, the inverse is solved by
+ * correcting a close estimate against that same forward conversion — so the two
+ * directions cannot drift apart by construction.
+ * ------------------------------------------------------------------ */
+
+export const JALALI_MONTHS_FA = [
+  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
+];
+
+/** Persian weeks start on Saturday. */
+export const JALALI_WEEKDAYS_FA = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
+
+/** 1-based day of the Jalali year: months 1-6 have 31 days, 7-11 have 30, 12 has 29/30. */
+function jalaliDayOfYear(month: number, day: number): number {
+  return (month <= 6 ? (month - 1) * 31 : 186 + (month - 7) * 30) + day;
+}
+
+/**
+ * The UTC instant of Tehran-local midnight on a given Jalali date.
+ * Throws rather than returning a silently wrong day if the correction fails to converge.
+ */
+export function jalaliToDate(
+  year: number,
+  month: number,
+  day: number,
+  timeZone = APP_TIMEZONE,
+): Date {
+  const targetDoy = jalaliDayOfYear(month, day);
+
+  // A Jalali year begins around 20 March of (year + 621).
+  let guess = Date.UTC(year + 621, 2, 20, 12) + (targetDoy - 1) * DAY_MS;
+
+  for (let i = 0; i < 8; i++) {
+    const p = toJalaliParts(new Date(guess), timeZone);
+    const deltaDays =
+      (year - p.year) * 365 + (targetDoy - jalaliDayOfYear(p.month, p.day));
+    if (deltaDays === 0) return startOfLocalDay(new Date(guess), timeZone);
+    guess += deltaDays * DAY_MS;
+  }
+
+  throw new Error(`Could not resolve Jalali date ${year}/${month}/${day}`);
+}
+
+/** True when the Jalali date actually exists (e.g. 1403/12/30 does, 1404/12/30 doesn't). */
+export function isValidJalaliDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  try {
+    const p = toJalaliParts(jalaliToDate(year, month, day));
+    return p.year === year && p.month === month && p.day === day;
+  } catch {
+    return false;
+  }
+}
+
+/** Number of days in a Jalali month — 29 or 30 for Esfand depending on the leap year. */
+export function jalaliMonthLength(year: number, month: number): number {
+  if (month <= 6) return 31;
+  if (month <= 11) return 30;
+  return isValidJalaliDate(year, 12, 30) ? 30 : 29;
+}
+
+/**
+ * Weekday index of the 1st of a Jalali month, 0 = Saturday — the offset a month grid
+ * needs before its first cell.
+ */
+export function jalaliMonthStartWeekday(year: number, month: number): number {
+  const d = jalaliToDate(year, month, 1);
+  // JS getUTCDay: 0 = Sunday. Persian weeks start Saturday, so shift by one.
+  const gregorianDow = new Date(d.getTime() + 12 * 3600 * 1000).getUTCDay();
+  return (gregorianDow + 1) % 7;
+}
+
+/** `1404/06/13` (Latin digits) -> the ISO Gregorian day string the filters already use. */
+export function jalaliStringToIso(input: string): string | null {
+  const parts = toLatinDigits(input).split(/[/\-.]/).map((s) => Number(s.trim()));
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [y, m, d] = parts;
+  if (!isValidJalaliDate(y, m, d)) return null;
+  return formatGregorian(jalaliToDate(y, m, d));
+}
+
+/** The inverse: an ISO Gregorian day string -> `1404/06/13`. */
+export function isoToJalaliString(iso: string, persianDigits = false): string {
+  return formatJalali(new Date(`${iso}T12:00:00Z`), { persianDigits });
+}

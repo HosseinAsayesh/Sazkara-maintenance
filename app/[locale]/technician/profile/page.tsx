@@ -43,17 +43,13 @@ export default async function TechnicianProfilePage({
 
       <DateRangeFilter from={from} to={to} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Wages are deliberately absent: technicians see their workload, not their
+          earnings. The figures still exist server-side for the manager's split. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label={t('stats.repaired')} value={stats.repaired} tone="success" />
         <StatCard label={t('stats.notRepaired')} value={stats.notRepaired} tone="danger" />
         <StatCard label={t('stats.reRepairs')} value={stats.reRepairs} tone="warning" />
         <StatCard label={t('stats.totalVisits')} value={stats.totalVisits} />
-        <StatCard
-          label={t('stats.estimatedWage')}
-          value={stats.wageTotal.toLocaleString(locale === 'fa' ? 'fa-IR' : 'en-US')}
-          hint={tc('toman')}
-          tone="info"
-        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -70,7 +66,6 @@ export default async function TechnicianProfilePage({
                       <Th>{tc('city')}</Th>
                       <Th>{t('stats.repaired')}</Th>
                       <Th>{t('stats.notRepaired')}</Th>
-                      <Th>{t('stats.estimatedWage')}</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -79,7 +74,6 @@ export default async function TechnicianProfilePage({
                         <Td>{row.cityName}</Td>
                         <Td className="tabular-nums">{row.repaired}</Td>
                         <Td className="tabular-nums">{row.notRepaired}</Td>
-                        <Td className="tabular-nums">{row.wage.toLocaleString('en-US')}</Td>
                       </tr>
                     ))}
                   </tbody>

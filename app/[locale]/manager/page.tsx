@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
+import { AddCityInline } from '@/components/AddCityInline';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { LiveRefresher } from '@/components/LiveRefresher';
 import { ReasonBarChart } from '@/components/Charts';
@@ -19,6 +20,7 @@ import { getOverview } from '@/lib/analytics';
 import { requireManager } from '@/lib/auth';
 import { formatDateTimeForLocale, localDayRange } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
+import { listProjectOptions } from '@/lib/projects';
 
 // The dashboard must reflect submissions as they land (§7), so nothing here is cached.
 export const dynamic = 'force-dynamic';
@@ -35,6 +37,8 @@ export default async function ManagerDashboard({
   const from = typeof sp.from === 'string' ? sp.from : undefined;
   const to = typeof sp.to === 'string' ? sp.to : undefined;
   const cityId = typeof sp.cityId === 'string' ? sp.cityId : undefined;
+  const projectId = typeof sp.projectId === 'string' ? sp.projectId : undefined;
+  const phaseId = typeof sp.phaseId === 'string' ? sp.phaseId : undefined;
   const range = localDayRange(from, to);
 
   const [t, tc, tr, to_] = await Promise.all([
@@ -44,9 +48,10 @@ export default async function ManagerDashboard({
     getTranslations({ locale, namespace: 'outcome' }),
   ]);
 
-  const [overview, cities, recent] = await Promise.all([
-    getOverview({ from: range.from, to: range.to, cityId }),
+  const [overview, cities, projects, recent] = await Promise.all([
+    getOverview({ from: range.from, to: range.to, cityId, projectId, phaseId }),
     prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    listProjectOptions(),
     prisma.repairForm.findMany({
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -67,9 +72,45 @@ export default async function ManagerDashboard({
         <LiveRefresher />
       </div>
 
-      <DateRangeFilter from={from} to={to} cities={cities} cityId={cityId} />
+      <DateRangeFilter
+        from={from}
+        to={to}
+        cities={cities}
+        cityId={cityId}
+        projects={projects}
+        projectId={projectId}
+        phaseId={phaseId}
+      />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      {/* Deliberately outside the filter card: AddCityInline is itself a <form>, and a
+          form nested inside the filter's form is invalid HTML. */}
+      <div className="flex justify-end">
+        <AddCityInline locale={locale} />
+      </div>
+
+      {/* Visited UIDs lead: that is the unit of fieldwork the manager tracks. Sub-stands
+          sit beside it because a store with two stands is two repairs but one trip. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label={t('totalUids')}
+          value={num(overview.totals.totalUids)}
+          hint={t('totalUidsHelp')}
+          tone="info"
+        />
+        <StatCard
+          label={t('subStands')}
+          value={num(overview.totals.subStands)}
+          hint={t('subStandsHelp')}
+        />
+        <StatCard label={t('totalOrdered')} value={num(overview.totals.totalOrdered)} />
+        <StatCard
+          label={t('successRate')}
+          value={`${num(overview.totals.successRate)}٪`}
+          tone="info"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label={t('repaired')} value={num(overview.totals.repaired)} tone="success" />
         <StatCard
           label={t('notRepaired')}
@@ -77,13 +118,7 @@ export default async function ManagerDashboard({
           tone="danger"
         />
         <StatCard label={t('remaining')} value={num(overview.totals.remaining)} tone="warning" />
-        <StatCard label={t('totalOrdered')} value={num(overview.totals.totalOrdered)} />
         <StatCard label={t('reRepairs')} value={num(overview.totals.reRepairs)} tone="warning" />
-        <StatCard
-          label={t('successRate')}
-          value={`${num(overview.totals.successRate)}٪`}
-          tone="info"
-        />
       </div>
 
       {/* §7 — Tehran vs all-other-cities vs grand total, because pay is split this way. */}

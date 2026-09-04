@@ -123,7 +123,8 @@ export async function addCityAction(
     await prisma.city.create({ data: { name, isTehran } });
   }
 
-  revalidatePath(`/${locale}/manager/settings`);
+  // Cities feed the dashboard and export filters, not just the settings page.
+  revalidatePath(`/${locale}/manager`, 'layout');
   return { ok: 'saved' };
 }
 

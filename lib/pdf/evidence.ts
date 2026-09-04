@@ -143,7 +143,7 @@ async function renderFormPage(
       <h3>فرم دیجیتال تعمیر</h3>
       <table class="kv">
         <tr>
-          <th>تکنسین</th><td>${esc(form.technician.name)} (${esc(form.technician.technicianCode ?? '—')})</td>
+          <th>تکنسین</th><td>${esc(form.technician.technicianCode ?? '—')}</td>
           <th>تاریخ</th><td>${esc(formatJalali(form.date))}</td>
         </tr>
         <tr>

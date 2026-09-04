@@ -28,6 +28,8 @@ const WAGE_SEED: Record<string, number> = {
   otherCityStandRate: 200000,
   secondStandRate: 90000,
   thirdPlusStandRate: 70000,
+  // Paid for a visit that produced no repair — the technician travelled either way.
+  unrepairedVisitRate: 50000,
 };
 
 async function main() {
@@ -40,11 +42,17 @@ async function main() {
         nameEn: part.nameEn,
         exportColumnKey: part.exportColumnKey,
         sortOrder: part.sortOrder,
+        unit: part.unit,
+        quantityStep: part.quantityStep,
       },
       update: {
         nameFa: part.nameFa,
         nameEn: part.nameEn,
         sortOrder: part.sortOrder,
+        // Units are a catalogue fact, not a manager preference, so they are kept in
+        // sync on every seed run.
+        unit: part.unit,
+        quantityStep: part.quantityStep,
         active: true,
       },
     });
@@ -84,6 +92,47 @@ async function main() {
     });
   }
   console.log('✓ app settings');
+
+  // --- Default project ---------------------------------------------------------
+  // The project boundary is what defines a re-repair, so every installation needs at
+  // least one. Any batch or form that predates the project register is adopted into it,
+  // otherwise those rows would sit outside every project filter and disappear from the
+  // dashboard's default view.
+  const existingProject = await prisma.project.findFirst();
+  if (!existingProject) {
+    const project = await prisma.project.create({
+      data: {
+        name: 'پروژه‌ی جاری',
+        code: 'P-1',
+        startDate: new Date(),
+        isActive: true,
+        phases: {
+          create: [
+            { name: 'فاز ۱', sortOrder: 1 },
+            { name: 'فاز ۲', sortOrder: 2 },
+          ],
+        },
+      },
+      include: { phases: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    const firstPhase = project.phases[0];
+    const adoptedBatches = await prisma.importBatch.updateMany({
+      where: { projectId: null, source: { not: 'HISTORICAL' } },
+      data: { projectId: project.id, phaseId: firstPhase.id },
+    });
+    const adoptedForms = await prisma.repairForm.updateMany({
+      where: { projectId: null },
+      data: { projectId: project.id, phaseId: firstPhase.id },
+    });
+
+    console.log(
+      `✓ project "${project.name}" with ${project.phases.length} phases ` +
+        `(adopted ${adoptedBatches.count} orders, ${adoptedForms.count} reports)`,
+    );
+  } else {
+    console.log(`✓ project register already populated`);
+  }
 
   // --- First manager account ---------------------------------------------------
   const phone = process.env.SEED_MANAGER_PHONE || '09120000000';

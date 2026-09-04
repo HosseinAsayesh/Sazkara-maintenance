@@ -27,6 +27,7 @@ export default async function ManagerLayout({
       userSubtitle={user.phone}
       nav={[
         { href: '/manager', label: t('dashboard') },
+        { href: '/manager/projects', label: t('projects') },
         { href: '/manager/imports', label: t('imports') },
         { href: '/manager/pending-uids', label: t('pendingUids'), badge: pendingStands },
         {

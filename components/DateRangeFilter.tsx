@@ -5,28 +5,43 @@ import { useRouter } from 'next/navigation';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { Button, Card, Input, Select } from './ui';
+import { JalaliDateInput } from './JalaliDateInput';
+import { Button, Card, Select } from './ui';
+
+export interface ProjectFilterOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  phases: Array<{ id: string; name: string }>;
+}
 
 /**
- * Date range (+ optional city) filter, kept in the URL so a filtered dashboard is
+ * Date range + city + project/phase filter, kept in the URL so a filtered view is
  * shareable and survives a refresh.
  *
- * The inputs are native `type="date"`, which always speaks Gregorian ISO. The Jalali
- * conversion happens on the server at render/export time — trying to make the browser's
- * date picker Persian would mean shipping a whole custom calendar widget for no gain to
- * the manager, who is picking a reporting window rather than reading a date.
+ * Dates are picked on a real Shamsi calendar (see JalaliDateInput) but travel as ISO
+ * Gregorian in the query string, which is what every server-side filter already speaks.
+ *
+ * The project filter matters because the manager's attention moves wholesale to each new
+ * campaign: once a project is running, almost every question they ask is scoped to it.
  */
 export function DateRangeFilter({
   from,
   to,
   cities,
   cityId,
+  projects,
+  projectId,
+  phaseId,
   extra,
 }: {
   from?: string;
   to?: string;
   cities?: Array<{ id: string; name: string }>;
   cityId?: string;
+  projects?: ProjectFilterOption[];
+  projectId?: string;
+  phaseId?: string;
   extra?: React.ReactNode;
 }) {
   const t = useTranslations('common');
@@ -37,6 +52,10 @@ export function DateRangeFilter({
   const [localFrom, setLocalFrom] = useState(from ?? '');
   const [localTo, setLocalTo] = useState(to ?? '');
   const [localCity, setLocalCity] = useState(cityId ?? '');
+  const [localProject, setLocalProject] = useState(projectId ?? '');
+  const [localPhase, setLocalPhase] = useState(phaseId ?? '');
+
+  const phases = projects?.find((p) => p.id === localProject)?.phases ?? [];
 
   const apply = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +64,9 @@ export function DateRangeFilter({
       ['from', localFrom],
       ['to', localTo],
       ['cityId', localCity],
+      ['projectId', localProject],
+      // A phase from a different project would silently filter everything out.
+      ['phaseId', phases.some((p) => p.id === localPhase) ? localPhase : ''],
     ]) {
       if (value) next.set(key, value);
       else next.delete(key);
@@ -55,28 +77,61 @@ export function DateRangeFilter({
   return (
     <Card className="p-3">
       <form onSubmit={apply} className="flex flex-wrap items-end gap-3">
-        <label className="flex-1 min-w-[9rem]">
+        {projects?.length ? (
+          <label className="min-w-[10rem] flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              {t('project')}
+            </span>
+            <Select
+              value={localProject}
+              onChange={(e) => {
+                setLocalProject(e.target.value);
+                setLocalPhase('');
+              }}
+            >
+              <option value="">{t('allProjects')}</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.isActive ? ` ★` : ''}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+
+        {phases.length ? (
+          <label className="min-w-[8rem] flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              {t('phase')}
+            </span>
+            <Select value={localPhase} onChange={(e) => setLocalPhase(e.target.value)}>
+              <option value="">{t('allPhases')}</option>
+              {phases.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+
+        <label className="min-w-[9rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-slate-600">{t('from')}</span>
-          <Input
-            type="date"
+          <JalaliDateInput
             value={localFrom}
-            onChange={(e) => setLocalFrom(e.target.value)}
-            className="dir-ltr"
+            onChange={setLocalFrom}
+            ariaLabel={t('from')}
           />
         </label>
 
-        <label className="flex-1 min-w-[9rem]">
+        <label className="min-w-[9rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-slate-600">{t('to')}</span>
-          <Input
-            type="date"
-            value={localTo}
-            onChange={(e) => setLocalTo(e.target.value)}
-            className="dir-ltr"
-          />
+          <JalaliDateInput value={localTo} onChange={setLocalTo} ariaLabel={t('to')} />
         </label>
 
         {cities ? (
-          <label className="flex-1 min-w-[9rem]">
+          <label className="min-w-[9rem] flex-1">
             <span className="mb-1 block text-xs font-medium text-slate-600">{t('city')}</span>
             <Select value={localCity} onChange={(e) => setLocalCity(e.target.value)}>
               <option value="">{t('all')}</option>
@@ -90,7 +145,7 @@ export function DateRangeFilter({
         ) : null}
 
         <Button type="submit" variant="secondary">
-          {t('filter')}
+          {t('applyFilter')}
         </Button>
         {extra}
       </form>
