@@ -284,10 +284,26 @@ export async function addManualUidsAction(
       cityName,
     }));
 
+    // Stray uids belong in the campaign that is running, and often in the order they
+    // arrived against — filing each one as its own batch buries the real order list.
+    const targetBatchId = String(formData.get('targetBatchId') ?? '') || null;
+    const projectId = String(formData.get('projectId') ?? '') || null;
+    const phaseId = String(formData.get('phaseId') ?? '') || null;
+
+    if (phaseId && projectId) {
+      const { prisma } = await import('@/lib/prisma');
+      const phase = await prisma.phase.findUnique({ where: { id: phaseId } });
+      if (!phase || phase.projectId !== projectId) return { error: 'phaseMismatch' };
+    }
+
     const result = await commitImport(rows, {
       name: String(formData.get('name') ?? '').trim() || 'Manual UIDs',
       source: 'MANUAL',
       importedById: manager.id,
+      existingBatchId: targetBatchId,
+      // Ignored when appending; commitImport defaults to the active project otherwise.
+      projectId,
+      phaseId,
       // §6.2 — a manager adding a uid by hand still routes it through confirmation, so
       // the pending-uids screen stays the single place stray codes are admitted.
       confirmStands: false,

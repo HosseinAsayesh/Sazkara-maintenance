@@ -57,8 +57,10 @@ export interface OrderProjectOption {
  * a workflow. Rows can be corrected, added and removed here, and the order itself
  * deleted or moved to another project/phase.
  *
- * The guard rail: anything a technician has already reported against is protected. Order
- * rows are the request; repair forms are the record.
+ * The guard rail is about the RECORD, not the request. A row a technician has reported
+ * against cannot be individually deleted, and deleting the whole order never removes the
+ * reports: an order line is a request for work, a repair form is the record of work done.
+ * The order can always be retired; the fieldwork stays.
  */
 export function OrderEditor({
   locale,
@@ -68,6 +70,7 @@ export function OrderEditor({
   projects,
   currentProjectId,
   currentPhaseId,
+  reportedCount,
 }: {
   locale: string;
   batchId: string;
@@ -76,6 +79,8 @@ export function OrderEditor({
   projects: OrderProjectOption[];
   currentProjectId: string | null;
   currentPhaseId: string | null;
+  /** Reports filed against this order's uids — kept, but the manager is told. */
+  reportedCount: number;
 }) {
   const t = useTranslations('imports');
   const tc = useTranslations('common');
@@ -83,6 +88,8 @@ export function OrderEditor({
 
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Off by default: removing an order should not quietly remove the fieldwork with it.
+  const [alsoDeleteForms, setAlsoDeleteForms] = useState(false);
 
   const [updateState, updateAction] = useActionState<ActionState, FormData>(
     updateOrderLineAction,
@@ -125,11 +132,47 @@ export function OrderEditor({
             <form
               action={deleteAction}
               onSubmit={(e) => {
-                if (!confirm(t('deleteOrderConfirm'))) e.preventDefault();
+                // Say plainly which of the two things is about to happen: retire the
+                // order and keep the record, or remove both.
+                const message = !reportedCount
+                  ? t('deleteOrderConfirm')
+                  : alsoDeleteForms
+                    ? t('deleteOrderAndFormsConfirm', {
+                        name: batchName,
+                        forms: reportedCount,
+                      })
+                    : t('deleteOrderWithFormsConfirm', {
+                        name: batchName,
+                        forms: reportedCount,
+                      });
+                if (!confirm(message)) e.preventDefault();
               }}
+              className="flex flex-wrap items-center justify-end gap-2"
             >
               <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="batchId" value={batchId} />
+              <input
+                type="hidden"
+                name="force"
+                value={reportedCount > 0 ? 'true' : 'false'}
+              />
+              <input
+                type="hidden"
+                name="deleteForms"
+                value={alsoDeleteForms ? 'true' : 'false'}
+              />
+
+              {reportedCount > 0 ? (
+                <label className="flex items-center gap-1.5 text-xs text-rose-700">
+                  <input
+                    type="checkbox"
+                    checked={alsoDeleteForms}
+                    onChange={(e) => setAlsoDeleteForms(e.target.checked)}
+                  />
+                  {t('alsoDeleteForms', { forms: reportedCount })}
+                </label>
+              ) : null}
+
               <Button type="submit" variant="danger" size="sm">
                 {t('deleteOrder')}
               </Button>

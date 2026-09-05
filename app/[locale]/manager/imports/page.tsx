@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { ManualUidsForm } from '@/components/ManualUidsForm';
 import {
+  Alert,
   Badge,
   Card,
   CardHeader,
@@ -15,11 +16,20 @@ import { Link } from '@/i18n/navigation';
 import { requireManager } from '@/lib/auth';
 import { formatDateForLocale } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
+import { listProjectOptions } from '@/lib/projects';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ImportsPage({ params }: PageProps<'/[locale]/manager/imports'>) {
+export default async function ImportsPage({
+  params,
+  searchParams,
+}: PageProps<'/[locale]/manager/imports'>) {
   const { locale } = await params;
+  const sp = await searchParams;
+  // Set by the delete action, which lands here because the order's own page is gone.
+  const deletedName = typeof sp.deleted === 'string' ? sp.deleted : '';
+  const keptForms = typeof sp.keptForms === 'string' ? Number(sp.keptForms) : 0;
+  const removedForms = typeof sp.removedForms === 'string' ? Number(sp.removedForms) : 0;
   setRequestLocale(locale);
   await requireManager(locale);
 
@@ -28,7 +38,7 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
     getTranslations({ locale, namespace: 'common' }),
   ]);
 
-  const [batches, cities] = await Promise.all([
+  const [batches, cities, projects] = await Promise.all([
     prisma.importBatch.findMany({
       orderBy: { importedAt: 'desc' },
       take: 40,
@@ -40,6 +50,7 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
       },
     }),
     prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    listProjectOptions(),
   ]);
 
   // Per-batch status counts in one grouped query rather than N per row.
@@ -65,6 +76,16 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
           {t('newImport')}
         </Link>
       </div>
+
+      {deletedName ? (
+        <Alert tone="success">
+          {removedForms > 0
+            ? t('orderDeletedRemovedForms', { name: deletedName, forms: removedForms })
+            : keptForms > 0
+              ? t('orderDeletedKeptForms', { name: deletedName, forms: keptForms })
+              : t('orderDeletedNotice', { name: deletedName })}
+        </Alert>
+      ) : null}
 
       <Card>
         <CardHeader title={t('batchList')} />
@@ -127,7 +148,16 @@ export default async function ImportsPage({ params }: PageProps<'/[locale]/manag
         </div>
       </Card>
 
-      <ManualUidsForm locale={locale} cities={cities} />
+      <ManualUidsForm
+        locale={locale}
+        cities={cities}
+        projects={projects}
+        orders={batches.map((b) => ({
+          id: b.id,
+          name: b.name,
+          projectName: b.project?.name ?? null,
+        }))}
+      />
     </div>
   );
 }

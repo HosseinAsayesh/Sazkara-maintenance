@@ -150,6 +150,21 @@ async function main() {
   await markScratchDatabase();
   await reset();
 
+  // The suite must not depend on whatever the seed happened to leave behind. Re-repair
+  // detection is scoped to the project, so with no ACTIVE project every repair resolves
+  // to projectId=null and nothing is ever a re-repair — which is a silent pass/fail
+  // flip driven by external state. Guarantee one here.
+  const activeProject =
+    (await prisma.project.findFirst({ where: { isActive: true } })) ??
+    (await prisma.project.create({
+      data: { name: 'پروژه‌ی جاری', code: 'P-1', startDate: new Date(), isActive: true },
+    }));
+  await prisma.phase.upsert({
+    where: { projectId_name: { projectId: activeProject.id, name: 'فاز ۱' } },
+    create: { projectId: activeProject.id, name: 'فاز ۱', sortOrder: 1 },
+    update: {},
+  });
+
   /* ---------------------------------------------------------------- */
   section('Seed data');
   const parts = await prisma.partCatalogItem.findMany({ orderBy: { sortOrder: 'asc' } });
@@ -1175,6 +1190,64 @@ async function main() {
   ok('demoting a lead releases their crew rather than orphaning it');
 
   await prisma.user.deleteMany({ where: { id: { in: [lead.id, outsider.id] } } });
+
+  /* ---------------------------------------------------------------- */
+  // An order is a REQUEST for work; a repair form is the RECORD of work done. Deleting
+  // the request must never take the record with it — but it also must not be blocked by
+  // it, which is what used to happen: the manager could not retire an order once anyone
+  // had filed against it.
+  section('order deletion keeps the fieldwork');
+
+  const delBatch = await prisma.importBatch.create({
+    data: { name: 'سفارش حذف آزمایشی', source: 'JTI_EXCEL', importedById: manager.id },
+  });
+  const delStore = await prisma.store.create({
+    data: { uid: 'DELTEST-1', name: 'فروشگاه حذف', matchKey: 'deltest', cityId: tehran.id },
+  });
+  const delStand = await prisma.stand.create({
+    data: { storeId: delStore.id, standIndexAtStore: 1 },
+  });
+  await prisma.orderLine.create({
+    data: { batchId: delBatch.id, uid: 'DELTEST-1', storeId: delStore.id },
+  });
+  const delForm = await prisma.repairForm.create({
+    data: {
+      formCode: 'DELTEST-FORM-1',
+      standId: delStand.id,
+      technicianId: tech.id,
+      cityId: tehran.id,
+      storeId: delStore.id,
+      uid: 'DELTEST-1',
+      standIndex: 1,
+      date: new Date(),
+      outcome: 'REPAIRED',
+      qualityScore: 3,
+      wageAmount: 0,
+      wageTier: 1,
+      wageRateApplied: 0,
+    },
+  });
+
+  // Deleting the batch is what the action does; OrderLine cascades, RepairForm does not
+  // reference OrderLine at all, so the record is structurally safe from this.
+  await prisma.importBatch.delete({ where: { id: delBatch.id } });
+
+  assert.equal(await prisma.importBatch.count({ where: { id: delBatch.id } }), 0);
+  assert.equal(await prisma.orderLine.count({ where: { uid: 'DELTEST-1' } }), 0);
+  ok('deleting an order removes the order and its rows');
+
+  const survivor = await prisma.repairForm.findUnique({ where: { id: delForm.id } });
+  assert.ok(survivor, 'the repair report must survive its order being deleted');
+  assert.equal(survivor.uid, 'DELTEST-1');
+  assert.ok(
+    await prisma.store.findUnique({ where: { uid: 'DELTEST-1' } }),
+    'the store must survive too, or the uid history would break',
+  );
+  ok('the repair report and its store survive — uid history stays intact');
+
+  await prisma.repairForm.delete({ where: { id: delForm.id } });
+  await prisma.stand.delete({ where: { id: delStand.id } });
+  await prisma.store.delete({ where: { id: delStore.id } });
 
   /* ---------------------------------------------------------------- */
   section('normalisation guards');

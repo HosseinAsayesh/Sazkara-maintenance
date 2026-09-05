@@ -35,6 +35,12 @@ export default async function OrderDetailPage({
     : [];
   const reportedUids = new Set(reported.map((r) => r.uid));
 
+  // Total reports filed against this order's uids — shown in the delete confirmation so
+  // the manager knows exactly what stays behind when the order goes.
+  const reportedCount = uids.length
+    ? await prisma.repairForm.count({ where: { uid: { in: uids } } })
+    : 0;
+
   const lines: OrderLineRow[] = batch.lines.map((line) => ({
     id: line.id,
     uid: line.uid,
@@ -59,6 +65,7 @@ export default async function OrderDetailPage({
       projects={projects.map((p) => ({ id: p.id, name: p.name, phases: p.phases }))}
       currentProjectId={batch.projectId}
       currentPhaseId={batch.phaseId}
+      reportedCount={reportedCount}
     />
   );
 }

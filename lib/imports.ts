@@ -254,6 +254,12 @@ export interface CommitOptions {
   /** Campaign this order belongs to. Defaults to the active project. */
   projectId?: string | null;
   phaseId?: string | null;
+  /**
+   * Append to an existing order rather than creating a new one. Jti sends stray uids by
+   * text message mid-campaign, and filing each one as its own "order" buries the real
+   * order list under single-row batches.
+   */
+  existingBatchId?: string | null;
 }
 
 /**
@@ -287,18 +293,22 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
 
   return prisma.$transaction(
     async (tx) => {
-      const batch = await tx.importBatch.create({
-        data: {
-          name: opts.name,
-          source: opts.source,
-          importedById: opts.importedById,
-          fileRef: opts.fileRef,
-          columnMapping: opts.mapping ? (opts.mapping as object) : undefined,
-          mappingProfileId: opts.mappingProfileId,
-          projectId,
-          phaseId,
-        },
-      });
+      const batch = opts.existingBatchId
+        ? await tx.importBatch.findUniqueOrThrow({
+            where: { id: opts.existingBatchId },
+          })
+        : await tx.importBatch.create({
+            data: {
+              name: opts.name,
+              source: opts.source,
+              importedById: opts.importedById,
+              fileRef: opts.fileRef,
+              columnMapping: opts.mapping ? (opts.mapping as object) : undefined,
+              mappingProfileId: opts.mappingProfileId,
+              projectId,
+              phaseId,
+            },
+          });
 
       // City cache keeps this to a handful of queries on a 2000-row sheet.
       const cityCache = new Map<string, string>();
@@ -376,8 +386,18 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
 
         const dup = duplicateInfo.get(row.uid);
 
-        await tx.orderLine.create({
-          data: {
+        await tx.orderLine.upsert({
+          where: { batchId_uid: { batchId: batch.id, uid: row.uid } },
+          update: {
+            storeId,
+            storeName: row.storeName,
+            address: row.address,
+            digitalAddress: row.digitalAddress,
+            managerName: row.managerName,
+            phone: row.phone,
+            cityName: row.cityName,
+          },
+          create: {
             batchId: batch.id,
             uid: row.uid,
             storeId,

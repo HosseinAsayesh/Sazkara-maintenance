@@ -344,7 +344,16 @@
       "PENDING": "Pending",
       "DONE": "Done",
       "EXCLUDED": "Excluded"
-    }
+    },
+    "deleteOrderWithFormsConfirm": "Delete order \"{name}\"?\n\n{forms} repair reports have been filed against this order’s UIDs. Those reports are NOT deleted — they stay in the UID history, the exports and the statistics; only the order itself goes.\n\nContinue?",
+    "orderDeletedNotice": "Order \"{name}\" was deleted.",
+    "orderDeletedKeptForms": "Order \"{name}\" was deleted. {forms} repair reports were kept.",
+    "targetOrder": "Add to",
+    "targetOrderHelp": "Append the UID to an existing order, or start a new one inside a project.",
+    "targetNewOrder": "New order",
+    "alsoDeleteForms": "delete the {forms} reports too",
+    "deleteOrderAndFormsConfirm": "Delete order \"{name}\" AND its {forms} repair reports?\n\nTheir photos, signatures and parts usage are erased too, and they disappear from the dashboard and every export.\n\nThis cannot be undone. Continue?",
+    "orderDeletedRemovedForms": "Order \"{name}\" and its {forms} reports were deleted."
   },
   "pendingUids": {
     "title": "UIDs awaiting confirmation",

@@ -1,9 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getStorage } from '@/lib/storage';
 import { normaliseUid } from '@/lib/text';
 
 export interface ActionState {
@@ -165,6 +167,23 @@ export async function addOrderLineAction(
   return { ok: 'success' };
 }
 
+/**
+ * Delete an imported order.
+ *
+ * Two things this must get right:
+ *
+ *  1. The caller is standing on /manager/imports/<id>, which is about to stop existing.
+ *     Revalidating that path re-renders it, `findUnique` returns null and notFound()
+ *     fires — a successful delete used to look like a 404. It redirects to the order list
+ *     instead, carrying the name so that page can confirm what happened.
+ *
+ *  2. It no longer refuses outright when technicians have filed against the order. The
+ *     manager needs to retire a wrong or finished order regardless. What it will NOT do
+ *     is take the reports with it: an order row is a REQUEST for work, a repair form is
+ *     the RECORD of work actually done, complete with photos and signatures. The forms
+ *     survive with their uid history intact and stay in every export and statistic; only
+ *     the request disappears. Deleting a report is a separate, per-report act.
+ */
 export async function deleteOrderAction(
   _prev: ActionState,
   formData: FormData,
@@ -173,28 +192,86 @@ export async function deleteOrderAction(
 
   const locale = String(formData.get('locale') || 'fa');
   const batchId = String(formData.get('batchId') ?? '');
+  const force = String(formData.get('force') ?? '') === 'true';
+  const alsoDeleteForms = String(formData.get('deleteForms') ?? '') === 'true';
   if (!batchId) return { error: 'generic' };
 
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, lines: { select: { uid: true } } },
+    select: { id: true, name: true, lines: { select: { uid: true } } },
   });
   if (!batch) return { error: 'notFound' };
 
-  // Refuse if any uid in this order has a report — deleting would orphan real fieldwork.
-  if (batch.lines.length) {
-    const reported = await prisma.repairForm.findFirst({
-      where: { uid: { in: batch.lines.map((l) => l.uid) } },
-      select: { id: true },
+  const uids = batch.lines.map((l) => l.uid);
+  const reported = uids.length
+    ? await prisma.repairForm.count({ where: { uid: { in: uids } } })
+    : 0;
+
+  // Fieldwork attached means a second, explicit confirmation — never a silent removal.
+  if (reported > 0 && !force) return { error: 'cannotDeleteWithForms' };
+
+  let removedForms = 0;
+
+  if (alsoDeleteForms && uids.length) {
+    // Opt-in only. Keeping the reports leaves them counted on the dashboard and in every
+    // export, which is right when an order is merely retired and wrong when it was
+    // imported by mistake — so the manager says which case this is.
+    const forms = await prisma.repairForm.findMany({
+      where: { uid: { in: uids } },
+      select: {
+        id: true,
+        technicianSignature: true,
+        storeManagerSignature: true,
+        photos: { select: { fileRef: true } },
+      },
     });
-    if (reported) return { error: 'cannotDeleteWithForms' };
+    const formIds = forms.map((f) => f.id);
+    removedForms = formIds.length;
+
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.partUsage.deleteMany({ where: { repairFormId: { in: formIds } } });
+        await tx.photo.deleteMany({ where: { repairFormId: { in: formIds } } });
+        await tx.repairForm.deleteMany({ where: { id: { in: formIds } } });
+        await tx.importBatch.delete({ where: { id: batchId } });
+
+        // Stores and stands go only once nothing at all references the uid.
+        for (const uid of uids) {
+          const stillUsed =
+            (await tx.repairForm.count({ where: { uid } })) +
+            (await tx.orderLine.count({ where: { uid } }));
+          if (stillUsed === 0) {
+            await tx.stand.deleteMany({ where: { store: { uid } } });
+            await tx.store.deleteMany({ where: { uid } });
+          }
+        }
+      },
+      { timeout: 120_000, maxWait: 20_000 },
+    );
+
+    // Files last: a rolled-back transaction must never leave dangling references.
+    const storage = getStorage();
+    const refs = forms
+      .flatMap((f) => [
+        ...f.photos.map((p) => p.fileRef),
+        f.technicianSignature,
+        f.storeManagerSignature,
+      ])
+      .filter((r): r is string => !!r);
+    await Promise.all(refs.map((ref) => storage.delete(ref).catch(() => {})));
+  } else {
+    // Lines cascade with the batch (see the schema relation). Repair forms do not
+    // reference OrderLine, so they are untouched by this.
+    await prisma.importBatch.delete({ where: { id: batchId } });
   }
 
-  // Lines cascade with the batch (see the schema relation).
-  await prisma.importBatch.delete({ where: { id: batchId } });
-
   revalidateOrders(locale);
-  return { ok: 'orderDeleted' };
+
+  const query = new URLSearchParams({ deleted: batch.name });
+  if (alsoDeleteForms) query.set('removedForms', String(removedForms));
+  else if (reported > 0) query.set('keptForms', String(reported));
+
+  redirect(`/${locale}/manager/imports?${query.toString()}`);
 }
 
 /** Move an order into a different project/phase after the fact. */
