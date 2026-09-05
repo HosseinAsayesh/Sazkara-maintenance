@@ -1,9 +1,11 @@
 import 'server-only';
 
+import type { Prisma } from '@prisma/client';
 import ExcelJS from 'exceljs';
 
 import { resolveCityId as resolveCityByName } from './cities';
 import { nextFormCode } from './codes';
+import { DAY_MS } from './dates';
 import {
   JTI_EXPORT_HEADERS,
   LEGACY_PART_COLUMN_COUNT,
@@ -186,10 +188,29 @@ function detectLayout(
     }
   }
 
-  // No usable header. Width alone is a poor signal — the legacy sheet carries extra
-  // status columns after the feedback column, so it is WIDER than a current export and a
-  // naive ">= current width" test misreads it as current. Prefer the exact widths, and
-  // only then fall back to a range.
+  // No address header. Real sheets leave that cell blank, so fall back to the part-name
+  // row: on a two-row header the row under the section labels lists the parts, and the
+  // run of non-empty names ends exactly where the trailing block starts. That run length
+  // IS the part count, which is far more reliable than the sheet's total width — legacy
+  // files carry a varying number of status columns after the feedback column, so they can
+  // be wider than a current export and no width test can separate them.
+  const namesRow = sheet.getRow(headerRow + 1);
+  const looksLikeNames =
+    cellText(namesRow.getCell(COL_FIRST_PART)).trim().length > 0 &&
+    !Number.isFinite(Number(cellText(namesRow.getCell(COL_FIRST_PART)).trim()));
+
+  if (looksLikeNames) {
+    let run = 0;
+    for (let c = COL_FIRST_PART; c <= width; c++) {
+      if (!cellText(namesRow.getCell(c)).trim()) break;
+      run++;
+    }
+    if (run === PART_CATALOG.length || run === LEGACY_PART_COLUMN_COUNT) {
+      return buildLayout(run);
+    }
+  }
+
+  // Last resort: exact widths for single-header sheets.
   const currentWidth = COL_FIRST_PART + PART_CATALOG.length + 9;
   const legacyWidth = COL_FIRST_PART + LEGACY_PART_COLUMN_COUNT + 9;
   if (width === currentWidth) return buildLayout(PART_CATALOG.length);
@@ -279,6 +300,12 @@ export interface HistoricalPreview {
   layout: ArchiveLayout;
   rows: number;
   forms: number;
+  /** Distinct uids in the file. A uid is a location, so this is "how many shops". */
+  distinctUids: number;
+  /** Of those, the ones this system has never seen. */
+  newUids: number;
+  /** Uids appearing on more than one row — a location visited twice, or a typo. */
+  repeatedUids: number;
   newStands: number;
   newStores: number;
   skipped: number;
@@ -440,10 +467,18 @@ export async function previewHistorical(
 
   const dates = rows.map((r) => r.date.getTime()).sort((a, b) => a - b);
 
+  // How often each uid appears, so the manager can see repeats rather than guess at
+  // them from a count that does not add up.
+  const uidCounts = new Map<string, number>();
+  for (const row of rows) uidCounts.set(row.uid, (uidCounts.get(row.uid) ?? 0) + 1);
+
   return {
     rows: rows.length,
     forms: rows.length,
     layout,
+    distinctUids: uids.length,
+    newUids: uids.filter((u) => !known.has(u)).length,
+    repeatedUids: [...uidCounts.values()].filter((n) => n > 1).length,
     newStands: uids.filter((u) => !known.has(u)).length,
     newStores: storeKeys.size,
     skipped,
@@ -481,6 +516,29 @@ async function historicalTechnicianId(): Promise<string> {
   return created.id;
 }
 
+/**
+ * An archive form code that is free, suffixing on collision.
+ *
+ * `RepairForm.formCode` is unique, but the archives' codes are not: the same paper form
+ * number legitimately appears on several rows. Suffixing keeps the original code legible
+ * in the data rather than discarding the row.
+ */
+async function uniqueFormCode(
+  tx: Prisma.TransactionClient,
+  desired: string,
+): Promise<string> {
+  const existing = await tx.repairForm.findUnique({ where: { formCode: desired } });
+  if (!existing) return desired;
+
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${desired}-${n}`;
+    const clash = await tx.repairForm.findUnique({ where: { formCode: candidate } });
+    if (!clash) return candidate;
+  }
+  // Beyond that the code is not usable as an identifier; fall back to a fresh sequence.
+  return nextFormCode(tx);
+}
+
 export async function commitHistorical(
   buffer: Buffer,
   opts: {
@@ -508,35 +566,95 @@ export async function commitHistorical(
 
   let imported = 0;
   let skipped = 0;
+  /**
+   * Why each dropped row was dropped. A bare "skipped: 30" is what let a dedup bug hide
+   * in plain sight, so the reason travels back to the manager.
+   */
+  const skippedRows: Array<{ uid: string; formCode: string | null; reason: string }> = [];
 
   // Chunked rather than one giant transaction: an archive file can hold thousands of
   // rows, and a single transaction that size risks a statement timeout.
   const CHUNK = 100;
+
+  // One uploaded file is ONE order. Creating a batch per chunk split a single archive
+  // into "name (1)", "name (2)"... which is both confusing in the orders list and the
+  // reason duplicate uids only sometimes collided: two rows sharing a uid clashed on
+  // OrderLine's (batchId, uid) key when they happened to land in the same chunk, and
+  // slipped through when they did not.
+  const batch = await prisma.importBatch.create({
+    data: {
+      name: opts.name,
+      source: 'HISTORICAL',
+      importedById: opts.importedById,
+      projectId: opts.projectId ?? null,
+      phaseId: opts.phaseId ?? null,
+      fileRef: opts.fileRef ?? null,
+    },
+  });
+
+  // A uid may legitimately appear on several rows — the same location visited twice, or
+  // simply entered twice. Each row is still its own repair form, because each is a real
+  // visit, but the ORDER LINE is the request for that location and there is exactly one
+  // per uid. Tracked across chunks, since the batch now spans the whole file.
+  const orderLineUids = new Set<string>();
+
+  // Rows already written by THIS run, so an exact duplicate inside one file is skipped
+  // without a database round-trip.
+  const seenIdentities = new Set<string>();
 
   for (let start = 0; start < rows.length; start += CHUNK) {
     const chunk = rows.slice(start, start + CHUNK);
 
     await prisma.$transaction(
       async (tx) => {
-        const batch = await tx.importBatch.create({
-          data: {
-            name: `${opts.name} (${start / CHUNK + 1})`,
-            source: 'HISTORICAL',
-            importedById: opts.importedById,
-            projectId: opts.projectId ?? null,
-            phaseId: opts.phaseId ?? null,
-            fileRef: opts.fileRef ?? null,
-          },
-        });
 
         for (const row of chunk) {
-          // Skip rows already present, so re-running an archive import is idempotent.
-          if (row.formCode) {
-            const clash = await tx.repairForm.findUnique({
-              where: { formCode: row.formCode },
+          // Idempotency without losing rows.
+          //
+          // Form codes in these archives are not unique: a single paper form can cover a
+          // store's several stands, and the column is hand-typed. Treating any repeated
+          // code as "already imported" silently dropped real visits — a 234-row sheet
+          // with 19 repeated codes lost 19 of them.
+          //
+          // A visit is identified by uid + date + form code instead. That still makes
+          // re-importing the same file a no-op, while two genuinely different rows that
+          // happen to share a code both survive; the second is stored under a suffixed
+          // code, because RepairForm.formCode is unique by schema.
+          const identity = `${row.uid}|${row.date.toISOString().slice(0, 10)}|${row.formCode ?? ''}`;
+
+          if (seenIdentities.has(identity)) {
+            skipped++;
+            skippedRows.push({
+              uid: row.uid,
+              formCode: row.formCode ?? null,
+              reason: 'DUPLICATE_ROW_IN_FILE',
             });
-            if (clash) {
+            continue;
+          }
+          seenIdentities.add(identity);
+
+          if (row.formCode) {
+            const sameVisit = await tx.repairForm.findFirst({
+              where: {
+                uid: row.uid,
+                formCode: { startsWith: row.formCode },
+                date: {
+                  gte: new Date(`${row.date.toISOString().slice(0, 10)}T00:00:00Z`),
+                  lt: new Date(
+                    new Date(`${row.date.toISOString().slice(0, 10)}T00:00:00Z`).getTime() +
+                      DAY_MS,
+                  ),
+                },
+              },
+              select: { id: true },
+            });
+            if (sameVisit) {
               skipped++;
+              skippedRows.push({
+                uid: row.uid,
+                formCode: row.formCode ?? null,
+                reason: 'ALREADY_IMPORTED',
+              });
               continue;
             }
           }
@@ -572,23 +690,28 @@ export async function commitHistorical(
             update: {},
           });
 
-          await tx.orderLine.create({
-            data: {
-              batchId: batch.id,
-              uid: row.uid,
-              storeId,
-              storeName: row.storeName,
-              address: row.address,
-              cityName: row.cityName,
-              phone: row.phone,
-              managerName: row.managerName,
-              status: 'DONE',
-            },
-          });
+          if (!orderLineUids.has(row.uid)) {
+            orderLineUids.add(row.uid);
+            await tx.orderLine.create({
+              data: {
+                batchId: batch.id,
+                uid: row.uid,
+                storeId,
+                storeName: row.storeName,
+                address: row.address,
+                cityName: row.cityName,
+                phone: row.phone,
+                managerName: row.managerName,
+                status: 'DONE',
+              },
+            });
+          }
 
           await tx.repairForm.create({
             data: {
-              formCode: row.formCode || (await nextFormCode(tx)),
+              formCode: row.formCode
+                ? await uniqueFormCode(tx, row.formCode)
+                : await nextFormCode(tx),
               standId: stand.id,
               technicianId,
               cityId: city.id,
@@ -632,5 +755,5 @@ export async function commitHistorical(
     );
   }
 
-  return { imported, skipped };
+  return { imported, skipped, skippedRows, batchId: batch.id };
 }

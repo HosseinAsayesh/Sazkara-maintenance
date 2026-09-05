@@ -19,8 +19,9 @@ export interface HistoricalState {
     /** Which sheet generation was detected: the current 30-part or the legacy 28-part. */
     layout: 'CURRENT' | 'LEGACY';
     rows: number;
-    newStands: number;
-    newStores: number;
+    distinctUids: number;
+    newUids: number;
+    repeatedUids: number;
     skipped: number;
     firstDate: string | null;
     lastDate: string | null;
@@ -70,8 +71,9 @@ export async function previewHistoricalAction(
         format,
         layout: preview.layout,
         rows: preview.rows,
-        newStands: preview.newStands,
-        newStores: preview.newStores,
+        distinctUids: preview.distinctUids,
+        newUids: preview.newUids,
+        repeatedUids: preview.repeatedUids,
         skipped: preview.skipped,
         firstDate: preview.firstDate?.toISOString() ?? null,
         lastDate: preview.lastDate?.toISOString() ?? null,

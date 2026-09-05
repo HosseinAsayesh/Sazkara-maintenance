@@ -693,6 +693,91 @@ async function main() {
   assert.equal(legacyFailed.qualityScore, null);
   ok('an unsuccessful archived visit imports as NOT_REPAIRED');
 
+  // A real 234-row archive failed to import outright. Three faults, all reproduced here.
+  const bigBook = new ExcelJS.Workbook();
+  const bigSheet = bigBook.addWorksheet('Rasht');
+  bigSheet.addRow([
+    '', 'Date', 'City', 'UID No.', 'Problem Type',
+    ...Array.from({ length: LEGACY_PART_HEADERS.length - 1 }, () => ''),
+    // The real file leaves this header EMPTY where the sample said "location AddresS",
+    // so the address probe finds nothing and detection must fall back to the part-name
+    // row rather than to the sheet's width.
+    '', 'Address', 'Store Details', 'Tel',
+    "Store's Name", "Store Manager's Name", "Technician's Code+", 'Form code',
+    'Stand Quality', 'Maintenance Services And Feedback',
+    // Status columns make the sheet WIDER than a current export.
+    'استند سالم', 'تغییر کاربری', 'تعطیل', 'تقاضای تعویض', 'عدم امکان تعمیر',
+    'عدم صدور اجازه', 'وضعیت نامساعد', 'آدرس اشتباه',
+  ]);
+  bigSheet.addRow(['', '', '', '', ...LEGACY_PART_HEADERS]);
+
+  const BIG_ROWS = 234;
+  for (let i = 1; i <= BIG_ROWS; i++) {
+    const qty = LEGACY_PART_HEADERS.map(() => 0);
+    qty[7] = 1;
+    // Two uids repeat, and both copies sit inside the SAME 100-row chunk — the case that
+    // tripped OrderLine's (batchId, uid) key and aborted the whole import.
+    const uidIndex = i === 40 ? 12 : i === 71 ? 33 : i;
+    // A block of rows shares one form code, as hand-typed archives do. Treating a
+    // repeated code as "already imported" silently dropped those rows.
+    const formCode = i <= 40 ? `SHARED-${Math.ceil(i / 2)}` : `BIG-${i}`;
+    bigSheet.addRow([
+      i, '1403/06/01', 'رشت', `BIG${String(uidIndex).padStart(4, '0')}`,
+      ...qty,
+      '', 'خیابان', 'جزئیات', '01300000000',
+      `فروشگاه ${uidIndex}`, 'مدیر', 'TC-900', formCode, 4,
+      'تعمیرات موفقیت آمیز بود',
+    ]);
+  }
+  const bigBuffer = Buffer.from(await bigBook.xlsx.writeBuffer());
+
+  // Detection must not need the address header, nor the sheet width.
+  const bigPreview = await previewHistorical(bigBuffer);
+  assert.equal(bigPreview.layout, 'LEGACY');
+  assert.equal(bigPreview.rows, BIG_ROWS);
+  assert.equal(bigPreview.repeatedUids, 2);
+  ok('layout detected from the part-name row when no address header exists');
+
+  const bigCommit = await commitHistorical(bigBuffer, {
+    name: 'Big archive',
+    importedById: manager.id,
+  });
+
+  // Every row lands. Two are exact in-file duplicates of another row's visit; the rest,
+  // including the 20 rows sharing form codes, must all survive.
+  assert.equal(
+    bigCommit.imported + bigCommit.skipped,
+    BIG_ROWS,
+    'every row must be accounted for',
+  );
+  assert.ok(
+    bigCommit.imported >= BIG_ROWS - 2,
+    `expected ~all rows imported, got ${bigCommit.imported}`,
+  );
+  ok('a 234-row archive with repeated uids and shared form codes imports', `${bigCommit.imported}`);
+
+  // One uploaded file is one order, not one per 100-row chunk.
+  const bigBatches = await prisma.importBatch.count({
+    where: { name: { startsWith: 'Big archive' } },
+  });
+  assert.equal(bigBatches, 1, 'a single file must produce a single order');
+  ok('a multi-chunk import creates exactly one order');
+
+  // The repeated uid gets one order line but keeps both of its visits.
+  const repeatedLines = await prisma.orderLine.count({
+    where: { batchId: bigCommit.batchId, uid: 'BIG0012' },
+  });
+  assert.equal(repeatedLines, 1, 'one order line per uid');
+  ok('a uid repeated in the file yields one order line, not a constraint error');
+
+  // Shared archive codes are preserved rather than dropped; collisions get a suffix.
+  const sharedForms = await prisma.repairForm.count({
+    where: { formCode: { startsWith: 'SHARED-1' } },
+  });
+  assert.ok(sharedForms >= 2, `expected shared codes to survive, got ${sharedForms}`);
+  ok('rows sharing an archive form code are all imported', `${sharedForms} under SHARED-1*`);
+
+
   // Store Details would otherwise be the one column between A and AP that is dropped.
   assert.match(legacyForm.notes ?? '', /موفقیت آمیز بود/);
   assert.match(legacyForm.notes ?? '', /جزئیات/);

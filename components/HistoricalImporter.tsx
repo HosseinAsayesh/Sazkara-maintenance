@@ -169,9 +169,14 @@ export function HistoricalImporter({
             <Alert tone="info">
               {t('willCreate', {
                 forms: preview.rows,
-                stands: preview.newStands,
-                stores: preview.newStores,
+                uids: preview.distinctUids,
+                newUids: preview.newUids,
               })}
+              {preview.repeatedUids > 0 ? (
+                <span className="mt-1 block text-xs">
+                  {t('repeatedUids', { count: preview.repeatedUids })}
+                </span>
+              ) : null}
             </Alert>
 
             {/* Which sheet generation was read. The legacy layout has 28 part columns

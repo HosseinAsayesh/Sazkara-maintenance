@@ -522,7 +522,7 @@
     "expectedFormat": "For pre-system archives and for paper reports typed up mid-project alike. Both the legacy and current spreadsheet formats are supported.",
     "dryRun": "Check without importing",
     "importNow": "Import now",
-    "willCreate": "{forms, number} forms, {stands, number} stands and {stores, number} stores will be created",
+    "willCreate": "{forms} reports across {uids} distinct UIDs ({newUids} new to the system).",
     "imported": "{count, number} historical forms imported",
     "technicianForHistorical": "Technician attributed to historical data",
     "layoutCurrent": "Current layout (30 parts)",
@@ -542,7 +542,8 @@
         "title": "Current format (app export)",
         "help": "30 part columns, exactly what this app produces."
       }
-    }
+    },
+    "repeatedUids": "{count} UID(s) appear on more than one row. Each row still becomes its own report; only one order line is created per UID."
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
