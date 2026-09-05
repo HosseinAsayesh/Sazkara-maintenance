@@ -85,6 +85,17 @@ body {
   touch-action: none;
 }
 
+/* The nav tabs scroll sideways when the sections outgrow the bar, but a scrollbar track
+   drawn across the dark header reads as a stray light rule. The strip still scrolls by
+   drag, wheel and keyboard. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Inputs inherit direction from <html dir>, but numeric fields read better as LTR
    even in an RTL page — a phone number or uid is not a Persian sentence. */
 .dir-ltr {

@@ -14,7 +14,7 @@ const LABELS: Record<string, string> = { fa: 'فارسی', en: 'English' };
  * returns the locale-stripped path, so the router can re-apply the new prefix without
  * hand-parsing the URL — and dynamic segments survive via `params`.
  */
-export function LocaleSwitcher() {
+export function LocaleSwitcher({ onDark = false }: { onDark?: boolean } = {}) {
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -37,7 +37,13 @@ export function LocaleSwitcher() {
           );
         });
       }}
-      className="rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-xs text-brand-600 focus:outline-none"
+      className={
+        onDark
+          ? // On the graphite bar. The options themselves are drawn by the OS, so they
+            // need an explicit dark colour or they inherit white-on-white.
+            'rounded-lg border border-white/20 bg-transparent px-2 py-1 text-xs text-white focus:outline-none [&>option]:text-brand-900'
+          : 'rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-xs text-brand-600 focus:outline-none'
+      }
     >
       {routing.locales.map((l) => (
         <option key={l} value={l}>

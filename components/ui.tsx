@@ -163,11 +163,15 @@ export function StatCard({
   value,
   hint,
   tone = 'neutral',
+  lead = false,
 }: {
   label: ReactNode;
   value: ReactNode;
   hint?: ReactNode;
   tone?: Tone;
+  /** Marks the headline figure of a row with a teal rule, so a grid of equal cards
+      still has an obvious place to start reading. Use it once per row. */
+  lead?: boolean;
 }) {
   const accent: Record<Tone, string> = {
     neutral: 'text-brand-900',
@@ -177,10 +181,10 @@ export function StatCard({
     info: 'text-teal-700',
   };
   return (
-    <Card className="px-4 py-3">
+    <Card className={clsx('px-4 py-3.5', lead && 'border-t-[3px] border-t-teal-600')}>
       <div className="text-xs font-medium text-[var(--muted)]">{label}</div>
-      <div className={clsx('mt-1 text-2xl font-bold tabular-nums', accent[tone])}>{value}</div>
-      {hint ? <div className="mt-0.5 text-xs text-[var(--muted)]">{hint}</div> : null}
+      <div className={clsx('mt-1 text-3xl font-bold tabular-nums', accent[tone])}>{value}</div>
+      {hint ? <div className="mt-0.5 text-[11px] text-[var(--muted)]">{hint}</div> : null}
     </Card>
   );
 }

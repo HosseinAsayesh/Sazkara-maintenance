@@ -2,7 +2,9 @@
   "app": {
     "name": "Sazkara Maintenance",
     "shortName": "Sazkara",
-    "tagline": "Stand repair tracking and reporting"
+    "tagline": "Stand repair tracking and reporting",
+    "brandHeadline": "Stand maintenance and repair",
+    "brandBlurb": "Repairs reported from the shop floor, live project progress and a standard JTI export — instead of the paper form and manual Excel entry."
   },
   "common": {
     "save": "Save",

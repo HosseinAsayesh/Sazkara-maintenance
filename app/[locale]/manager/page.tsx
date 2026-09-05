@@ -94,7 +94,7 @@ export default async function ManagerDashboard({
           label={t('totalUids')}
           value={num(overview.totals.totalUids)}
           hint={t('totalUidsHelp')}
-          tone="info"
+          lead
         />
         <StatCard
           label={t('subStands')}
