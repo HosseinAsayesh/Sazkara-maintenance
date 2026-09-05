@@ -34,7 +34,7 @@
     "city": "شهر",
     "cities": "شهرها",
     "store": "فروشگاه",
-    "uid": "شناسه استند",
+    "uid": "شناسه فروشگاه",
     "technician": "تکنسین",
     "manager": "مدیر تعمیرات",
     "phone": "شماره تماس",
@@ -223,7 +223,10 @@
     "cmHint": "بر حسب سانتی‌متر (گام ۵۰)",
     "sharedUidNote": "استند {n} از همین شناسه ({uid}) — شناسه‌ی جداگانه ندارد.",
     "sectionStorePhoto": "عکس فروشگاه",
-    "standPhotosHelp": "عکس قبل و بعد همین استند"
+    "standPhotosHelp": "عکس قبل و بعد همین استند",
+    "standCount": "{n} استند",
+    "standReady": "تکمیل شده",
+    "standIncomplete": "هنوز پر نشده"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "مدیر فروشگاه اجازهٔ تعمیر نداد",

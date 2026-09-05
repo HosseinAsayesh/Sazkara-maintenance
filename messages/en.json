@@ -34,7 +34,7 @@
     "city": "City",
     "cities": "Cities",
     "store": "Store",
-    "uid": "Stand UID",
+    "uid": "Store UID",
     "technician": "Technician",
     "manager": "Repair manager",
     "phone": "Phone",
@@ -223,7 +223,10 @@
     "cmHint": "in centimetres (steps of 50)",
     "sharedUidNote": "Stand {n} at the same UID ({uid}) — it has no separate UID.",
     "sectionStorePhoto": "Store photo",
-    "standPhotosHelp": "Before and after photos of THIS stand"
+    "standPhotosHelp": "Before and after photos of THIS stand",
+    "standCount": "{n, plural, one {# stand} other {# stands}}",
+    "standReady": "Filled in",
+    "standIncomplete": "Not filled in yet"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",

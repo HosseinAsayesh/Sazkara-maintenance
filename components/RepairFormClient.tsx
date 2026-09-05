@@ -15,7 +15,11 @@ import {
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { ExtraPhotoInput, PhotoInput } from './PhotoInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
+import { StandTabs } from './StandTabs';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
+
+/** A store may carry up to three stands (§6.6). */
+const MAX_STANDS = 3;
 
 /** §6.5 — fixed list; a developer extends it, never a user. */
 export const NOT_REPAIRED_REASONS = [
@@ -78,6 +82,8 @@ export function RepairFormClient(props: RepairFormProps) {
   const [extraStands, setExtraStands] = useState<ExtraStandValue[]>(() =>
     Array.from({ length: Math.max(0, props.knownStandCount - 1) }, emptyExtraStand),
   );
+  /** Which stand's panel is on screen. 0 is the primary stand, i+1 is extraStands[i]. */
+  const [activeStand, setActiveStand] = useState(0);
 
   const techSig = useRef<SignaturePadHandle | null>(null);
   const mgrSig = useRef<SignaturePadHandle | null>(null);
@@ -86,6 +92,39 @@ export function RepairFormClient(props: RepairFormProps) {
   // server rule so the technician sees the consequence of their input immediately.
   const hasParts = Object.keys(replaced).length + Object.keys(repaired).length > 0;
   const outcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
+
+  const standCount = 1 + extraStands.length;
+  const standTabs = [
+    { label: t('standNumber', { n: 1 }), ready: hasParts || Boolean(reason) },
+    ...extraStands.map((stand, i) => ({
+      label: t('standNumber', { n: i + 2 }),
+      ready:
+        Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0 ||
+        Boolean(stand.reason),
+    })),
+  ];
+
+  /**
+   * Surfaces a validation failure on the stand it belongs to. With the panels switched
+   * rather than stacked, an error about stand 2 is invisible while stand 1 is on screen,
+   * so the message alone would leave the technician with nothing to act on.
+   */
+  const failOn = (standIndex: number, message: string) => {
+    setActiveStand(standIndex);
+    setClientError(message);
+  };
+
+  const addStand = () => {
+    setExtraStands((prev) => [...prev, emptyExtraStand()]);
+    setActiveStand(standCount); // the tab the new stand will occupy
+  };
+
+  const removeStand = (i: number) => {
+    setExtraStands((prev) => prev.filter((_, j) => j !== i));
+    // Removing the stand on screen, or one before it, would otherwise leave the tab
+    // index pointing past the end or at the wrong panel.
+    setActiveStand((current) => (current > i ? current - 1 : current));
+  };
 
   const captureLocation = () => {
     setGeoError(null);
@@ -113,15 +152,23 @@ export function RepairFormClient(props: RepairFormProps) {
     // Client-side mirrors of the server's guards, so the technician isn't told about a
     // missing signature only after a slow multi-megabyte upload.
     if (!hasParts && !reason) {
-      setClientError(t('errors.partsOrReason'));
+      failOn(0, t('errors.partsOrReason'));
       return;
     }
     if (hasParts && quality === null) {
-      setClientError(t('errors.qualityRequired'));
+      failOn(0, t('errors.qualityRequired'));
       return;
     }
-    for (const field of ['photoStore', 'photoBefore', 'photoAfter']) {
+    for (const field of ['photoBefore', 'photoAfter']) {
       const file = formData.get(field);
+      if (!(file instanceof File) || file.size === 0) {
+        failOn(0, t('errors.photosRequired'));
+        return;
+      }
+    }
+    // The storefront photo describes the visit, not a stand, so it is not a stand's fault.
+    {
+      const file = formData.get('photoStore');
       if (!(file instanceof File) || file.size === 0) {
         setClientError(t('errors.photosRequired'));
         return;
@@ -132,17 +179,17 @@ export function RepairFormClient(props: RepairFormProps) {
       const standHasParts =
         Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0;
       if (!standHasParts && !stand.reason) {
-        setClientError(t('errors.partsOrReason'));
+        failOn(i + 1, t('errors.partsOrReason'));
         return;
       }
       if (standHasParts && stand.quality === null) {
-        setClientError(t('errors.qualityRequired'));
+        failOn(i + 1, t('errors.qualityRequired'));
         return;
       }
       for (const field of [`extra_${i}_photoBefore`, `extra_${i}_photoAfter`]) {
         const file = formData.get(field);
         if (!(file instanceof File) || file.size === 0) {
-          setClientError(t('errors.photosRequired'));
+          failOn(i + 1, t('errors.photosRequired'));
           return;
         }
       }
@@ -201,14 +248,31 @@ export function RepairFormClient(props: RepairFormProps) {
       <input type="hidden" name="uid" value={props.uid} />
       <input type="hidden" name="locale" value={props.locale} />
 
+      {/* ---------------- the store this visit is about ----------------
+          The uid names the STORE, not a cabinet, and every stand below shares it. It
+          leads the screen because it is the one thing the technician checks against the
+          sticker in front of them before entering anything else. */}
+      <Card className="p-4">
+        <div className="text-[11px] text-[var(--muted)]">{tc('uid')}</div>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="dir-ltr text-[26px] font-bold leading-tight tracking-[0.01em]">
+            {props.uid}
+          </div>
+          <span className="shrink-0 rounded-full bg-teal-100 px-3 py-1 text-xs font-medium text-teal-900">
+            {t('standCount', { n: standCount })}
+          </span>
+        </div>
+        {props.prefill.storeName || props.prefill.storeAddress ? (
+          <div className="mt-2 text-[13px] text-ink-500">
+            {[props.prefill.storeName, props.prefill.storeAddress].filter(Boolean).join(' — ')}
+          </div>
+        ) : null}
+      </Card>
+
       {/* ---------------- general ---------------- */}
       <Card>
         <CardHeader title={t('sectionGeneral')} />
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-xs text-[var(--muted)]">{tc('uid')}</dt>
-            <dd className="dir-ltr font-semibold">{props.uid}</dd>
-          </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-xs text-[var(--muted)]">{t('formCode')}</dt>
             <dd className="text-xs text-ink-400">{t('assignedOnSubmit')}</dd>
@@ -277,19 +341,26 @@ export function RepairFormClient(props: RepairFormProps) {
         </div>
       </Card>
 
-      {/* ---------------- stand 1 ----------------
-          Everything below belongs to ONE stand and stays together: parts, quality, and
-          crucially its own before/after photos. The photos used to sit in a shared card
-          after the extra stands, which meant filling stand 1's parts, then all of stand 2,
-          then coming back for stand 1's photos — an easy way to attach the wrong pair. */}
-      <div className="rounded-xl border-2 border-brand-300 bg-brand-50/40 p-3 sm:p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
-            ۱
-          </span>
-          <h2 className="text-sm font-bold text-brand-900">{t('primaryStand')}</h2>
-          <span className="text-xs text-[var(--muted)] dir-ltr">{props.uid}</span>
-        </div>
+      {/* ---------------- the stands at this store ----------------
+          One panel per stand, switched rather than stacked: these blocks are long, and
+          scrolling past a finished stand to reach the next one is where a technician
+          loses their place. Hidden panels stay mounted — unmounting would drop their
+          already-chosen photos out of the form.
+
+          Everything inside a panel belongs to ONE stand and stays together: parts,
+          quality, and crucially its own before/after photos. The photos used to sit in a
+          shared card after the other stands, which meant filling stand 1's parts, then
+          all of stand 2, then coming back for stand 1's photos — an easy way to attach
+          the wrong pair. */}
+      <StandTabs
+        tabs={standTabs}
+        active={activeStand}
+        onSelect={setActiveStand}
+        onAdd={addStand}
+        canAdd={standCount < MAX_STANDS}
+      />
+
+      <div className={clsx('space-y-4', activeStand !== 0 && 'hidden')}>
 
       <Alert tone={outcome === 'REPAIRED' ? 'success' : 'warning'}>
         <span className="font-semibold">
@@ -394,7 +465,7 @@ export function RepairFormClient(props: RepairFormProps) {
 
         {/* This stand's own before/after shots, captured while it is still in front of
             the technician. */}
-        <Card className="mt-4">
+        <Card>
           <CardHeader title={t('sectionPhotos')} description={t('standPhotosHelp')} />
           <div className="grid gap-4 p-4 sm:grid-cols-2">
             <PhotoInput label={t('photoBefore')} name="photoBefore" required />
@@ -403,11 +474,9 @@ export function RepairFormClient(props: RepairFormProps) {
         </Card>
       </div>
 
-      {/* ---------------- additional stands at this store ---------------- */}
-      <div className="space-y-4">
-        {extraStands.map((stand, i) => (
+      {extraStands.map((stand, i) => (
+        <div key={i} className={clsx(activeStand !== i + 1 && 'hidden')}>
           <ExtraStandSection
-            key={i}
             index={i}
             uid={props.uid}
             parts={props.parts}
@@ -415,27 +484,10 @@ export function RepairFormClient(props: RepairFormProps) {
             onChange={(next) =>
               setExtraStands((prev) => prev.map((s, j) => (j === i ? next : s)))
             }
-            onRemove={() =>
-              setExtraStands((prev) => prev.filter((_, j) => j !== i))
-            }
+            onRemove={() => removeStand(i)}
           />
-        ))}
-
-        <Card className="border-dashed">
-          <div className="flex flex-wrap items-center justify-between gap-2 p-4">
-            <p className="text-xs text-[var(--muted)]">{t('extraStandHelp')}</p>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                setExtraStands((prev) => [...prev, emptyExtraStand()])
-              }
-            >
-              + {t('addStand')}
-            </Button>
-          </div>
-        </Card>
-      </div>
+        </div>
+      ))}
 
       {/* ---------------- shared: the store itself ----------------
           The storefront photo and any extras describe the visit, not one stand, so they
