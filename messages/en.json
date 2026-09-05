@@ -439,7 +439,8 @@
     "formHistory": "Repair history",
     "viewForm": "View form",
     "standIndexHeader": "Stand number at store",
-    "standCountHeader": "Stands at this location"
+    "standCountHeader": "Stands at this location",
+    "formDeleted": "Report {code} was deleted. This UID is back on the outstanding list."
   },
   "formView": {
     "title": "Form {code}",
@@ -517,15 +518,31 @@
   },
   "historical": {
     "title": "Historical data import",
-    "help": "Upload Jti export files from before this system existed so they count toward stats and analytics.",
-    "expectedFormat": "The file must use the same 43-column layout as the Jti export.",
+    "help": "Import completed reports from an Excel file",
+    "expectedFormat": "For pre-system archives and for paper reports typed up mid-project alike. Both the legacy and current spreadsheet formats are supported.",
     "dryRun": "Check without importing",
     "importNow": "Import now",
     "willCreate": "{forms, number} forms, {stands, number} stands and {stores, number} stores will be created",
     "imported": "{count, number} historical forms imported",
     "technicianForHistorical": "Technician attributed to historical data",
     "layoutCurrent": "Current layout (30 parts)",
-    "layoutLegacy": "Legacy layout (28 parts)"
+    "layoutLegacy": "Legacy layout (28 parts)",
+    "formatLabel": "Excel format",
+    "formatHelp": "Both formats stay available. If auto-detection gets it wrong, state the format yourself.",
+    "format": {
+      "AUTO": {
+        "title": "Detect automatically",
+        "help": "Work the format out from the headers."
+      },
+      "LEGACY": {
+        "title": "Legacy format (pre-system)",
+        "help": "28 part columns, two-row header, feedback in column AP."
+      },
+      "CURRENT": {
+        "title": "Current format (app export)",
+        "help": "30 part columns, exactly what this app produces."
+      }
+    }
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

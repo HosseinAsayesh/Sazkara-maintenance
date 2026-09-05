@@ -53,6 +53,15 @@ const COL_FIRST_PART = 5;
  */
 export type ArchiveLayout = 'CURRENT' | 'LEGACY';
 
+/**
+ * Which reader to use. Auto-detection is a convenience, not a guarantee: real archives
+ * carry hand-edited headers ("location AddresS" instead of "Digital Address") and split
+ * their header across two rows, so the manager can always state the format outright.
+ * Both remain available permanently — a paper report filed mid-project is transcribed
+ * into whichever spreadsheet the office has to hand.
+ */
+export type ArchiveFormat = 'AUTO' | 'CURRENT' | 'LEGACY';
+
 interface ResolvedLayout {
   layout: ArchiveLayout;
   partCount: number;
@@ -67,19 +76,63 @@ interface ResolvedLayout {
   colTechCode: number;
   colFormCode: number;
   colQuality: number;
+  /** Legacy sheets carry a free-text "Store Details" column the current export lacks. */
+  colStoreDetails?: number;
+}
+
+/**
+ * The real legacy sheet, column by column.
+ *
+ * Its trailing block is NOT the current layout shifted by two: the current export puts
+ * `Maintenance detail` third, while the legacy sheet puts `Store Details` there and moves
+ * the maintenance feedback to the very end (column 42 / AP), which is where the
+ * technician's final review is written. Deriving these positions arithmetically from the
+ * current layout — as the previous code did — reads the store name out of the technician
+ * code column and the form code out of the feedback column.
+ */
+const LEGACY_COLUMNS = {
+  digitalAddress: 33,
+  address: 34,
+  storeDetails: 35,
+  tel: 36,
+  store: 37,
+  manager: 38,
+  techCode: 39,
+  formCode: 40,
+  quality: 41,
+  /** Column AP — the final review. */
+  maintenance: 42,
+} as const;
+
+function legacyLayout(): ResolvedLayout {
+  return {
+    layout: 'LEGACY',
+    partCount: LEGACY_PART_COLUMN_COUNT,
+    sortOrderFor: (offset) => LEGACY_TO_CURRENT_SORT_ORDER[offset + 1] ?? null,
+    colDigitalAddress: LEGACY_COLUMNS.digitalAddress,
+    colAddress: LEGACY_COLUMNS.address,
+    colMaintenance: LEGACY_COLUMNS.maintenance,
+    colTel: LEGACY_COLUMNS.tel,
+    colStore: LEGACY_COLUMNS.store,
+    colManager: LEGACY_COLUMNS.manager,
+    colTechCode: LEGACY_COLUMNS.techCode,
+    colFormCode: LEGACY_COLUMNS.formCode,
+    colQuality: LEGACY_COLUMNS.quality,
+    colStoreDetails: LEGACY_COLUMNS.storeDetails,
+  };
 }
 
 function buildLayout(partCount: number): ResolvedLayout {
-  const legacy = partCount === LEGACY_PART_COLUMN_COUNT;
+  // Legacy has its own hand-written column map; only the current layout is regular
+  // enough to derive positions arithmetically.
+  if (partCount === LEGACY_PART_COLUMN_COUNT) return legacyLayout();
+
   const afterParts = COL_FIRST_PART + partCount;
 
   return {
-    layout: legacy ? 'LEGACY' : 'CURRENT',
+    layout: 'CURRENT',
     partCount,
-    sortOrderFor: (offset) =>
-      legacy
-        ? (LEGACY_TO_CURRENT_SORT_ORDER[offset + 1] ?? null)
-        : (PART_CATALOG[offset]?.sortOrder ?? null),
+    sortOrderFor: (offset) => PART_CATALOG[offset]?.sortOrder ?? null,
     colDigitalAddress: afterParts,
     colAddress: afterParts + 1,
     colMaintenance: afterParts + 2,
@@ -98,12 +151,33 @@ function buildLayout(partCount: number): ResolvedLayout {
  * it. Falling back on the raw column count only when the header is unreadable keeps
  * hand-edited archives importable.
  */
-function detectLayout(sheet: ExcelJS.Worksheet, headerRow: number): ResolvedLayout {
-  const header = sheet.getRow(headerRow);
+/**
+ * The address column that opens the trailing block. Real sheets spell it
+ * "Digital Address", "location AddresS", or "Location Address" — matching loosely on
+ * "address" preceded by "digital"/"location" covers every archive seen so far.
+ */
+function isTrailingAddressHeader(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  return /(digital|location)\s*address/.test(t);
+}
+
+function detectLayout(
+  sheet: ExcelJS.Worksheet,
+  headerRow: number,
+  format: ArchiveFormat = 'AUTO',
+): ResolvedLayout {
+  // An explicit choice always wins: auto-detection guesses, the manager knows.
+  if (format === 'LEGACY') return legacyLayout();
+  if (format === 'CURRENT') return buildLayout(PART_CATALOG.length);
+
   const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
 
-  for (let c = COL_FIRST_PART; c <= width; c++) {
-    if (cellText(header.getCell(c)).trim().toLowerCase() === 'digital address') {
+  // The header may be split over two rows (section labels above, part names below), so
+  // look for the trailing address column on the header row AND the one after it.
+  for (const r of [headerRow, headerRow + 1]) {
+    const header = sheet.getRow(r);
+    for (let c = COL_FIRST_PART; c <= width; c++) {
+      if (!isTrailingAddressHeader(cellText(header.getCell(c)))) continue;
       const partCount = c - COL_FIRST_PART;
       if (partCount === PART_CATALOG.length || partCount === LEGACY_PART_COLUMN_COUNT) {
         return buildLayout(partCount);
@@ -112,15 +186,16 @@ function detectLayout(sheet: ExcelJS.Worksheet, headerRow: number): ResolvedLayo
     }
   }
 
-  // No usable header: infer from total width. Current sheets are 44 columns wide,
-  // legacy ones 41.
-  if (width >= COL_FIRST_PART + PART_CATALOG.length + 8) {
-    return buildLayout(PART_CATALOG.length);
-  }
-  if (width >= COL_FIRST_PART + LEGACY_PART_COLUMN_COUNT + 8) {
-    return buildLayout(LEGACY_PART_COLUMN_COUNT);
-  }
-  throw new Error(`UNKNOWN_LAYOUT:${width}`);
+  // No usable header. Width alone is a poor signal — the legacy sheet carries extra
+  // status columns after the feedback column, so it is WIDER than a current export and a
+  // naive ">= current width" test misreads it as current. Prefer the exact widths, and
+  // only then fall back to a range.
+  const currentWidth = COL_FIRST_PART + PART_CATALOG.length + 9;
+  const legacyWidth = COL_FIRST_PART + LEGACY_PART_COLUMN_COUNT + 9;
+  if (width === currentWidth) return buildLayout(PART_CATALOG.length);
+  if (width === legacyWidth) return buildLayout(LEGACY_PART_COLUMN_COUNT);
+
+  throw new Error(`AMBIGUOUS_LAYOUT:${width}`);
 }
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -225,11 +300,13 @@ interface HistoricalRow {
   formCode?: string;
   quality: number | null;
   notes?: string;
+  outcome: 'REPAIRED' | 'NOT_REPAIRED';
   parts: Array<{ sortOrder: number; quantity: number }>;
 }
 
 function readRows(
   buffer: Buffer,
+  format: ArchiveFormat = 'AUTO',
 ): Promise<{ rows: HistoricalRow[]; skipped: number; layout: ArchiveLayout }> {
   return (async () => {
     const workbook = new ExcelJS.Workbook();
@@ -245,10 +322,13 @@ function readRows(
       const row = sheet.getRow(r);
       const first = cellText(row.getCell(COL_ROW_NUMBER)).trim();
       const second = cellText(row.getCell(COL_DATE)).trim();
+      // The uid column header is the most reliable marker: it survived every revision,
+      // in Persian ("شناسه") and English ("UID No.") alike.
+      const uidHeader = /uid|شناسه/i.test(cellText(row.getCell(COL_UID)));
       const hasEnglishTrailer = (() => {
         const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
         for (let c = COL_FIRST_PART; c <= width; c++) {
-          if (cellText(row.getCell(c)).trim().toLowerCase() === 'digital address') return true;
+          if (isTrailingAddressHeader(cellText(row.getCell(c)))) return true;
         }
         return false;
       })();
@@ -256,6 +336,7 @@ function readRows(
       if (
         first === JTI_EXPORT_HEADERS[0] ||
         second === JTI_EXPORT_HEADERS[1] ||
+        uidHeader ||
         hasEnglishTrailer
       ) {
         headerRow = r;
@@ -263,12 +344,22 @@ function readRows(
       }
     }
 
-    const cols = detectLayout(sheet, headerRow);
+    const cols = detectLayout(sheet, headerRow, format);
+
+    // A legacy sheet spreads its header over two rows: section labels on the first, part
+    // names on the second. Data therefore starts one row later than the marker row.
+    // Detected rather than assumed, so a single-row variant still imports.
+    const partNameRow = sheet.getRow(headerRow + 1);
+    const secondRowIsHeader =
+      !normaliseUid(cellText(partNameRow.getCell(COL_UID))) &&
+      !cellText(partNameRow.getCell(COL_DATE)).trim() &&
+      cellText(partNameRow.getCell(COL_FIRST_PART)).trim().length > 0;
+    const firstDataRow = headerRow + (secondRowIsHeader ? 2 : 1);
 
     const rows: HistoricalRow[] = [];
     let skipped = 0;
 
-    for (let r = headerRow + 1; r <= sheet.rowCount; r++) {
+    for (let r = firstDataRow; r <= sheet.rowCount; r++) {
       const row = sheet.getRow(r);
       const uid = normaliseUid(cellText(row.getCell(COL_UID)));
       const date = parseHistoricalDate(cellText(row.getCell(COL_DATE)));
@@ -292,6 +383,19 @@ function readRows(
       const qualityRaw = cellText(row.getCell(cols.colQuality));
       const quality = qualityRaw ? Math.max(0, Math.min(5, cellNumber(qualityRaw))) : null;
 
+      // Column AP carries the technician's final review, e.g. "تعمیرات موفقیت آمیز بود"
+      // or "... نبود". It is the only outcome signal an archive has.
+      const feedback = cellText(row.getCell(cols.colMaintenance)).trim();
+      const storeDetails = cols.colStoreDetails
+        ? cellText(row.getCell(cols.colStoreDetails)).trim()
+        : '';
+
+      // §6.1 stays intact: parts decide the outcome. The review only settles rows that
+      // recorded no parts at all, which is exactly the unsuccessful visits.
+      const reviewSaysFailed = /نبود|unsuccessful|not\s*success/i.test(feedback);
+      const outcome: 'REPAIRED' | 'NOT_REPAIRED' =
+        parts.length > 0 ? 'REPAIRED' : reviewSaysFailed ? 'NOT_REPAIRED' : 'REPAIRED';
+
       rows.push({
         uid,
         date,
@@ -304,7 +408,10 @@ function readRows(
         technicianCode: cleanOptional(cellText(row.getCell(cols.colTechCode))),
         formCode: cleanOptional(cellText(row.getCell(cols.colFormCode))),
         quality,
-        notes: cleanOptional(cellText(row.getCell(cols.colMaintenance))),
+        // Store Details exists only on legacy sheets; keeping it means no column between
+        // A and AP is silently dropped.
+        notes: cleanOptional([feedback, storeDetails].filter(Boolean).join(' | ')),
+        outcome,
         parts,
       });
     }
@@ -313,8 +420,11 @@ function readRows(
   })();
 }
 
-export async function previewHistorical(buffer: Buffer): Promise<HistoricalPreview> {
-  const { rows, skipped, layout } = await readRows(buffer);
+export async function previewHistorical(
+  buffer: Buffer,
+  format: ArchiveFormat = 'AUTO',
+): Promise<HistoricalPreview> {
+  const { rows, skipped, layout } = await readRows(buffer, format);
 
   const uids = [...new Set(rows.map((r) => r.uid))];
   // Locations, not stands, are what a uid identifies now.
@@ -385,9 +495,11 @@ export async function commitHistorical(
     phaseId?: string | null;
     /** Storage ref of the uploaded original, so the manager can download it again. */
     fileRef?: string | null;
+    /** Which reader to use; the manager's explicit choice overrides detection. */
+    format?: ArchiveFormat;
   },
 ) {
-  const { rows } = await readRows(buffer);
+  const { rows } = await readRows(buffer, opts.format ?? 'AUTO');
   if (rows.length === 0) return { imported: 0, skipped: 0 };
 
   const technicianId = await historicalTechnicianId();
@@ -493,9 +605,9 @@ export async function commitHistorical(
               storePhone: row.phone ?? null,
               digitalAddress: row.digitalAddress ?? null,
               date: row.date,
-              qualityScore: row.quality,
+              qualityScore: row.outcome === 'REPAIRED' ? row.quality : null,
               notes: row.notes ?? null,
-              outcome: 'REPAIRED',
+              outcome: row.outcome,
               // Wages are not reconstructed for pre-system work — the rates in effect
               // then are unknown, and inventing them would corrupt payroll reporting.
               wageAmount: 0,

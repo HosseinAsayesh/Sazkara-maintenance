@@ -3,13 +3,19 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireActionManager } from '@/lib/auth';
-import { commitHistorical, previewHistorical } from '@/lib/historical';
+import {
+  commitHistorical,
+  previewHistorical,
+  type ArchiveFormat,
+} from '@/lib/historical';
 import { getStorage } from '@/lib/storage';
 
 export interface HistoricalState {
   error?: string;
   preview?: {
     fileRef: string;
+    /** The format the file was read with, carried into the commit step. */
+    format: ArchiveFormat;
     /** Which sheet generation was detected: the current 30-part or the legacy 28-part. */
     layout: 'CURRENT' | 'LEGACY';
     rows: number;
@@ -25,6 +31,15 @@ export interface HistoricalState {
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/**
+ * The manager's explicit format choice. Auto-detection is only a default: real archives
+ * carry hand-edited headers, so stating the format outright has to be possible.
+ */
+function readFormat(formData: FormData): ArchiveFormat {
+  const raw = String(formData.get('format') ?? 'AUTO').toUpperCase();
+  return raw === 'CURRENT' || raw === 'LEGACY' ? raw : 'AUTO';
+}
+
 /** §7 — dry-run a historical Jti export before writing anything. */
 export async function previewHistoricalAction(
   _prev: HistoricalState,
@@ -37,18 +52,22 @@ export async function previewHistoricalAction(
     if (!(file instanceof File) || file.size === 0) return { error: 'parseFailed' };
     if (file.size > MAX_UPLOAD_BYTES) return { error: 'parseFailed' };
 
+    const format = readFormat(formData);
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileRef = await getStorage().put(buffer, {
       prefix: 'historical',
       filename: file.name || 'history.xlsx',
     });
 
-    const preview = await previewHistorical(buffer);
+    const preview = await previewHistorical(buffer, format);
     if (preview.rows === 0) return { error: 'noRows' };
 
     return {
       preview: {
         fileRef,
+        // Echoed back so the commit step reads the file exactly as the preview did.
+        format,
         layout: preview.layout,
         rows: preview.rows,
         newStands: preview.newStands,
@@ -92,6 +111,7 @@ export async function commitHistoricalAction(
       importedById: manager.id,
       projectId,
       phaseId,
+      format: readFormat(formData),
       // Keep the original on the batch so the manager can download what was uploaded.
       fileRef,
     });

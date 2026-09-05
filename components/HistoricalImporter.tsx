@@ -51,6 +51,7 @@ export function HistoricalImporter({
     commitHistoricalAction,
     {},
   );
+  const [format, setFormat] = useState<'AUTO' | 'LEGACY' | 'CURRENT'>('AUTO');
   const [name, setName] = useState('');
   // An archive filed under no project is invisible to every project filter, so the
   // manager picks the campaign it belonged to at import time.
@@ -93,6 +94,45 @@ export function HistoricalImporter({
               className="block w-full text-sm file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
             />
           </Field>
+
+          {/* Both formats stay available for good: a paper report filed mid-project is
+              transcribed into whichever spreadsheet the office has to hand. Detection is
+              only a default — real archives carry hand-edited headers, so stating the
+              format outright has to be possible. */}
+          <div className="sm:col-span-2">
+            <Field label={t('formatLabel')} hint={t('formatHelp')}>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(['AUTO', 'LEGACY', 'CURRENT'] as const).map((option) => (
+                  <label
+                    key={option}
+                    className={
+                      'flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ' +
+                      (format === option
+                        ? 'border-brand-400 bg-brand-50'
+                        : 'border-[var(--border)] bg-white')
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="format"
+                      value={option}
+                      checked={format === option}
+                      onChange={() => setFormat(option)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium">
+                        {t(`format.${option}.title`)}
+                      </span>
+                      <span className="block text-xs text-[var(--muted)]">
+                        {t(`format.${option}.help`)}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <Button type="submit" disabled={previewing}>
               {previewing ? tc('loading') : t('dryRun')}
@@ -119,6 +159,8 @@ export function HistoricalImporter({
               fd.set('name', name || 'Historical import');
               fd.set('locale', locale);
               fd.set('projectId', projectId);
+              // Commit must read the file exactly as the preview did.
+              fd.set('format', preview.format);
               fd.set('phaseId', phases.some((p) => p.id === phaseId) ? phaseId : '');
               commitAction(fd);
             }}

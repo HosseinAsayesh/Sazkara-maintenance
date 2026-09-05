@@ -31,6 +31,8 @@ export default async function UidSearchPage({
 
   const sp = await searchParams;
   const query = typeof sp.q === 'string' ? sp.q.trim() : '';
+  // Set by the delete action, which lands here because the form's own page is gone.
+  const deletedFormCode = typeof sp.deleted === 'string' ? sp.deleted : '';
 
   const [t, tc, ti] = await Promise.all([
     getTranslations({ locale, namespace: 'uidSearch' }),
@@ -68,6 +70,10 @@ export default async function UidSearchPage({
       <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
 
       <UidSearchBox initial={query} />
+
+      {deletedFormCode ? (
+        <Alert tone="success">{t('formDeleted', { code: deletedFormCode })}</Alert>
+      ) : null}
 
       {query && !stand ? <Alert tone="warning">{t('notFound')}</Alert> : null}
 

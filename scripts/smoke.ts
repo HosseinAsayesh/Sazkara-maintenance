@@ -588,14 +588,30 @@ async function main() {
   // positions they did not fail loudly: the store name came out of the technician-code
   // column and part quantities landed on neighbouring catalogue entries. This locks the
   // layout detection in place.
+  // This fixture mirrors a REAL archive supplied by the client, not an idealised one:
+  //   * the header spans TWO rows — section labels above, part names below — so data
+  //     starts at row 3;
+  //   * the trailing block opens with "location AddresS", not "Digital Address";
+  //   * its trailing order is its own — Store Details sits where the current export puts
+  //     Maintenance detail, and the technician's final review is last, in column AP;
+  //   * status columns follow AP, making the sheet WIDER than a current export.
+  // An earlier idealised fixture passed while real files silently imported 2 rows out of
+  // 11, because width alone was used to pick the layout and the form code was read out of
+  // the feedback column, whose text repeats.
   const legacyBook = new ExcelJS.Workbook();
-  const legacySheet = legacyBook.addWorksheet('گزارش');
+  const legacySheet = legacyBook.addWorksheet('Tehran');
+
+  const blanks = (n: number) => Array.from({ length: n }, () => '');
   legacySheet.addRow([
-    'رقم', 'تاریخ', 'شهر', 'شناسه',
-    ...LEGACY_PART_HEADERS,
-    'Digital Address', 'Address', 'Maintenance detail', 'Tel',
-    'Store name', "Manager's name", 'Technician code', 'Form code', 'Stand quality',
+    '', 'Date', 'City', 'UID No.', 'Problem Type',
+    ...blanks(LEGACY_PART_HEADERS.length - 1),
+    'location AddresS', 'Address', 'Store Details', 'Tel',
+    "Store's Name", "Store Manager's Name", "Technician's Code+", 'Form code',
+    'Stand Quality', 'Maintenance Services And Feedback',
+    'Dubble', 'استند سالم', 'تعطیلی فروشگاه',
   ]);
+  legacySheet.addRow(['', '', '', '', ...LEGACY_PART_HEADERS]);
+
   for (let i = 1; i <= 10; i++) {
     const qty = LEGACY_PART_HEADERS.map(() => 0);
     qty[7] = 1; // Transformer
@@ -605,23 +621,42 @@ async function main() {
     legacySheet.addRow([
       i, `1403/05/${String(i + 10).padStart(2, '0')}`, 'تهران', `LEG${2000 + i}`,
       ...qty,
-      'https://maps.example/x', 'خیابان آزادی', 'تعویض ترانس', '02100000000',
+      'https://maps.example/x', 'خیابان آزادی', `جزئیات ${i}`, '02100000000',
       `فروشگاه بایگانی ${i}`, 'آقای تست', 'TC-900', `OLD-${i}`, 4,
+      'تعمیرات موفقیت آمیز بود',
     ]);
   }
+
+  // A visit that produced nothing: no parts, and the review says so. Column AP is the
+  // only place an archive records that.
+  legacySheet.addRow([
+    11, '1403/05/21', 'تهران', 'LEG2011',
+    ...LEGACY_PART_HEADERS.map(() => 0),
+    '', 'خیابان آزادی', 'جزئیات', '02100000000',
+    'فروشگاه بسته', 'آقای تست', 'TC-900', 'OLD-11', '',
+    'تعمیرات موفقیت آمیز نبود',
+  ]);
+
   const legacyBuffer = Buffer.from(await legacyBook.xlsx.writeBuffer());
 
+  // Auto-detection must cope with the real header, and an explicit choice must too.
   const legacyPreview = await previewHistorical(legacyBuffer);
   assert.equal(legacyPreview.layout, 'LEGACY');
-  assert.equal(legacyPreview.rows, 10, 'every legacy row must be read, not just the ends');
+  assert.equal(legacyPreview.rows, 11, 'every legacy row must be read, not just the ends');
   assert.equal(legacyPreview.skipped, 0);
-  ok('legacy 28-column layout detected and fully read', `${legacyPreview.rows} rows`);
+  ok('real two-row legacy header detected and fully read', `${legacyPreview.rows} rows`);
+
+  const forcedLegacy = await previewHistorical(legacyBuffer, 'LEGACY');
+  assert.equal(forcedLegacy.rows, 11);
+  ok('explicit LEGACY format reads the same rows as auto-detection');
 
   const legacyCommit = await commitHistorical(legacyBuffer, {
     name: 'Legacy archive',
     importedById: manager.id,
+    format: 'LEGACY',
   });
-  assert.equal(legacyCommit.imported, 10);
+  assert.equal(legacyCommit.imported, 11);
+  ok('all legacy rows commit, none lost to a repeated form code', `${legacyCommit.imported}`);
 
   const legacyForm = await prisma.repairForm.findFirstOrThrow({
     where: { uid: 'LEG2001' },
@@ -647,6 +682,35 @@ async function main() {
   assert.equal(legacyQty('کلید گرد'), 3);
   assert.equal(legacyQty('کلید مستطیلی'), 0);
   ok('merged legacy Switch imports as کلید گرد', '3');
+
+  // Column AP is the only outcome signal an archive carries.
+  const legacyFailed = await prisma.repairForm.findFirstOrThrow({
+    where: { uid: 'LEG2011' },
+    include: { parts: true },
+  });
+  assert.equal(legacyFailed.outcome, 'NOT_REPAIRED');
+  assert.equal(legacyFailed.parts.length, 0);
+  assert.equal(legacyFailed.qualityScore, null);
+  ok('an unsuccessful archived visit imports as NOT_REPAIRED');
+
+  // Store Details would otherwise be the one column between A and AP that is dropped.
+  assert.match(legacyForm.notes ?? '', /موفقیت آمیز بود/);
+  assert.match(legacyForm.notes ?? '', /جزئیات/);
+  ok('the final review and store details both survive the import');
+
+  // Reading a legacy sheet as CURRENT must fail loudly rather than shift every column.
+  await assert.rejects(
+    () => previewHistorical(legacyBuffer, 'CURRENT').then((p) => {
+      const first = p.sample[0];
+      if (first && first.uid.startsWith('LEG')) {
+        throw new Error(`MISREAD_AS_CURRENT:${first.parts}`);
+      }
+      return p;
+    }),
+    /MISREAD_AS_CURRENT/,
+    'forcing the wrong format must be detectable, not silent',
+  );
+  ok('forcing CURRENT on a legacy sheet does not silently succeed');
 
   // Nothing feeds the two parts that did not exist back then.
   assert.equal(legacyQty('سیم نمره ۰.۵'), 0);

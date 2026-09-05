@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -75,7 +76,15 @@ export async function deleteRepairFormAction(
   await Promise.all(refs.map((ref) => storage.delete(ref).catch(() => {})));
 
   revalidateForm(locale);
-  return { ok: 'formDeleted' };
+
+  // The caller is standing on /manager/form/<id>, which has just ceased to exist —
+  // re-rendering it would hit notFound() and show a 404 instead of a confirmation. Send
+  // them to the uid's history, which is where they need to be anyway to re-file the
+  // report, and carry a flag so that page can confirm the deletion.
+  redirect(
+    `/${locale}/manager/uid?q=${encodeURIComponent(form.uid)}` +
+      `&deleted=${encodeURIComponent(form.formCode)}`,
+  );
 }
 
 export async function updateRepairFormAction(
