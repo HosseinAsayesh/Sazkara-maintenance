@@ -5,6 +5,7 @@ import type { NotRepairedReason, PartAction, PhotoType, Prisma } from '@prisma/c
 import { nextFormCode } from './codes';
 import { DAY_MS, RE_REPAIR_WINDOW_DAYS } from './dates';
 import { prisma } from './prisma';
+import { resolveCityId as resolveCityByName } from './cities';
 import { resolveProjectForUid } from './projects';
 import { makeStoreMatchKey, normaliseUid } from './text';
 import { computeWage } from './wages';
@@ -146,16 +147,9 @@ async function resolveCityId(
   cityName: string | null | undefined,
 ): Promise<string | null> {
   if (cityId) return cityId;
-  const name = cityName?.trim();
-  if (!name) return null;
-
-  const existing = await tx.city.findFirst({ where: { name } });
-  if (existing) return existing.id;
-
-  const created = await tx.city.create({
-    data: { name, isTehran: makeStoreMatchKey(name) === makeStoreMatchKey('تهران') },
-  });
-  return created.id;
+  // Delegated so an English city name matches the Persian row instead of creating a
+  // second city (see lib/cities.ts).
+  return resolveCityByName(tx, cityName);
 }
 
 /**

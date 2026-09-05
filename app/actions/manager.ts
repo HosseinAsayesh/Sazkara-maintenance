@@ -4,6 +4,12 @@ import { revalidatePath } from 'next/cache';
 
 import { requireActionManager } from '@/lib/auth';
 import { nextTechnicianCode } from '@/lib/codes';
+import {
+  CityMergeError,
+  cityKey,
+  deleteCityIfUnused,
+  mergeCities,
+} from '@/lib/cities';
 import { prisma } from '@/lib/prisma';
 import { setAppSettings, setWageSettings, type WageKey, WAGE_KEYS } from '@/lib/settings';
 import { makeStoreMatchKey } from '@/lib/text';
@@ -118,7 +124,14 @@ export async function addCityAction(
     formData.get('isTehran') === 'on' ||
     makeStoreMatchKey(name) === makeStoreMatchKey('تهران');
 
-  const existing = await prisma.city.findFirst({ where: { name } });
+  // Matching on the normalised name and the English alias, so adding "Tehran" when
+  // "تهران" exists updates that row instead of creating a rival city.
+  const all = await prisma.city.findMany({ select: { id: true, name: true, nameEn: true } });
+  const key = cityKey(name);
+  const existing = all.find(
+    (c) => cityKey(c.name) === key || (c.nameEn ? cityKey(c.nameEn) === key : false),
+  );
+
   if (existing) {
     await prisma.city.update({ where: { id: existing.id }, data: { isTehran } });
   } else {
@@ -139,4 +152,62 @@ export async function toggleCityTehranAction(formData: FormData) {
 
   await prisma.city.update({ where: { id: cityId }, data: { isTehran } });
   revalidatePath(`/${locale}/manager/settings`);
+}
+
+/**
+ * Fold one city into another (§6.6 depends on this being right).
+ *
+ * Duplicate cities used to arise whenever a sheet spelled a city differently — `Tehran`
+ * beside `تهران`. That splits the city's stores, forms and, for Tehran, its wage bucket,
+ * so the dashboard's Tehran-vs-other-cities split silently under-reports. Creation is now
+ * normalised, and this repairs databases that already drifted.
+ */
+export async function mergeCitiesAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const sourceId = String(formData.get('sourceId') ?? '');
+  const targetId = String(formData.get('targetId') ?? '');
+
+  if (!sourceId || !targetId) return { error: 'generic' };
+  if (sourceId === targetId) return { error: 'sameCity' };
+
+  try {
+    await mergeCities(sourceId, targetId);
+  } catch (err) {
+    if (err instanceof CityMergeError) {
+      return { error: err.code === 'SAME_CITY' ? 'sameCity' : 'notFound' };
+    }
+    console.error('mergeCitiesAction failed', err);
+    return { error: 'generic' };
+  }
+
+  revalidatePath(`/${locale}/manager`, 'layout');
+  return { ok: 'saved' };
+}
+
+/** Remove a city nothing points at — the tidy-up after a merge, or a mistyped entry. */
+export async function deleteCityAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const cityId = String(formData.get('cityId') ?? '');
+  if (!cityId) return { error: 'generic' };
+
+  try {
+    await deleteCityIfUnused(cityId);
+  } catch (err) {
+    if (err instanceof CityMergeError) return { error: 'cityInUse' };
+    console.error('deleteCityAction failed', err);
+    return { error: 'generic' };
+  }
+
+  revalidatePath(`/${locale}/manager`, 'layout');
+  return { ok: 'saved' };
 }

@@ -493,7 +493,17 @@
     "isTehran": "Price as Tehran",
     "saved": "Settings saved",
     "unrepairedVisitRate": "Unsuccessful visit rate",
-    "unrepairedVisitRateHelp": "Paid for any visit that produced no repair (store closed, permission refused, ...). If the same stand is repaired on a later visit, that visit is priced at the normal rate."
+    "unrepairedVisitRateHelp": "Paid for any visit that produced no repair (store closed, permission refused, ...). If the same stand is repaired on a later visit, that visit is priced at the normal rate.",
+    "mergeTitle": "Merge cities",
+    "mergeHelp": "If one city was recorded twice (say \"Tehran\" and \"تهران\"), this moves all of its stores, reports and evidence onto the surviving city and deletes the duplicate.",
+    "mergeSource": "From (deleted)",
+    "mergeTarget": "Into (kept)",
+    "mergeAction": "Merge",
+    "mergeConfirm": "Merge \"{source}\" into \"{target}\"? {count} records move across and the source city is deleted.",
+    "merged": "Cities merged",
+    "duplicateCities": "Duplicate cities",
+    "duplicateCitiesHelp": "These look like the same city. Until they are merged, statistics and the wage split are divided between them.",
+    "possibleDuplicate": "duplicate?"
   },
   "parts": {
     "title": "Part catalogue",
@@ -529,7 +539,9 @@
     "lineHasForms": "A repair report exists for this UID, so the row cannot be deleted.",
     "cannotDeleteWithForms": "This order has repair reports against it and cannot be deleted.",
     "phaseMismatch": "The selected phase does not belong to this project.",
-    "qualityOutOfRange": "Quality score must be between 0 and 5."
+    "qualityOutOfRange": "Quality score must be between 0 and 5.",
+    "sameCity": "The source and target city cannot be the same.",
+    "cityInUse": "That city is in use; merge it instead of deleting it."
   },
   "projects": {
     "title": "Projects and phases",

@@ -2,6 +2,7 @@ import 'server-only';
 
 import ExcelJS from 'exceljs';
 
+import { resolveCityId as resolveCityByName } from './cities';
 import { nextFormCode } from './codes';
 import {
   JTI_EXPORT_HEADERS,
@@ -428,13 +429,10 @@ export async function commitHistorical(
             }
           }
 
-          let city = await tx.city.findFirst({ where: { name: row.cityName } });
-          city ??= await tx.city.create({
-            data: {
-              name: row.cityName,
-              isTehran: makeStoreMatchKey(row.cityName) === makeStoreMatchKey('تهران'),
-            },
-          });
+          // Archives frequently spell cities in English; resolving through the shared
+          // matcher keeps them on the same city row as the Persian sheets.
+          const cityId = await resolveCityByName(tx, row.cityName);
+          const city = { id: cityId! };
 
           // The uid keys the location, so a historical sheet lands on the same store
           // record a live import would.

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 import ExcelJS from 'exceljs';
 
+import { cityKey, resolveCityId as resolveCityByName } from './cities';
 import { prisma } from './prisma';
 import { cleanOptional, makeStoreMatchKey, normaliseUid } from './text';
 
@@ -320,21 +321,12 @@ export async function commitImport(rows: ImportRow[], opts: CommitOptions) {
         // --- City ---
         let cityId: string | null = null;
         if (row.cityName) {
-          const key = makeStoreMatchKey(row.cityName);
+          const key = cityKey(row.cityName);
           if (cityCache.has(key)) {
             cityId = cityCache.get(key)!;
           } else {
-            const existing = await tx.city.findFirst({ where: { name: row.cityName } });
-            const city =
-              existing ??
-              (await tx.city.create({
-                data: {
-                  name: row.cityName,
-                  isTehran: key === makeStoreMatchKey('تهران'),
-                },
-              }));
-            cityId = city.id;
-            cityCache.set(key, city.id);
+            cityId = await resolveCityByName(tx, row.cityName);
+            if (cityId) cityCache.set(key, cityId);
           }
         }
 

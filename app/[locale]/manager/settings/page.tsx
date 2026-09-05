@@ -1,8 +1,9 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
-import { CitySettings, WageSettingsForm } from '@/components/SettingsForms';
+import { CityManager } from '@/components/CityManager';
+import { WageSettingsForm } from '@/components/SettingsForms';
 import { requireManager } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { findDuplicateCityGroups, listCitiesWithUsage } from '@/lib/cities';
 import { getAppSettings, getWageSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
@@ -14,13 +15,11 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
 
   const t = await getTranslations({ locale, namespace: 'settings' });
 
-  const [wages, app, cities] = await Promise.all([
+  const [wages, app, cities, duplicateGroups] = await Promise.all([
     getWageSettings(),
     getAppSettings(),
-    prisma.city.findMany({
-      orderBy: [{ isTehran: 'desc' }, { name: 'asc' }],
-      select: { id: true, name: true, isTehran: true },
-    }),
+    listCitiesWithUsage(),
+    findDuplicateCityGroups(),
   ]);
 
   return (
@@ -33,7 +32,11 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         app={{ companyName: app.companyName, managerContactEmail: app.managerContactEmail }}
       />
 
-      <CitySettings locale={locale} cities={cities} />
+      <CityManager
+        locale={locale}
+        cities={cities}
+        duplicateGroups={duplicateGroups.map((group) => group.map((c) => c.id))}
+      />
     </div>
   );
 }

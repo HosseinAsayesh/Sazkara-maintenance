@@ -10,6 +10,11 @@ import ExcelJS from 'exceljs';
 import bcrypt from 'bcryptjs';
 
 import { getOverview, getPartRates, forecastParts } from '../lib/analytics';
+import {
+  findDuplicateCityGroups,
+  mergeCities,
+  resolveCityId as resolveCityByName,
+} from '../lib/cities';
 // NB: lib/auth is deliberately not imported here — it pulls in next/navigation, which
 // cannot load outside the Next runtime. Password hashing is the only piece needed.
 import { nextTechnicianCode } from '../lib/codes';
@@ -61,6 +66,8 @@ async function reset() {
   // The seeded project is left alone; only the one this suite creates is removed, so a
   // re-run does not collide on Project.name. Phases cascade with it.
   await prisma.project.deleteMany({ where: { name: TEST_PROJECT_NAME } });
+  // Cities this suite invents; the seeded set is left alone.
+  await prisma.city.deleteMany({ where: { name: { in: ['Tehran'] } } });
   await prisma.stand.deleteMany();
   await prisma.store.deleteMany();
   await prisma.user.deleteMany({ where: { role: 'TECHNICIAN' } });
@@ -91,7 +98,9 @@ async function main() {
   assert.equal(parts[29].nameFa, 'درب');
   ok('30-part catalogue in export order', `${parts[0].nameFa} … ${parts[29].nameFa}`);
 
-  const tehran = await prisma.city.findFirstOrThrow({ where: { isTehran: true } });
+  // By name, not by the isTehran flag: a duplicate city carrying the same flag would
+  // otherwise make this fixture pick a different row on every run.
+  const tehran = await prisma.city.findFirstOrThrow({ where: { name: 'تهران' } });
   const isfahan = await prisma.city.findFirstOrThrow({ where: { name: 'اصفهان' } });
   ok('Tehran flagged separately from other cities', tehran.name);
 
@@ -796,6 +805,93 @@ async function main() {
   assert.equal(isValidJalaliDate(1403, 12, 30), true);
   assert.equal(isValidJalaliDate(1404, 12, 30), false);
   ok('Esfand 30 exists only in leap years', '1403 yes, 1404 no');
+
+  /* ---------------------------------------------------------------- */
+  // Cities used to be created from four code paths, each matching on an exact name
+  // string, so a sheet spelling a city in English produced a second row. That splits the
+  // city's stores and forms and — for Tehran, its own wage bucket (§6.6) — quietly
+  // under-reports the payroll split.
+  section('city identity and merging');
+
+  const beforeCities = await prisma.city.count();
+  const englishTehran = await resolveCityByName(prisma, 'Tehran');
+  const spacedTehran = await resolveCityByName(prisma, '  تهـران ');
+  assert.equal(englishTehran, tehran.id, 'English spelling must match the seeded city');
+  assert.equal(spacedTehran, tehran.id, 'spacing and character variants must fold away');
+  assert.equal(await prisma.city.count(), beforeCities, 'no new city may be created');
+  ok('city names resolve through the English alias and normalisation');
+
+  // A duplicate that already exists in the database still has to be repairable.
+  const stray = await prisma.city.create({
+    data: { name: 'Tehran', isTehran: true },
+  });
+  const strayStore = await prisma.store.create({
+    data: {
+      uid: 'MERGE-1',
+      name: 'فروشگاه ادغام',
+      matchKey: 'merge',
+      cityId: stray.id,
+    },
+  });
+  const strayStand = await prisma.stand.create({
+    data: { storeId: strayStore.id, standIndexAtStore: 1 },
+  });
+  const strayForm = await prisma.repairForm.create({
+    data: {
+      formCode: 'MERGE-FORM-1',
+      standId: strayStand.id,
+      technicianId: tech.id,
+      cityId: stray.id,
+      storeId: strayStore.id,
+      uid: 'MERGE-1',
+      standIndex: 1,
+      date: new Date(),
+      outcome: 'REPAIRED',
+      qualityScore: 4,
+      wageAmount: 1000,
+      wageTier: 1,
+      wageRateApplied: 1000,
+    },
+  });
+  await prisma.orderLine.updateMany({
+    where: { uid: 'MERGE-1' },
+    data: { cityName: stray.name },
+  });
+
+  const duplicates = await findDuplicateCityGroups();
+  assert.ok(
+    duplicates.some((g) => g.some((c) => c.id === stray.id)),
+    'the stray city must be surfaced as a suspected duplicate',
+  );
+  ok('duplicate cities are detected for the manager');
+
+  const mergeResult = await mergeCities(stray.id, tehran.id);
+  assert.equal(mergeResult.stores, 1);
+  assert.equal(mergeResult.forms, 1);
+  ok('merge moves stores and forms across', `${mergeResult.forms} form(s)`);
+
+  assert.equal(await prisma.city.findUnique({ where: { id: stray.id } }), null);
+  assert.equal(
+    (await prisma.store.findUniqueOrThrow({ where: { id: strayStore.id } })).cityId,
+    tehran.id,
+  );
+  assert.equal(
+    (await prisma.repairForm.findUniqueOrThrow({ where: { id: strayForm.id } })).cityId,
+    tehran.id,
+  );
+  ok('the duplicate city is gone and nothing is orphaned');
+
+  // The whole point: Tehran's wage bucket must be whole again.
+  const merged = await getOverview({});
+  const tehranForms = await prisma.repairForm.count({ where: { cityId: tehran.id } });
+  assert.ok(tehranForms >= 1);
+  assert.ok(merged.split.tehran.repaired >= 1);
+  ok('Tehran wage bucket accounts for the merged rows');
+
+  await prisma.partUsage.deleteMany({ where: { repairFormId: strayForm.id } });
+  await prisma.repairForm.delete({ where: { id: strayForm.id } });
+  await prisma.stand.delete({ where: { id: strayStand.id } });
+  await prisma.store.delete({ where: { id: strayStore.id } });
 
   /* ---------------------------------------------------------------- */
   section('normalisation guards');
