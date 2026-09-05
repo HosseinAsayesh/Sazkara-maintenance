@@ -6,13 +6,12 @@ import { requireActionManager } from '@/lib/auth';
 import { nextTechnicianCode } from '@/lib/codes';
 import {
   CityMergeError,
-  cityKey,
+  addOrMatchCity,
   deleteCityIfUnused,
   mergeCities,
 } from '@/lib/cities';
 import { prisma } from '@/lib/prisma';
 import { setAppSettings, setWageSettings, type WageKey, WAGE_KEYS } from '@/lib/settings';
-import { makeStoreMatchKey } from '@/lib/text';
 
 export interface ActionState {
   error?: string;
@@ -120,27 +119,11 @@ export async function addCityAction(
   const locale = String(formData.get('locale') || 'fa');
   if (!name) return { error: 'generic' };
 
-  const isTehran =
-    formData.get('isTehran') === 'on' ||
-    makeStoreMatchKey(name) === makeStoreMatchKey('تهران');
-
-  // Matching on the normalised name and the English alias, so adding "Tehran" when
-  // "تهران" exists updates that row instead of creating a rival city.
-  const all = await prisma.city.findMany({ select: { id: true, name: true, nameEn: true } });
-  const key = cityKey(name);
-  const existing = all.find(
-    (c) => cityKey(c.name) === key || (c.nameEn ? cityKey(c.nameEn) === key : false),
-  );
-
-  if (existing) {
-    await prisma.city.update({ where: { id: existing.id }, data: { isTehran } });
-  } else {
-    await prisma.city.create({ data: { name, isTehran } });
-  }
+  const { created } = await addOrMatchCity(name, formData.get('isTehran') === 'on');
 
   // Cities feed the dashboard and export filters, not just the settings page.
   revalidatePath(`/${locale}/manager`, 'layout');
-  return { ok: 'saved' };
+  return { ok: created ? 'saved' : 'cityExists' };
 }
 
 export async function toggleCityTehranAction(formData: FormData) {

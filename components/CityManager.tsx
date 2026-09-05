@@ -248,7 +248,15 @@ export function CityManager({
           {t('addCity')}
         </Button>
         {addState.ok ? (
-          <span className="pb-2 text-sm text-emerald-700">{t('saved')}</span>
+          <span
+            className={
+              addState.ok === 'cityExists'
+                ? 'pb-2 text-sm text-amber-700'
+                : 'pb-2 text-sm text-emerald-700'
+            }
+          >
+            {addState.ok === 'cityExists' ? t('cityExists') : t('saved')}
+          </span>
         ) : null}
       </form>
     </Card>

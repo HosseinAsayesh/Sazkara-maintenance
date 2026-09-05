@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 
 import { getOverview, getPartRates, forecastParts } from '../lib/analytics';
 import {
+  addOrMatchCity,
   findDuplicateCityGroups,
   mergeCities,
   resolveCityId as resolveCityByName,
@@ -66,10 +67,11 @@ async function reset() {
   // The seeded project is left alone; only the one this suite creates is removed, so a
   // re-run does not collide on Project.name. Phases cascade with it.
   await prisma.project.deleteMany({ where: { name: TEST_PROJECT_NAME } });
-  // Cities this suite invents; the seeded set is left alone.
-  await prisma.city.deleteMany({ where: { name: { in: ['Tehran'] } } });
   await prisma.stand.deleteMany();
   await prisma.store.deleteMany();
+  // Cities this suite invents; the seeded set is left alone. Must come after stores and
+  // forms, which hold the foreign keys into City.
+  await prisma.city.deleteMany({ where: { name: { in: ['Tehran'] } } });
   await prisma.user.deleteMany({ where: { role: 'TECHNICIAN' } });
   await prisma.counter.deleteMany({ where: { key: 'repairForm' } });
 }
@@ -820,6 +822,24 @@ async function main() {
   assert.equal(spacedTehran, tehran.id, 'spacing and character variants must fold away');
   assert.equal(await prisma.city.count(), beforeCities, 'no new city may be created');
   ok('city names resolve through the English alias and normalisation');
+
+  // Regression: re-adding an existing city name with the Tehran box unticked must not
+  // clear that city's wage flag. Writing the checkbox straight through emptied the
+  // Tehran bucket (§6.6) with no visible warning.
+  assert.equal(
+    (await prisma.city.findUniqueOrThrow({ where: { id: tehran.id } })).isTehran,
+    true,
+  );
+  const readd = await addOrMatchCity('Tehran', false);
+  assert.equal(readd.created, false, 'must match the existing city, not create a rival');
+  assert.equal(readd.cityId, tehran.id);
+  assert.equal(
+    (await prisma.city.findUniqueOrThrow({ where: { id: tehran.id } })).isTehran,
+    true,
+    'adding an existing city name must never clear its Tehran flag',
+  );
+  ok('re-adding an existing city keeps its Tehran wage flag');
+
 
   // A duplicate that already exists in the database still has to be repairable.
   const stray = await prisma.city.create({

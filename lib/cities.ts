@@ -22,6 +22,12 @@ type Db = Prisma.TransactionClient | typeof prisma;
  * against BOTH the Persian name and the English `nameEn` alias.
  */
 
+export class CityMergeError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
 /** Persian/Arabic character variants, digits and spacing all folded away. */
 export function cityKey(name: string): string {
   return makeStoreMatchKey(name);
@@ -63,6 +69,44 @@ export async function resolveCityId(
     data: { name, isTehran: looksLikeTehran(name) },
   });
   return created.id;
+}
+
+/**
+ * Add a city, or recognise that it already exists.
+ *
+ * The Tehran flag is only ever RAISED here. Writing the caller's checkbox straight
+ * through would let re-typing an existing city name with the box unticked silently clear
+ * that city's flag — emptying the Tehran wage bucket (§6.6) with nothing on screen to say
+ * so. Clearing the flag is what the explicit per-row toggle is for.
+ */
+export async function addOrMatchCity(
+  rawName: string,
+  wantsTehranFlag: boolean,
+): Promise<{ cityId: string; created: boolean }> {
+  const name = rawName.trim();
+  if (!name) throw new CityMergeError('NAME_REQUIRED');
+
+  const wantsTehran = wantsTehranFlag || looksLikeTehran(name);
+
+  const all = await prisma.city.findMany({
+    select: { id: true, name: true, nameEn: true, isTehran: true },
+  });
+  const key = cityKey(name);
+  const existing = all.find(
+    (c) => cityKey(c.name) === key || (c.nameEn ? cityKey(c.nameEn) === key : false),
+  );
+
+  if (existing) {
+    if (wantsTehran && !existing.isTehran) {
+      await prisma.city.update({ where: { id: existing.id }, data: { isTehran: true } });
+    }
+    return { cityId: existing.id, created: false };
+  }
+
+  const created = await prisma.city.create({
+    data: { name, isTehran: wantsTehran },
+  });
+  return { cityId: created.id, created: true };
 }
 
 export interface CityUsage {
@@ -139,12 +183,6 @@ export async function findDuplicateCityGroups(): Promise<CityUsage[][]> {
   }
 
   return [...new Set(groups.values())].filter((g) => g.length > 1);
-}
-
-export class CityMergeError extends Error {
-  constructor(readonly code: string) {
-    super(code);
-  }
 }
 
 /**

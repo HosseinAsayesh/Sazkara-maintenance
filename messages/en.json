@@ -503,7 +503,8 @@
     "merged": "Cities merged",
     "duplicateCities": "Duplicate cities",
     "duplicateCitiesHelp": "These look like the same city. Until they are merged, statistics and the wage split are divided between them.",
-    "possibleDuplicate": "duplicate?"
+    "possibleDuplicate": "duplicate?",
+    "cityExists": "That city already exists"
   },
   "parts": {
     "title": "Part catalogue",
