@@ -6,9 +6,14 @@ import { useActionState } from 'react';
 import {
   addPhaseAction,
   createProjectAction,
+  deleteProjectAction,
   setActiveProjectAction,
   type ActionState,
 } from '@/app/actions/projects';
+import {
+  deleteHistoricalImportAction,
+  type HistoricalState,
+} from '@/app/actions/historical';
 
 import { Link } from '@/i18n/navigation';
 
@@ -63,6 +68,7 @@ export function ProjectsManager({
   const t = useTranslations('projects');
   const tc = useTranslations('common');
   const ti = useTranslations('imports');
+  const th = useTranslations('historical');
   const tErr = useTranslations('errors');
 
   const [createState, createAction, creating] = useActionState<ActionState, FormData>(
@@ -73,6 +79,14 @@ export function ProjectsManager({
     setActiveProjectAction,
     {},
   );
+  const [deleteState, deleteAction] = useActionState<ActionState, FormData>(
+    deleteProjectAction,
+    {},
+  );
+  const [importDeleteState, deleteImportAction] = useActionState<
+    HistoricalState,
+    FormData
+  >(deleteHistoricalImportAction, {});
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -116,15 +130,52 @@ export function ProjectsManager({
                     </p>
                   </div>
 
-                  {!project.isActive ? (
-                    <form action={activateAction}>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {!project.isActive ? (
+                      <form action={activateAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <Button type="submit" variant="ghost" size="sm">
+                          {t('setActive')}
+                        </Button>
+                      </form>
+                    ) : null}
+
+                    {/* An empty project deletes on one confirmation; a populated one
+                        spells out what is attached and needs an explicit second yes.
+                        Reports are detached, never destroyed — they are the record of
+                        work actually done. */}
+                    <form
+                      action={deleteAction}
+                      onSubmit={(e) => {
+                        const populated =
+                          project.formCount > 0 || project.batchCount > 0;
+                        const message = populated
+                          ? t('deleteFullConfirm', {
+                              name: project.name,
+                              forms: project.formCount,
+                              batches: project.batchCount,
+                            })
+                          : t('deleteEmptyConfirm', { name: project.name });
+                        if (!confirm(message)) e.preventDefault();
+                      }}
+                    >
                       <input type="hidden" name="locale" value={locale} />
                       <input type="hidden" name="projectId" value={project.id} />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {t('setActive')}
+                      <input
+                        type="hidden"
+                        name="force"
+                        value={
+                          project.formCount > 0 || project.batchCount > 0
+                            ? 'true'
+                            : 'false'
+                        }
+                      />
+                      <Button type="submit" variant="danger" size="sm">
+                        {t('delete')}
                       </Button>
                     </form>
-                  ) : null}
+                  </div>
                 </div>
 
                 {/* Everything imported into this campaign, including archives of past
@@ -153,16 +204,40 @@ export function ProjectsManager({
                             {batch.lineCount} · {batch.importedAt}
                           </span>
                         </span>
-                        {batch.fileUrl ? (
-                          <a
-                            href={batch.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-medium text-brand-700 underline"
-                          >
-                            {tc('download')}
-                          </a>
-                        ) : null}
+                        <span className="flex items-center gap-2">
+                          {batch.fileUrl ? (
+                            <a
+                              href={batch.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-brand-700 underline"
+                            >
+                              {tc('download')}
+                            </a>
+                          ) : null}
+
+                          {/* Undo lives beside the import it undoes. Archive chunks
+                              commit independently, so a mid-file failure leaves earlier
+                              rows behind and the Jti-order delete refuses to touch them
+                              (it protects real fieldwork). Only HISTORICAL batches. */}
+                          {batch.source === 'HISTORICAL' ? (
+                            <form
+                              action={deleteImportAction}
+                              onSubmit={(e) => {
+                                if (!confirm(th('deleteImportConfirm'))) e.preventDefault();
+                              }}
+                            >
+                              <input type="hidden" name="locale" value={locale} />
+                              <input type="hidden" name="batchId" value={batch.id} />
+                              <button
+                                type="submit"
+                                className="text-rose-700 underline hover:text-rose-800"
+                              >
+                                {th('deleteImport')}
+                              </button>
+                            </form>
+                          ) : null}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -179,7 +254,14 @@ export function ProjectsManager({
             ))}
           </ul>
         )}
-        <div className="px-4 pb-3">{showError(activeState)}</div>
+        <div className="space-y-2 px-4 pb-3">
+          {showError(activeState)}
+          {showError(deleteState)}
+          {deleteState.ok ? <Alert tone="success">{t('deleted')}</Alert> : null}
+          {importDeleteState.deleted ? (
+            <Alert tone="success">{th('importDeleted')}</Alert>
+          ) : null}
+        </div>
       </Card>
 
       <Card>

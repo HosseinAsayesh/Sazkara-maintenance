@@ -1,9 +1,11 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { CityManager } from '@/components/CityManager';
+import { LogoSettings } from '@/components/LogoSettings';
 import { WageSettingsForm } from '@/components/SettingsForms';
 import { requireManager } from '@/lib/auth';
 import { findDuplicateCityGroups, listCitiesWithUsage } from '@/lib/cities';
+import { getStorage } from '@/lib/storage';
 import { getAppSettings, getWageSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +32,11 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         locale={locale}
         wages={wages}
         app={{ companyName: app.companyName, managerContactEmail: app.managerContactEmail }}
+      />
+
+      <LogoSettings
+        locale={locale}
+        logoUrl={app.logoRef ? getStorage().url(app.logoRef) : null}
       />
 
       <CityManager

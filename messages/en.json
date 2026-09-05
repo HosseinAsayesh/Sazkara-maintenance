@@ -90,7 +90,8 @@
     "newReport": "New report",
     "myProfile": "My stats",
     "projects": "Projects",
-    "uidArchive": "UID archive"
+    "uidArchive": "UID archive",
+    "crew": "My crew"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -366,7 +367,15 @@
       "PENDING": "Pending",
       "APPROVED": "Approved",
       "REJECTED": "Rejected"
-    }
+    },
+    "role": "Role",
+    "lead": "Lead",
+    "makeLead": "Promote to lead",
+    "removeLead": "Back to technician",
+    "roleTechnician": "Technician",
+    "roleLead": "Crew lead",
+    "noLead": "No lead",
+    "crewSize": "Crew"
   },
   "exports": {
     "title": "Exports",
@@ -505,7 +514,12 @@
     "duplicateCities": "Duplicate cities",
     "duplicateCitiesHelp": "These look like the same city. Until they are merged, statistics and the wage split are divided between them.",
     "possibleDuplicate": "duplicate?",
-    "cityExists": "That city already exists"
+    "cityExists": "That city already exists",
+    "logoTitle": "Company logo",
+    "logoHelp": "Printed on the evidence PDF cover. PNG or JPG, up to 4 MB.",
+    "logoUpload": "Upload logo",
+    "logoCurrent": "Current logo",
+    "logoNone": "No logo uploaded yet."
   },
   "parts": {
     "title": "Part catalogue",
@@ -543,7 +557,15 @@
         "help": "30 part columns, exactly what this app produces."
       }
     },
-    "repeatedUids": "{count} UID(s) appear on more than one row. Each row still becomes its own report; only one order line is created per UID."
+    "repeatedUids": "{count} UID(s) appear on more than one row. Each row still becomes its own report; only one order line is created per UID.",
+    "columnMismatch": "Part columns do not match",
+    "columnMismatchHelp": "Quantities are read by column position. If these columns are a different part, the parts usage will be recorded against the wrong entries. Check before committing.",
+    "columnExpected": "expected",
+    "columnFound": "in file",
+    "deleteImport": "Delete this import",
+    "deleteImportConfirm": "Delete every report from this import? This is for undoing a partial or wrong upload and cannot be reversed.",
+    "importDeleted": "Import deleted",
+    "partial": "This import is incomplete."
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",
@@ -560,7 +582,12 @@
     "phaseMismatch": "The selected phase does not belong to this project.",
     "qualityOutOfRange": "Quality score must be between 0 and 5.",
     "sameCity": "The source and target city cannot be the same.",
-    "cityInUse": "That city is in use; merge it instead of deleting it."
+    "cityInUse": "That city is in use; merge it instead of deleting it.",
+    "selfLead": "A technician cannot be their own lead.",
+    "notALead": "The selected user is not a crew lead.",
+    "projectNotEmpty": "That project is not empty; deleting it needs a second confirmation.",
+    "invalidImage": "Only PNG, JPG or WebP is accepted.",
+    "imageTooLarge": "That image is too large."
   },
   "projects": {
     "title": "Projects and phases",
@@ -581,7 +608,13 @@
     "forms": "reports",
     "batches": "orders",
     "none": "No projects yet",
-    "assignToProject": "Project and phase"
+    "assignToProject": "Project and phase",
+    "delete": "Delete project",
+    "deleteEmptyConfirm": "Delete project \"{name}\"? It is empty.",
+    "deleteFullConfirm": "Project \"{name}\" has {forms} reports and {batches} orders.\n\nThe reports are NOT deleted — they are detached from this project and left without one.\n\nContinue?",
+    "deleted": "Project deleted",
+    "contents": "{forms} reports · {batches} orders",
+    "empty": "empty"
   },
   "uidArchive": {
     "title": "UID archive",
@@ -593,5 +626,24 @@
     "partsReplaced": "Parts replaced",
     "lastVisit": "Last visit",
     "multiStand": "multi-stand"
+  },
+  "workExport": {
+    "title": "Work export",
+    "help": "Your submitted reports for a period or a project, as a spreadsheet.",
+    "download": "Download Excel",
+    "generating": "Generating...",
+    "noRows": "No reports in this range.",
+    "technician": "Technician",
+    "wholeCrew": "Whole crew"
+  },
+  "lead": {
+    "title": "Crew lead dashboard",
+    "crew": "Crew members",
+    "crewHelp": "Technicians reporting to you. Assignment is done by the manager.",
+    "noCrew": "No technicians assigned to you yet.",
+    "recent": "Recent crew reports",
+    "scopeNote": "This page shows your crew’s work only; wages, the Jti export and settings stay with the manager.",
+    "assignLead": "Lead",
+    "noLead": "No lead"
   }
 }

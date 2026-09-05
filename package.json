@@ -19,7 +19,8 @@
     "setup": "npm run db:up && prisma migrate deploy && npm run db:seed",
     "smoke": "tsx --conditions=react-server scripts/smoke.ts",
     "db:merge-cities": "tsx --conditions=react-server scripts/merge-duplicate-cities.ts",
-    "db:delete-import": "tsx --conditions=react-server scripts/delete-import.ts"
+    "db:delete-import": "tsx --conditions=react-server scripts/delete-import.ts",
+    "db:backup": "tsx --conditions=react-server scripts/backup.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireActionManager } from '@/lib/auth';
 import {
   commitHistorical,
+  deleteHistoricalImport,
   previewHistorical,
   type ArchiveFormat,
 } from '@/lib/historical';
@@ -18,6 +19,8 @@ export interface HistoricalState {
     format: ArchiveFormat;
     /** Which sheet generation was detected: the current 30-part or the legacy 28-part. */
     layout: 'CURRENT' | 'LEGACY';
+    /** Part columns whose header disagrees with the catalogue entry behind them. */
+    columnWarnings: Array<{ column: number; expected: string; found: string }>;
     rows: number;
     distinctUids: number;
     newUids: number;
@@ -28,6 +31,7 @@ export interface HistoricalState {
     sample: Array<{ uid: string; date: string; city: string; parts: number }>;
   };
   imported?: { count: number; skipped: number };
+  deleted?: boolean;
 }
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -70,6 +74,7 @@ export async function previewHistoricalAction(
         // Echoed back so the commit step reads the file exactly as the preview did.
         format,
         layout: preview.layout,
+        columnWarnings: preview.columnWarnings,
         rows: preview.rows,
         distinctUids: preview.distinctUids,
         newUids: preview.newUids,
@@ -122,6 +127,33 @@ export async function commitHistoricalAction(
     return { imported: { count: result.imported, skipped: result.skipped } };
   } catch (err) {
     console.error('commitHistoricalAction failed', err);
+    return { error: 'parseFailed' };
+  }
+}
+
+/**
+ * Undo a historical import from the screen.
+ *
+ * Chunks commit independently, so a mid-file failure leaves earlier rows behind. Until
+ * now the only remedy was a terminal command; it belongs next to the import it undoes.
+ */
+export async function deleteHistoricalImportAction(
+  _prev: HistoricalState,
+  formData: FormData,
+): Promise<HistoricalState> {
+  try {
+    await requireActionManager();
+
+    const batchId = String(formData.get('batchId') ?? '');
+    const locale = String(formData.get('locale') || 'fa');
+    if (!batchId) return { error: 'parseFailed' };
+
+    await deleteHistoricalImport(batchId);
+
+    revalidatePath(`/${locale}/manager`, 'layout');
+    return { deleted: true };
+  } catch (err) {
+    console.error('deleteHistoricalImportAction failed', err);
     return { error: 'parseFailed' };
   }
 }

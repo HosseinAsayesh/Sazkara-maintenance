@@ -45,3 +45,6 @@ next-env.d.ts
 # uploaded photos, signatures, generated exports and evidence PDFs
 /uploads/
 !/uploads/.gitkeep
+
+# local backups
+/backups/

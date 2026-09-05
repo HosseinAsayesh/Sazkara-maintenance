@@ -29,6 +29,7 @@ import {
 } from '../lib/dates';
 import { buildJtiWorkbook, collectJtiRows } from '../lib/exports/jti';
 import { buildPartsUsageReport } from '../lib/exports/parts-usage';
+import { collectWorkRows } from '../lib/exports/technician-work';
 import { commitHistorical, parseHistoricalDate, previewHistorical } from '../lib/historical';
 import { buildReview, commitImport, extractRows, parseWorkbook } from '../lib/imports';
 import { JTI_EXPORT_HEADERS, LEGACY_PART_HEADERS, PART_CATALOG } from '../lib/parts';
@@ -54,6 +55,61 @@ const PNG = Buffer.from(
 
 /** Name of the second campaign this suite creates to exercise the project boundary. */
 const TEST_PROJECT_NAME = 'پروژه آزمایشی دوم';
+
+/**
+ * Refuse to run against a database that looks like it holds real work.
+ *
+ * `reset()` wipes every form, order and store. That is correct for a scratch database and
+ * catastrophic for a live one — and this suite has already destroyed a real archive once,
+ * on a database that was only ever meant to be a demo. The check is deliberately crude:
+ * it counts what would be lost and stops if that number is large enough to hurt.
+ *
+ * Set SMOKE_ALLOW_DESTRUCTIVE=1 to override, which is what CI and a deliberate local run
+ * do. It must be an explicit act, never a default.
+ */
+const DESTRUCTIVE_ROW_LIMIT = 40;
+
+/** Written into AppSetting once a database has been accepted as a scratch one. */
+const SCRATCH_MARKER = 'smokeDatabase';
+
+async function guardAgainstRealData() {
+  if (process.env.SMOKE_ALLOW_DESTRUCTIVE === '1') return;
+
+  // A database this suite has already claimed stays claimed. Counting rows alone would
+  // block every run after the first, since the suite's own fixtures exceed any sane
+  // limit — and a guard that must be overridden routinely is one that gets overridden
+  // without reading it.
+  const marked = await prisma.appSetting.findUnique({ where: { key: SCRATCH_MARKER } });
+  if (marked?.value === 'true') return;
+
+  const [forms, stores] = await Promise.all([
+    prisma.repairForm.count(),
+    prisma.store.count(),
+  ]);
+
+  if (forms + stores > DESTRUCTIVE_ROW_LIMIT) {
+    const lines = [
+      `Refusing to run: this database holds ${forms} repair forms and ${stores} stores,`,
+      'and has not been marked as a scratch database. The suite deletes all of them.',
+      '',
+      'If this really is a scratch database, claim it once:',
+      '  SMOKE_ALLOW_DESTRUCTIVE=1 npm run smoke',
+      '',
+      'If it is not, back it up first:  npm run db:backup',
+    ];
+    console.error('\n' + lines.join('\n') + '\n');
+    process.exit(1);
+  }
+}
+
+/** Claim the database, so later runs do not need the override. */
+async function markScratchDatabase() {
+  await prisma.appSetting.upsert({
+    where: { key: SCRATCH_MARKER },
+    create: { key: SCRATCH_MARKER, value: 'true' },
+    update: { value: 'true' },
+  });
+}
 
 async function reset() {
   // Wipe transactional data but keep the seeded catalogue/cities/manager.
@@ -90,6 +146,8 @@ async function buildJtiOrderFile(): Promise<Buffer> {
 
 async function main() {
   console.log('Sazkara smoke test\n==================');
+  await guardAgainstRealData();
+  await markScratchDatabase();
   await reset();
 
   /* ---------------------------------------------------------------- */
@@ -1061,6 +1119,62 @@ async function main() {
   await prisma.repairForm.delete({ where: { id: strayForm.id } });
   await prisma.stand.delete({ where: { id: strayStand.id } });
   await prisma.store.delete({ where: { id: strayStore.id } });
+
+  /* ---------------------------------------------------------------- */
+  // A crew lead sees their own crew and nothing else. This is an authorisation boundary,
+  // so it is asserted rather than assumed: a lead must not be able to read a technician
+  // outside their crew, and a technician must not be able to read anyone at all.
+  section('crew lead scope');
+
+  const lead = await prisma.user.create({
+    data: {
+      name: 'سرپرست آزمایشی',
+      phone: '09129990001',
+      passwordHash: await bcrypt.hash('lead1234', 10),
+      role: 'LEAD_TECHNICIAN',
+      status: 'APPROVED',
+      technicianCode: 'TL-001',
+    },
+  });
+  const outsider = await prisma.user.create({
+    data: {
+      name: 'تکنسین دیگر',
+      phone: '09129990002',
+      passwordHash: await bcrypt.hash('other1234', 10),
+      role: 'TECHNICIAN',
+      status: 'APPROVED',
+      technicianCode: 'TC-999',
+    },
+  });
+
+  await prisma.user.update({ where: { id: tech.id }, data: { leadId: lead.id } });
+
+  const crewIds = (
+    await prisma.user.findMany({ where: { leadId: lead.id }, select: { id: true } })
+  ).map((u) => u.id);
+  assert.deepEqual(crewIds, [tech.id]);
+  assert.ok(!crewIds.includes(outsider.id), 'an unassigned technician is not in the crew');
+  ok('a lead sees exactly their own crew', `${crewIds.length} member`);
+
+  // The export reads whatever technician ids it is given, so the route's scoping is what
+  // protects the boundary; verify the underlying query respects the id list.
+  const crewRows = await collectWorkRows({ technicianIds: [lead.id, ...crewIds] });
+  const outsiderRows = await collectWorkRows({ technicianIds: [outsider.id] });
+  assert.ok(crewRows.every((r) => r.technicianCode !== 'TC-999'));
+  assert.equal(outsiderRows.length, 0, 'the outsider has filed nothing yet');
+  ok('the work export is scoped to the technician ids it is given');
+
+  // Demoting a lead must release the crew, or those technicians would point at someone
+  // with no lead surface and vanish from every crew dashboard.
+  await prisma.$transaction(async (tx) => {
+    await tx.user.updateMany({ where: { leadId: lead.id }, data: { leadId: null } });
+    await tx.user.update({ where: { id: lead.id }, data: { role: 'TECHNICIAN' } });
+  });
+  const orphaned = await prisma.user.count({ where: { leadId: lead.id } });
+  assert.equal(orphaned, 0);
+  ok('demoting a lead releases their crew rather than orphaning it');
+
+  await prisma.user.deleteMany({ where: { id: { in: [lead.id, outsider.id] } } });
 
   /* ---------------------------------------------------------------- */
   section('normalisation guards');

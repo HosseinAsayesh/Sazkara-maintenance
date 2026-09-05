@@ -3,13 +3,7 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
-import {
-  clearSessionCookie,
-  hashPassword,
-  normalisePhone,
-  setSessionCookie,
-  verifyPassword,
-} from '@/lib/auth';
+import { clearSessionCookie, hashPassword, homeFor, normalisePhone, setSessionCookie, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export interface AuthState {
@@ -62,7 +56,9 @@ export async function loginAction(
   });
 
   const next = String(formData.get('next') || '');
-  const fallback = user.role === 'MANAGER' ? `/${locale}/manager` : `/${locale}/technician`;
+  // One source of truth for where a role belongs, so a new role cannot land somewhere
+  // it will only be bounced out of.
+  const fallback = homeFor(user.role, locale);
   // Only follow same-origin relative paths — never an attacker-supplied absolute URL.
   redirect(next.startsWith('/') && !next.startsWith('//') ? next : fallback);
 }

@@ -13,6 +13,7 @@ import {
   PART_CATALOG,
 } from './parts';
 import { prisma } from './prisma';
+import { getStorage } from './storage';
 import { cleanOptional, makeStoreMatchKey, normaliseUid, toLatinDigits } from './text';
 
 /**
@@ -63,6 +64,21 @@ export type ArchiveLayout = 'CURRENT' | 'LEGACY';
  * into whichever spreadsheet the office has to hand.
  */
 export type ArchiveFormat = 'AUTO' | 'CURRENT' | 'LEGACY';
+
+/**
+ * The part row a legacy sheet is expected to carry, in column order (5..32). Compared
+ * against the uploaded file so a sheet with a different part list is flagged rather than
+ * silently mis-filed. Taken from real archives, hence the spelling drift from the
+ * catalogue ("پایه میکروسیچ", "سیم آداپتوری") — matching is normalised, so those pass.
+ */
+const LEGACY_PART_HEADERS_FA = [
+  'شلف پلکسی', 'لایت باکس', 'شلف روی در', 'کلیدبرق12Amp', 'سیم نمره1',
+  'پایه فیوز', 'فیوز', 'ترانس', 'میکروسوئیچ', 'پایه میکروسیچ',
+  'سیم آداپتوری', 'سیم تلفنی', 'سوکت سیم تلفنی', 'کابل3/60', 'سنت نگهدارنده در',
+  'لایت فریم', 'آرام بند', 'فنر', 'برد استند', '(smd)LEDسفید',
+  '(smd)LEDآبی', 'کلید', 'ریل وپوشرL', 'ریل وپوشرU', 'سوکت کولری',
+  'درب پلاستیکی شلف', 'پلکسی سفید', 'درب',
+];
 
 interface ResolvedLayout {
   layout: ArchiveLayout;
@@ -298,6 +314,8 @@ export function parseHistoricalDate(raw: string): Date | null {
 export interface HistoricalPreview {
   /** Which sheet generation was detected — shown to the manager before committing. */
   layout: ArchiveLayout;
+  /** Part columns whose header disagrees with the catalogue entry behind them. */
+  columnWarnings: ColumnWarning[];
   rows: number;
   forms: number;
   /** Distinct uids in the file. A uid is a location, so this is "how many shops". */
@@ -331,10 +349,22 @@ interface HistoricalRow {
   parts: Array<{ sortOrder: number; quantity: number }>;
 }
 
+/** A part column whose header does not match the catalogue entry it will be filed under. */
+export interface ColumnWarning {
+  column: number;
+  expected: string;
+  found: string;
+}
+
 function readRows(
   buffer: Buffer,
   format: ArchiveFormat = 'AUTO',
-): Promise<{ rows: HistoricalRow[]; skipped: number; layout: ArchiveLayout }> {
+): Promise<{
+  rows: HistoricalRow[];
+  skipped: number;
+  layout: ArchiveLayout;
+  columnWarnings: ColumnWarning[];
+}> {
   return (async () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
@@ -382,6 +412,29 @@ function readRows(
       !cellText(partNameRow.getCell(COL_DATE)).trim() &&
       cellText(partNameRow.getCell(COL_FIRST_PART)).trim().length > 0;
     const firstDataRow = headerRow + (secondRowIsHeader ? 2 : 1);
+
+    // Quantities are read by POSITION, so a sheet whose part row differs from the one we
+    // expect will file parts against the wrong catalogue entries — silently, because a
+    // number in the wrong column is still a valid number. Compare the two and report any
+    // mismatch, so the manager sees it in the preview instead of discovering it in the
+    // parts bill. Real evidence this matters: one city's sheet ends column 32 with `درب`
+    // while another ends it with `پک هواکش`, which is not in the catalogue at all.
+    const partHeaderRow = secondRowIsHeader ? partNameRow : sheet.getRow(headerRow);
+    const expectedNames =
+      cols.layout === 'LEGACY'
+        ? LEGACY_PART_HEADERS_FA
+        : PART_CATALOG.map((p) => p.nameFa);
+
+    const columnWarnings: ColumnWarning[] = [];
+    for (let offset = 0; offset < cols.partCount; offset++) {
+      const column = COL_FIRST_PART + offset;
+      const found = cellText(partHeaderRow.getCell(column)).trim();
+      if (!found) continue; // an unlabelled column tells us nothing either way
+      const expected = expectedNames[offset] ?? '';
+      if (makeStoreMatchKey(found) !== makeStoreMatchKey(expected)) {
+        columnWarnings.push({ column, expected, found });
+      }
+    }
 
     const rows: HistoricalRow[] = [];
     let skipped = 0;
@@ -443,7 +496,7 @@ function readRows(
       });
     }
 
-    return { rows, skipped, layout: cols.layout };
+    return { rows, skipped, layout: cols.layout, columnWarnings };
   })();
 }
 
@@ -451,7 +504,7 @@ export async function previewHistorical(
   buffer: Buffer,
   format: ArchiveFormat = 'AUTO',
 ): Promise<HistoricalPreview> {
-  const { rows, skipped, layout } = await readRows(buffer, format);
+  const { rows, skipped, layout, columnWarnings } = await readRows(buffer, format);
 
   const uids = [...new Set(rows.map((r) => r.uid))];
   // Locations, not stands, are what a uid identifies now.
@@ -476,6 +529,7 @@ export async function previewHistorical(
     rows: rows.length,
     forms: rows.length,
     layout,
+    columnWarnings,
     distinctUids: uids.length,
     newUids: uids.filter((u) => !known.has(u)).length,
     repeatedUids: [...uidCounts.values()].filter((n) => n > 1).length,
@@ -756,4 +810,81 @@ export async function commitHistorical(
   }
 
   return { imported, skipped, skippedRows, batchId: batch.id };
+}
+
+/**
+ * Undo a historical import: remove the batch, its order lines, and the archived forms it
+ * created.
+ *
+ * This exists because the Jti-order delete deliberately refuses once any uid carries a
+ * repair report — a report is fieldwork and outranks the order that requested it. For a
+ * HISTORICAL import that rule is wrong: those "reports" are spreadsheet rows, and a
+ * part-committed import (chunks commit independently, so a mid-file failure leaves
+ * earlier rows behind) otherwise strands them with no way back.
+ *
+ * Only forms written by the archive importer are touched — a technician's real report for
+ * the same uid survives, whatever the archive did. Stores and stands go only if nothing
+ * else references them.
+ */
+export async function deleteHistoricalImport(batchId: string) {
+  const batch = await prisma.importBatch.findUnique({
+    where: { id: batchId },
+    select: { id: true, source: true, fileRef: true },
+  });
+  if (!batch) throw new Error('NOT_FOUND');
+  if (batch.source !== 'HISTORICAL') throw new Error('NOT_HISTORICAL');
+
+  const uids = [
+    ...new Set(
+      (
+        await prisma.orderLine.findMany({
+          where: { batchId },
+          select: { uid: true },
+        })
+      ).map((l) => l.uid),
+    ),
+  ];
+
+  const forms = await prisma.repairForm.findMany({
+    where: { uid: { in: uids }, technician: { technicianCode: 'LEGACY' } },
+    select: { id: true, technicianSignature: true, storeManagerSignature: true },
+  });
+  const formIds = forms.map((f) => f.id);
+
+  const photos = await prisma.photo.findMany({
+    where: { repairFormId: { in: formIds } },
+    select: { fileRef: true },
+  });
+
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.partUsage.deleteMany({ where: { repairFormId: { in: formIds } } });
+      await tx.photo.deleteMany({ where: { repairFormId: { in: formIds } } });
+      await tx.repairForm.deleteMany({ where: { id: { in: formIds } } });
+      await tx.orderLine.deleteMany({ where: { batchId } });
+      await tx.importBatch.delete({ where: { id: batchId } });
+
+      for (const uid of uids) {
+        const stillUsed =
+          (await tx.repairForm.count({ where: { uid } })) +
+          (await tx.orderLine.count({ where: { uid } }));
+        if (stillUsed === 0) {
+          await tx.stand.deleteMany({ where: { store: { uid } } });
+          await tx.store.deleteMany({ where: { uid } });
+        }
+      }
+    },
+    { timeout: 120_000, maxWait: 20_000 },
+  );
+
+  // Files last, so a rolled-back transaction never leaves dangling references.
+  const storage = getStorage();
+  const refs = [
+    ...photos.map((p) => p.fileRef),
+    ...forms.flatMap((f) => [f.technicianSignature, f.storeManagerSignature]),
+    batch.fileRef,
+  ].filter((r): r is string => !!r);
+  await Promise.all(refs.map((ref) => storage.delete(ref).catch(() => {})));
+
+  return { forms: formIds.length, orderLines: uids.length };
 }

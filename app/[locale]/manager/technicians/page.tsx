@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
+import { CrewControls } from '@/components/CrewControls';
 import { ReviewTechnicianButtons } from '@/components/ReviewButtons';
 import {
   Badge,
@@ -29,11 +30,16 @@ export default async function TechniciansPage({
     getTranslations({ locale, namespace: 'common' }),
   ]);
 
+  // Leads are technicians with a role flag, so they belong in the same list.
   const technicians = await prisma.user.findMany({
-    where: { role: 'TECHNICIAN' },
+    where: { role: { in: ['TECHNICIAN', 'LEAD_TECHNICIAN'] } },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-    include: { _count: { select: { repairForms: true } } },
+    include: { _count: { select: { repairForms: true, crew: true } } },
   });
+
+  const leads = technicians
+    .filter((u) => u.role === 'LEAD_TECHNICIAN' && u.status === 'APPROVED')
+    .map((u) => ({ id: u.id, name: u.name, technicianCode: u.technicianCode }));
 
   const groups = [
     { status: 'PENDING' as const, title: t('pendingTitle'), tone: 'warning' as const },
@@ -72,6 +78,7 @@ export default async function TechniciansPage({
                         <Th>{t('code')}</Th>
                         <Th>{t('registeredOn')}</Th>
                         <Th>{tc('count')}</Th>
+                        <Th>{t('role')}</Th>
                         <Th>{tc('actions')}</Th>
                       </tr>
                     </thead>
@@ -85,6 +92,21 @@ export default async function TechniciansPage({
                             {formatDateForLocale(user.createdAt, locale)}
                           </Td>
                           <Td className="tabular-nums">{user._count.repairForms}</Td>
+                          <Td>
+                            {/* Crew structure is only meaningful once approved. */}
+                            {user.status === 'APPROVED' ? (
+                              <CrewControls
+                                locale={locale}
+                                userId={user.id}
+                                role={user.role as 'TECHNICIAN' | 'LEAD_TECHNICIAN'}
+                                leadId={user.leadId}
+                                crewSize={user._count.crew}
+                                leads={leads.filter((l) => l.id !== user.id)}
+                              />
+                            ) : (
+                              <span className="text-xs text-[var(--muted)]">—</span>
+                            )}
+                          </Td>
                           <Td>
                             <ReviewTechnicianButtons
                               locale={locale}

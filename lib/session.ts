@@ -13,7 +13,7 @@ import { jwtVerify, SignJWT } from 'jose';
 export const SESSION_COOKIE = 'sazkara_session';
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
-export type SessionRole = 'TECHNICIAN' | 'MANAGER';
+export type SessionRole = 'TECHNICIAN' | 'LEAD_TECHNICIAN' | 'MANAGER';
 
 export interface SessionPayload {
   userId: string;
@@ -48,7 +48,9 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
     const { userId, name, phone, role, technicianCode } = payload as unknown as SessionPayload;
-    if (!userId || (role !== 'TECHNICIAN' && role !== 'MANAGER')) return null;
+    if (!userId || !['TECHNICIAN', 'LEAD_TECHNICIAN', 'MANAGER'].includes(role)) {
+      return null;
+    }
     return { userId, name, phone, role, technicianCode: technicianCode ?? null };
   } catch {
     return null;

@@ -22,6 +22,10 @@ datasource db {
 
 enum Role {
   TECHNICIAN
+  /// Runs a crew of technicians: sees and exports their work, and nothing else.
+  /// Deliberately NOT a junior manager — no parts catalogue, no wage settings, no Jti
+  /// exports, no analytics, no imports.
+  LEAD_TECHNICIAN
   MANAGER
 }
 
@@ -96,12 +100,19 @@ model User {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
+  /// The lead this technician reports to. Null for a manager, for a lead, or for a
+  /// technician not yet assigned to a crew.
+  leadId String?
+  lead   User?   @relation("Crew", fields: [leadId], references: [id], onDelete: SetNull)
+  crew   User[]  @relation("Crew")
+
   repairForms       RepairForm[]
   importBatches     ImportBatch[]
   storesCreated     Store[]            @relation("StoreCreatedBy")
   evidencePdfBatchs EvidencePdfBatch[]
 
   @@index([role, status])
+  @@index([leadId])
 }
 
 model City {

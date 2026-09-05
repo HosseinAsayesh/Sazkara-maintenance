@@ -159,3 +159,64 @@ export function projectScopeWhere(projectId?: string | null, phaseId?: string | 
   if (projectId === NO_PROJECT) return { projectId: null };
   return { projectId, ...(phaseId && phaseId !== 'all' ? { phaseId } : {}) };
 }
+
+export class ProjectDeleteError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
+export interface ProjectDeletionImpact {
+  forms: number;
+  batches: number;
+  orderLines: number;
+  phases: number;
+}
+
+/** What deleting a project would take with it — shown before the manager confirms. */
+export async function projectDeletionImpact(
+  projectId: string,
+): Promise<ProjectDeletionImpact> {
+  const [forms, batches, phases, orderLines] = await Promise.all([
+    prisma.repairForm.count({ where: { projectId } }),
+    prisma.importBatch.count({ where: { projectId } }),
+    prisma.phase.count({ where: { projectId } }),
+    prisma.orderLine.count({ where: { batch: { projectId } } }),
+  ]);
+  return { forms, batches, orderLines, phases };
+}
+
+/**
+ * Delete a project.
+ *
+ * Phases cascade. Repair forms and import batches do NOT: they are fieldwork, and a
+ * campaign being wound up must never silently delete the reports filed under it. They are
+ * detached instead — `projectId` is nulled — so the work survives and can be re-filed
+ * under another project. `force` is required once anything is attached, so an empty
+ * project (the common case) deletes with a plain confirmation while a populated one takes
+ * a deliberate second step.
+ */
+export async function deleteProject(projectId: string, opts: { force?: boolean } = {}) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new ProjectDeleteError('NOT_FOUND');
+
+  const impact = await projectDeletionImpact(projectId);
+  const hasContent = impact.forms > 0 || impact.batches > 0;
+
+  if (hasContent && !opts.force) throw new ProjectDeleteError('PROJECT_NOT_EMPTY');
+
+  await prisma.$transaction(async (tx) => {
+    // Detach rather than delete: the reports are the record of work done.
+    await tx.repairForm.updateMany({
+      where: { projectId },
+      data: { projectId: null, phaseId: null },
+    });
+    await tx.importBatch.updateMany({
+      where: { projectId },
+      data: { projectId: null, phaseId: null },
+    });
+    await tx.project.delete({ where: { id: projectId } });
+  });
+
+  return impact;
+}

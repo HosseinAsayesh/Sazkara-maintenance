@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { WorkExportPanel } from '@/components/WorkExportPanel';
 import {
   Card,
   CardHeader,
@@ -14,6 +15,7 @@ import {
 import { requireTechnician } from '@/lib/auth';
 import { getTechnicianStats } from '@/lib/analytics';
 import { localDayRange } from '@/lib/dates';
+import { listProjectOptions } from '@/lib/projects';
 
 /** §4.6 — each technician sees their own stats, by date range and city. */
 export default async function TechnicianProfilePage({
@@ -35,13 +37,20 @@ export default async function TechnicianProfilePage({
     getTranslations({ locale, namespace: 'reasons' }),
   ]);
 
-  const stats = await getTechnicianStats(user.id, { from: range.from, to: range.to });
+  const [stats, projects] = await Promise.all([
+    getTechnicianStats(user.id, { from: range.from, to: range.to }),
+    listProjectOptions(),
+  ]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-brand-900">{t('profileTitle')}</h1>
 
       <DateRangeFilter from={from} to={to} />
+
+      {/* The technician's own record, to hand to their lead. No wages: they see their
+          workload here, never their earnings. */}
+      <WorkExportPanel projects={projects} />
 
       {/* Wages are deliberately absent: technicians see their workload, not their
           earnings. The figures still exist server-side for the manager's split. */}

@@ -74,15 +74,35 @@ export async function requireUser(locale: string) {
   return user;
 }
 
+/** Where a signed-in user belongs, so a wrong-role visit lands somewhere useful. */
+export function homeFor(role: string, locale: string): string {
+  if (role === 'MANAGER') return `/${locale}/manager`;
+  if (role === 'LEAD_TECHNICIAN') return `/${locale}/lead`;
+  return `/${locale}/technician`;
+}
+
 export async function requireManager(locale: string) {
   const user = await requireUser(locale);
-  if (user.role !== 'MANAGER') redirect(`/${locale}/technician`);
+  if (user.role !== 'MANAGER') redirect(homeFor(user.role, locale));
   return user;
 }
 
 export async function requireTechnician(locale: string) {
   const user = await requireUser(locale);
-  if (user.role !== 'TECHNICIAN') redirect(`/${locale}/manager`);
+  if (user.role !== 'TECHNICIAN') redirect(homeFor(user.role, locale));
+  return user;
+}
+
+/**
+ * A crew lead. Deliberately NOT a junior manager: this guard gates the /lead area only,
+ * which exposes their own crew's work and nothing else. A manager is allowed in so they
+ * can see what a lead sees without a second account.
+ */
+export async function requireLead(locale: string) {
+  const user = await requireUser(locale);
+  if (user.role !== 'LEAD_TECHNICIAN' && user.role !== 'MANAGER') {
+    redirect(homeFor(user.role, locale));
+  }
   return user;
 }
 
@@ -103,6 +123,14 @@ export async function requireActionManager() {
   return user;
 }
 
+export async function requireActionLead() {
+  const user = await requireActionUser();
+  if (user.role !== 'LEAD_TECHNICIAN' && user.role !== 'MANAGER') {
+    throw new Error('FORBIDDEN');
+  }
+  return user;
+}
+
 /** API-route variants: throw a 401/403 Response instead of redirecting. */
 export async function requireApiUser() {
   const user = await getCurrentUser();
@@ -115,6 +143,15 @@ export async function requireApiUser() {
 export async function requireApiManager() {
   const user = await requireApiUser();
   if (user.role !== 'MANAGER') {
+    throw Response.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
+  return user;
+}
+
+/** A lead (or manager) for API routes that serve crew data. */
+export async function requireApiLead() {
+  const user = await requireApiUser();
+  if (user.role !== 'LEAD_TECHNICIAN' && user.role !== 'MANAGER') {
     throw Response.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
   return user;

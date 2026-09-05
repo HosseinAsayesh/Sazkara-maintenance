@@ -179,6 +179,25 @@ export function HistoricalImporter({
               ) : null}
             </Alert>
 
+            {/* Quantities are read by column position, so a sheet whose part row differs
+                from the expected one files parts against the wrong catalogue entries —
+                and a number in the wrong column is still a valid number, so nothing
+                would fail. Surfaced here, before anything is written. */}
+            {preview.columnWarnings.length ? (
+              <Alert tone="warning" title={t('columnMismatch')}>
+                <span className="block text-xs">{t('columnMismatchHelp')}</span>
+                <ul className="mt-2 space-y-0.5 text-xs">
+                  {preview.columnWarnings.map((w) => (
+                    <li key={w.column}>
+                      <span className="font-medium dir-ltr">#{w.column}</span>{' '}
+                      — {t('columnExpected')}: «{w.expected || '—'}» · {t('columnFound')}:
+                      «{w.found}»
+                    </li>
+                  ))}
+                </ul>
+              </Alert>
+            ) : null}
+
             {/* Which sheet generation was read. The legacy layout has 28 part columns
                 and two of today's parts simply did not exist in it. */}
             <div className="flex flex-wrap gap-2">

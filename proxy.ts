@@ -47,11 +47,20 @@ export async function proxy(request: NextRequest) {
 
   const wrongArea =
     (rest.startsWith('/manager') && session.role !== 'MANAGER') ||
-    (rest.startsWith('/technician') && session.role !== 'TECHNICIAN');
+    (rest.startsWith('/technician') && session.role !== 'TECHNICIAN') ||
+    // A manager may look at the lead surface; a plain technician may not.
+    (rest.startsWith('/lead') &&
+      session.role !== 'LEAD_TECHNICIAN' &&
+      session.role !== 'MANAGER');
 
   if (wrongArea) {
     const url = request.nextUrl.clone();
-    url.pathname = `/${locale}/${session.role === 'MANAGER' ? 'manager' : 'technician'}`;
+    url.pathname =
+      session.role === 'MANAGER'
+        ? `/${locale}/manager`
+        : session.role === 'LEAD_TECHNICIAN'
+          ? `/${locale}/lead`
+          : `/${locale}/technician`;
     url.search = '';
     return NextResponse.redirect(url);
   }

@@ -194,3 +194,105 @@ export async function deleteCityAction(
   revalidatePath(`/${locale}/manager`, 'layout');
   return { ok: 'saved' };
 }
+
+/**
+ * Crew structure: promote a technician to crew lead, or demote them back.
+ *
+ * A lead is not a junior manager — the role only unlocks the /lead surface, which shows
+ * their own crew's work. Demoting someone releases their crew rather than silently
+ * leaving technicians pointing at a lead who no longer has the role, which would make
+ * those technicians invisible on every lead dashboard.
+ */
+export async function setTechnicianRoleAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const userId = String(formData.get('userId') ?? '');
+  const makeLead = String(formData.get('makeLead') ?? '') === 'true';
+  if (!userId) return { error: 'generic' };
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  // The archive importer's placeholder account is not a person and has no crew role.
+  if (!user || user.role === 'MANAGER' || user.technicianCode === 'LEGACY') {
+    return { error: 'notFound' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (makeLead) {
+      // A lead reports to the manager, not to another lead.
+      await tx.user.update({
+        where: { id: userId },
+        data: { role: 'LEAD_TECHNICIAN', leadId: null },
+      });
+    } else {
+      await tx.user.updateMany({ where: { leadId: userId }, data: { leadId: null } });
+      await tx.user.update({ where: { id: userId }, data: { role: 'TECHNICIAN' } });
+    }
+  });
+
+  revalidatePath(`/${locale}/manager`, 'layout');
+  return { ok: 'saved' };
+}
+
+/** Assign a technician to a crew lead, or detach them. */
+export async function assignLeadAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const userId = String(formData.get('userId') ?? '');
+  const leadId = String(formData.get('leadId') ?? '') || null;
+  if (!userId) return { error: 'generic' };
+
+  if (leadId) {
+    if (leadId === userId) return { error: 'selfLead' };
+    const lead = await prisma.user.findUnique({ where: { id: leadId } });
+    if (!lead || lead.role !== 'LEAD_TECHNICIAN') return { error: 'notALead' };
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { leadId } });
+
+  revalidatePath(`/${locale}/manager`, 'layout');
+  return { ok: 'saved' };
+}
+
+/**
+ * Upload the company logo used on the evidence-PDF cover (§9).
+ *
+ * Stored through the storage adapter like any other file and referenced by
+ * `AppSetting.logoRef`, so moving to object storage later needs no change here.
+ */
+export async function uploadLogoAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const file = formData.get('logo');
+
+  if (!(file instanceof File) || file.size === 0) return { error: 'generic' };
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    return { error: 'invalidImage' };
+  }
+  if (file.size > 4 * 1024 * 1024) return { error: 'imageTooLarge' };
+
+  const { getStorage } = await import('@/lib/storage');
+  const storage = getStorage();
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const ref = await storage.put(bytes, { prefix: 'branding', filename: file.name || 'logo.png' });
+
+  // Replace rather than accumulate: only one logo is ever in use.
+  const current = await prisma.appSetting.findUnique({ where: { key: 'logoRef' } });
+  await setAppSettings({ logoRef: ref });
+  if (current?.value) await storage.delete(current.value).catch(() => {});
+
+  revalidatePath(`/${locale}/manager`, 'layout');
+  return { ok: 'saved' };
+}

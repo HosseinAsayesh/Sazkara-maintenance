@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 
 import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { addPhase, createProject, setActiveProject } from '@/lib/projects';
+import {
+  ProjectDeleteError,
+  addPhase,
+  createProject,
+  deleteProject,
+  setActiveProject,
+} from '@/lib/projects';
 
 export interface ActionState {
   error?: string;
@@ -90,4 +96,33 @@ export async function addPhaseAction(
   await addPhase(projectId, name);
   revalidateManager(locale);
   return { ok: 'success' };
+}
+
+/**
+ * Delete a project. Empty ones go on a plain confirmation; a project with fieldwork
+ * attached needs `force`, and even then the forms are detached, never destroyed.
+ */
+export async function deleteProjectAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireActionManager();
+
+  const locale = String(formData.get('locale') || 'fa');
+  const projectId = String(formData.get('projectId') ?? '');
+  const force = String(formData.get('force') ?? '') === 'true';
+  if (!projectId) return { error: 'generic' };
+
+  try {
+    await deleteProject(projectId, { force });
+  } catch (err) {
+    if (err instanceof ProjectDeleteError) {
+      return { error: err.code === 'NOT_FOUND' ? 'notFound' : 'projectNotEmpty' };
+    }
+    console.error('deleteProjectAction failed', err);
+    return { error: 'generic' };
+  }
+
+  revalidateManager(locale);
+  return { ok: 'projectDeleted' };
 }
