@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#232426" />
+    <title>اتصال برقرار نیست — سازکارا</title>
+    <!--
+      Served by the service worker when a page request cannot reach the network. It is
+      deliberately a plain static file: it carries no fieldwork, no user name and no
+      project data, so it is safe to hand to whoever is holding the phone. Both the font
+      and the mark are precached, so it looks like the app rather than a browser error.
+    -->
+    <style>
+      @font-face {
+        font-family: 'Vazirmatn';
+        src: url('/fonts/vazirmatn-variable.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-display: swap;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #f5f6f6;
+        color: #232426;
+        font-family: 'Vazirmatn', Tahoma, 'Segoe UI', system-ui, sans-serif;
+      }
+      .card {
+        width: 100%;
+        max-width: 372px;
+        text-align: center;
+      }
+      img {
+        height: 44px;
+        width: auto;
+      }
+      h1 {
+        margin: 26px 0 0;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.9;
+        color: #6e7072;
+      }
+      button {
+        margin-top: 26px;
+        width: 100%;
+        height: 48px;
+        border: 0;
+        border-radius: 10px;
+        background: #3a3b3d;
+        color: #fff;
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #232426;
+      }
+      .en {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid #e4e6e6;
+        font-size: 12px;
+        color: #6e7072;
+        direction: ltr;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/brand/logo.svg" alt="سازکارا" />
+      <h1>اتصال اینترنت برقرار نیست</h1>
+      <p>
+        برای ثبت یا مشاهده‌ی گزارش‌ها به اینترنت نیاز است. پس از وصل شدن، دوباره تلاش کنید.
+      </p>
+      <button type="button" onclick="location.reload()">تلاش دوباره</button>
+      <div class="en">You are offline. Reconnect and try again.</div>
+    </div>
+  </body>
+</html>
