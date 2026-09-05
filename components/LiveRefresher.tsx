@@ -65,7 +65,7 @@ export function LiveRefresher() {
           router.refresh();
           setLastUpdated(new Date());
         }}
-        className="rounded-md border border-[var(--border)] bg-white px-2 py-1 font-medium text-slate-600 hover:bg-brand-50"
+        className="rounded-md border border-[var(--border)] bg-white px-2 py-1 font-medium text-ink-500 hover:bg-brand-50"
       >
         {tc('refresh')}
       </button>

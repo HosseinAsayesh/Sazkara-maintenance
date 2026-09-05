@@ -131,7 +131,7 @@ export function CityManager({
                 className={
                   city.isTehran
                     ? 'rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white'
-                    : 'rounded-full border border-[var(--border)] px-3 py-1 text-xs text-slate-600 hover:bg-brand-50'
+                    : 'rounded-full border border-[var(--border)] px-3 py-1 text-xs text-ink-500 hover:bg-brand-50'
                 }
               >
                 {t('isTehran')}
@@ -252,7 +252,7 @@ export function CityManager({
             className={
               addState.ok === 'cityExists'
                 ? 'pb-2 text-sm text-amber-700'
-                : 'pb-2 text-sm text-emerald-700'
+                : 'pb-2 text-sm text-teal-700'
             }
           >
             {addState.ok === 'cityExists' ? t('cityExists') : t('saved')}

@@ -134,8 +134,8 @@ export default async function UidArchivePage({
                         ) : null}
                       </Td>
                       <Td className="tabular-nums">{num(row.formCount)}</Td>
-                      <Td className="tabular-nums text-emerald-700">{num(row.repaired)}</Td>
-                      <Td className="tabular-nums text-rose-700">{num(row.notRepaired)}</Td>
+                      <Td className="tabular-nums text-teal-700">{num(row.repaired)}</Td>
+                      <Td className="tabular-nums text-red-700">{num(row.notRepaired)}</Td>
                       <Td className="tabular-nums text-amber-700">{num(row.reRepairs)}</Td>
                       <Td className="tabular-nums">{num(row.partsReplaced)}</Td>
                       <Td className="whitespace-nowrap text-xs">

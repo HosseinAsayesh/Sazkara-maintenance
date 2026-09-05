@@ -79,7 +79,7 @@ export function WageSettingsForm({
         <Button type="submit" disabled={pending}>
           {pending ? tc('saving') : tc('save')}
         </Button>
-        {state.ok ? <span className="text-sm text-emerald-700">{t('saved')}</span> : null}
+        {state.ok ? <span className="text-sm text-teal-700">{t('saved')}</span> : null}
         {state.error ? <Alert tone="danger">{tc('error')}</Alert> : null}
       </div>
     </form>

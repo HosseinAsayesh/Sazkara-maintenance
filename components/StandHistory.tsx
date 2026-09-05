@@ -67,7 +67,7 @@ export async function StandHistory({
                       {to(form.outcome)}
                     </Badge>
                     {form.isReRepair ? <Badge tone="warning">↻</Badge> : null}
-                    <span className="text-sm font-medium text-slate-800">
+                    <span className="text-sm font-medium text-brand-700">
                       {formatDateForLocale(form.date, locale)}
                     </span>
                     <span className="text-xs text-[var(--muted)]">
@@ -93,7 +93,7 @@ export async function StandHistory({
                     </span>
                   </div>
 
-                  <div className="mt-2 space-y-1 text-xs text-slate-700">
+                  <div className="mt-2 space-y-1 text-xs text-brand-600">
                     {replaced.length ? (
                       <div>
                         <span className="font-semibold">{ta('REPLACED')}: </span>

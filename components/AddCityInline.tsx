@@ -38,7 +38,7 @@ export function AddCityInline({ locale }: { locale: string }) {
     <form action={action} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="locale" value={locale} />
       <div className="min-w-[10rem]">
-        <span className="mb-1 block text-xs font-medium text-slate-600">
+        <span className="mb-1 block text-xs font-medium text-ink-500">
           {t('cityName')}
         </span>
         <Input name="cityName" required aria-label={t('cityName')} />
@@ -54,7 +54,7 @@ export function AddCityInline({ locale }: { locale: string }) {
         {tc('cancel')}
       </Button>
       {state.ok ? (
-        <span className="pb-2 text-xs text-emerald-700">{t('cityAdded')}</span>
+        <span className="pb-2 text-xs text-teal-700">{t('cityAdded')}</span>
       ) : null}
     </form>
   );

@@ -65,7 +65,7 @@ export function HistoricalImporter({
     return (
       <Card className="p-6 text-center">
         <div className="text-3xl">✓</div>
-        <h2 className="mt-2 text-lg font-bold text-emerald-700">
+        <h2 className="mt-2 text-lg font-bold text-teal-700">
           {t('imported', { count: commitState.imported.count })}
         </h2>
         {commitState.imported.skipped > 0 ? (

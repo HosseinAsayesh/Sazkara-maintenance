@@ -163,7 +163,7 @@ export function OrderEditor({
               />
 
               {reportedCount > 0 ? (
-                <label className="flex items-center gap-1.5 text-xs text-rose-700">
+                <label className="flex items-center gap-1.5 text-xs text-red-700">
                   <input
                     type="checkbox"
                     checked={alsoDeleteForms}
@@ -190,7 +190,7 @@ export function OrderEditor({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="batchId" value={batchId} />
             <label className="min-w-[10rem]">
-              <span className="mb-1 block text-xs font-medium text-slate-600">
+              <span className="mb-1 block text-xs font-medium text-ink-500">
                 {tc('project')}
               </span>
               <Select
@@ -207,7 +207,7 @@ export function OrderEditor({
               </Select>
             </label>
             <label className="min-w-[9rem]">
-              <span className="mb-1 block text-xs font-medium text-slate-600">
+              <span className="mb-1 block text-xs font-medium text-ink-500">
                 {tc('phase')}
               </span>
               <Select name="phaseId" defaultValue={currentPhaseId ?? ''} key={projectId}>

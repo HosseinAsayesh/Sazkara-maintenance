@@ -126,7 +126,7 @@ export function SignaturePad({
     <div>
       {label ? (
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">
+          <span className="text-sm font-medium text-brand-600">
             {label} <span className="text-red-500">*</span>
           </span>
           <Button type="button" variant="ghost" size="sm" onClick={clear}>

@@ -86,7 +86,7 @@ export function ExtraStandSection({
 
       <div className="space-y-4 p-4">
         {/* The uid is the store's and is submitted once with the first stand. */}
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-[var(--muted)]">
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-[var(--muted)]">
           {t('sharedUidNote', { uid, n: index + 2 })}
         </p>
 
@@ -121,7 +121,7 @@ export function ExtraStandSection({
                     'h-11 flex-1 rounded-lg border text-sm font-semibold transition-colors',
                     value.quality === n
                       ? 'border-brand-600 bg-brand-600 text-white'
-                      : 'border-[var(--border)] bg-white text-slate-700 hover:bg-brand-50',
+                      : 'border-[var(--border)] bg-white text-brand-600 hover:bg-brand-50',
                   )}
                 >
                   {n}

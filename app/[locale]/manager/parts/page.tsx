@@ -63,7 +63,7 @@ export default async function PartsPage({ params }: PageProps<'/[locale]/manager
                     </Td>
                     <Td className="font-medium">{part.nameFa}</Td>
                     <Td className="dir-ltr text-[var(--muted)]">{part.nameEn}</Td>
-                    <Td className="tabular-nums text-emerald-700" title={ta('REPLACED')}>
+                    <Td className="tabular-nums text-teal-700" title={ta('REPLACED')}>
                       {entry.REPLACED}
                     </Td>
                     <Td className="tabular-nums text-brand-700" title={ta('REPAIRED')}>

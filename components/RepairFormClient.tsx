@@ -170,12 +170,12 @@ export function RepairFormClient(props: RepairFormProps) {
     return (
       <Card className="mx-auto max-w-md p-6 text-center">
         <div className="text-4xl">✓</div>
-        <h2 className="mt-3 text-lg font-bold text-emerald-700">{t('submitted')}</h2>
-        <p className="mt-1 text-sm text-slate-700">
+        <h2 className="mt-3 text-lg font-bold text-teal-700">{t('submitted')}</h2>
+        <p className="mt-1 text-sm text-brand-600">
           {t('submittedCode', { code: state.success.formCode })}
         </p>
         {state.success.extraFormCodes?.length ? (
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-ink-500">
             {state.success.extraFormCodes.join(' · ')}
           </p>
         ) : null}
@@ -211,7 +211,7 @@ export function RepairFormClient(props: RepairFormProps) {
           </div>
           <div>
             <dt className="text-xs text-[var(--muted)]">{t('formCode')}</dt>
-            <dd className="text-xs text-slate-500">{t('assignedOnSubmit')}</dd>
+            <dd className="text-xs text-ink-400">{t('assignedOnSubmit')}</dd>
           </div>
           <div>
             <dt className="text-xs text-[var(--muted)]">{t('technicianCode')}</dt>
@@ -362,7 +362,7 @@ export function RepairFormClient(props: RepairFormProps) {
                       'h-11 flex-1 rounded-lg border text-sm font-semibold transition-colors',
                       quality === n
                         ? 'border-brand-600 bg-brand-600 text-white'
-                        : 'border-[var(--border)] bg-white text-slate-700 hover:bg-brand-50',
+                        : 'border-[var(--border)] bg-white text-brand-600 hover:bg-brand-50',
                     )}
                   >
                     {n}

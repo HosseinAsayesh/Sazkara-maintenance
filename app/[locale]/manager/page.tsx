@@ -153,7 +153,7 @@ export default async function ManagerDashboard({
                   </Td>
                 </tr>
               ))}
-              <tr className="bg-slate-50">
+              <tr className="bg-brand-50">
                 <Td className="font-bold">{tc('grandTotal')}</Td>
                 <Td className="tabular-nums font-bold">{num(overview.totals.repaired)}</Td>
                 <Td className="tabular-nums font-bold">{num(overview.totals.notRepaired)}</Td>

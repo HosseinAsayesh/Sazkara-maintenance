@@ -181,7 +181,7 @@ export function ProjectsManager({
                 {/* Everything imported into this campaign, including archives of past
                     work, with the uploaded original still downloadable. */}
                 {project.batches.length ? (
-                  <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2">
+                  <ul className="mt-2 space-y-1 rounded-lg bg-brand-50 p-2">
                     {project.batches.map((batch) => (
                       <li
                         key={batch.id}
@@ -231,7 +231,7 @@ export function ProjectsManager({
                               <input type="hidden" name="batchId" value={batch.id} />
                               <button
                                 type="submit"
-                                className="text-rose-700 underline hover:text-rose-800"
+                                className="text-red-700 underline hover:text-red-800"
                               >
                                 {th('deleteImport')}
                               </button>
@@ -338,7 +338,7 @@ function AddPhaseForm({ locale, projectId }: { locale: string; projectId: string
       <Button type="submit" variant="ghost" size="sm" disabled={pending}>
         {t('addPhase')}
       </Button>
-      {state.error ? <span className="text-xs text-rose-600">!</span> : null}
+      {state.error ? <span className="text-xs text-red-600">!</span> : null}
     </form>
   );
 }

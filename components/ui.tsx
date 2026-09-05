@@ -52,10 +52,10 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-200',
   secondary:
-    'bg-white text-brand-900 border border-[var(--border)] hover:bg-brand-50 disabled:text-slate-400',
+    'bg-white text-brand-900 border border-[var(--border)] hover:bg-brand-50 disabled:text-brand-400',
   ghost: 'text-brand-700 hover:bg-brand-50',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-200',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-200',
+  success: 'bg-teal-700 text-white hover:bg-teal-900 disabled:bg-teal-200',
 };
 
 export function Button({
@@ -68,7 +68,7 @@ export function Button({
     <button
       className={clsx(
         'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-1',
         'disabled:cursor-not-allowed',
         size === 'sm' && 'px-3 py-1.5 text-xs',
         size === 'md' && 'px-4 py-2 text-sm',
@@ -96,7 +96,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-1 text-sm font-medium text-slate-700">
+      <span className="mb-1.5 flex items-center gap-1 text-sm font-medium text-brand-600">
         {label}
         {required ? <span className="text-red-500">*</span> : null}
       </span>
@@ -111,8 +111,8 @@ export function Field({
 
 const CONTROL =
   'w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm ' +
-  'placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 ' +
-  'disabled:bg-slate-50 disabled:text-slate-500';
+  'placeholder:text-brand-400 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 ' +
+  'disabled:bg-brand-50 disabled:text-ink-400';
 
 export function Input({ className, ...rest }: ComponentProps<'input'>) {
   return <input className={clsx(CONTROL, className)} {...rest} />;
@@ -129,11 +129,11 @@ export function Select({ className, ...rest }: ComponentProps<'select'>) {
 type Tone = 'neutral' | 'success' | 'danger' | 'warning' | 'info';
 
 const BADGE_TONES: Record<Tone, string> = {
-  neutral: 'bg-slate-100 text-slate-700',
-  success: 'bg-emerald-100 text-emerald-800',
+  neutral: 'bg-brand-100 text-brand-600',
+  success: 'bg-teal-100 text-teal-900',
   danger: 'bg-red-100 text-red-800',
   warning: 'bg-amber-100 text-amber-900',
-  info: 'bg-brand-50 text-brand-700',
+  info: 'bg-teal-50 text-teal-700',
 };
 
 export function Badge({
@@ -170,11 +170,11 @@ export function StatCard({
   tone?: Tone;
 }) {
   const accent: Record<Tone, string> = {
-    neutral: 'text-slate-900',
-    success: 'text-emerald-700',
+    neutral: 'text-brand-900',
+    success: 'text-teal-700',
     danger: 'text-red-700',
     warning: 'text-amber-700',
-    info: 'text-brand-700',
+    info: 'text-teal-700',
   };
   return (
     <Card className="px-4 py-3">
@@ -203,11 +203,11 @@ export function Alert({
   children?: ReactNode;
 }) {
   const tones: Record<Tone, string> = {
-    neutral: 'border-slate-200 bg-slate-50 text-slate-800',
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    neutral: 'border-brand-200 bg-brand-50 text-brand-700',
+    success: 'border-teal-200 bg-teal-50 text-teal-900',
     danger: 'border-red-200 bg-red-50 text-red-900',
     warning: 'border-amber-200 bg-amber-50 text-amber-900',
-    info: 'border-brand-200 bg-brand-50 text-brand-900',
+    info: 'border-teal-200 bg-teal-50 text-teal-900',
   };
   return (
     <div className={clsx('rounded-lg border px-4 py-3 text-sm', tones[tone])}>
@@ -230,7 +230,7 @@ export function Th({ className, ...rest }: ComponentProps<'th'>) {
   return (
     <th
       className={clsx(
-        'whitespace-nowrap border-b border-[var(--border)] bg-slate-50 px-3 py-2 text-start text-xs font-semibold text-slate-600',
+        'whitespace-nowrap border-b border-[var(--border)] bg-brand-50 px-3 py-2 text-start text-xs font-semibold text-ink-500',
         className,
       )}
       {...rest}

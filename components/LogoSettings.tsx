@@ -36,7 +36,7 @@ export function LogoSettings({
         <input type="hidden" name="locale" value={locale} />
 
         <div className="min-w-[10rem]">
-          <span className="mb-1 block text-xs font-medium text-slate-600">
+          <span className="mb-1 block text-xs font-medium text-ink-500">
             {t('logoCurrent')}
           </span>
           {logoUrl ? (
@@ -66,7 +66,7 @@ export function LogoSettings({
         </Button>
 
         {state.ok ? (
-          <span className="pb-2 text-sm text-emerald-700">{t('saved')}</span>
+          <span className="pb-2 text-sm text-teal-700">{t('saved')}</span>
         ) : null}
         {state.error ? (
           <div className="w-full">

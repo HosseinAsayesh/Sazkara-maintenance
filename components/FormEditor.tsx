@@ -239,7 +239,7 @@ export function FormEditor({
                       className={
                         quality === n
                           ? 'h-11 flex-1 rounded-lg border border-brand-600 bg-brand-600 text-sm font-semibold text-white'
-                          : 'h-11 flex-1 rounded-lg border border-[var(--border)] bg-white text-sm font-semibold text-slate-700 hover:bg-brand-50'
+                          : 'h-11 flex-1 rounded-lg border border-[var(--border)] bg-white text-sm font-semibold text-brand-600 hover:bg-brand-50'
                       }
                     >
                       {n}

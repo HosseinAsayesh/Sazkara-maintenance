@@ -1,31 +1,75 @@
 @import 'tailwindcss';
 
 /*
- * Fonts are a system stack rather than a webfont on purpose: this deployment runs on
- * localhost, often on machines with no reliable internet, and Tahoma/Segoe UI shape
- * Persian correctly on Windows. Vazirmatn is picked up automatically if the user has it
- * installed.
+ * Vazirmatn, self-hosted.
+ *
+ * Not a system stack and not Google Fonts. A system stack lands on Tahoma for most
+ * Windows users, which is legible but dated; Google Fonts is unreliable from Iran, where
+ * every user of this app is. One variable file covers 100-900 (111 KB — less than four
+ * static weights would cost) and is served from our own origin, so it works offline on a
+ * localhost install and behind a filtered connection alike.
+ */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/fonts/vazirmatn-variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Palette, read off the brand artwork rather than sampled by eye:
+ *   #58595B  the logo's charcoal half
+ *   #8EBEBE  the logo's teal half
+ *
+ * The logo is built from a heavy dark half and a lighter teal one, and the UI keeps that
+ * ratio. `brand-*` IS the graphite ramp — it does the structural work (headings, primary
+ * buttons, tables), which is why every existing `brand-600` class keeps working and simply
+ * changes hue. `teal-*` is the accent, spent only where it carries meaning: a successful
+ * repair, an active state, a focus ring.
+ *
+ * One measured constraint: the logo teal on white is 2.05:1, far under the 4.5 needed for
+ * text. It is a fill and tint colour only. Anything that must be READ uses teal-700
+ * (5.91:1), which is why the success badge and links are darker than the mark itself.
  */
 @theme {
-  --font-sans:
-    'Vazirmatn', 'IRANSans', Tahoma, 'Segoe UI', 'Noto Naskh Arabic', system-ui,
-    sans-serif;
+  --font-sans: 'Vazirmatn', Tahoma, 'Segoe UI', 'Noto Naskh Arabic', system-ui, sans-serif;
 
-  --color-brand-50: #eef4fb;
-  --color-brand-100: #d7e5f5;
-  --color-brand-200: #b3cbe9;
-  --color-brand-400: #4b7fbd;
-  --color-brand-600: #1f4f8a;
-  --color-brand-700: #17406f;
-  --color-brand-900: #0f2947;
+  /* graphite — structure */
+  --color-brand-50: #f4f5f5;
+  --color-brand-100: #e6e7e8;
+  --color-brand-200: #d2d4d5;
+  --color-brand-300: #b6b8b9;
+  --color-brand-400: #9a9c9e;
+  --color-brand-600: #3a3b3d;
+  --color-brand-700: #2e2f31;
+  --color-brand-800: #28292b;
+  --color-brand-900: #232426;
+
+  /* the logo's own grey, for anything that should read as the mark itself */
+  --color-ink-500: #58595b;
+  --color-ink-400: #6e7072;
+  --color-ink-300: #b4b6b8;
+
+  /* teal — accent */
+  --color-teal-50: #f0f7f7;
+  --color-teal-100: #dcebeb;
+  --color-teal-200: #bfdcdc;
+  /* 300 exists because the repair box outlines in it, opposite amber-300 on the
+     replace box; without it Tailwind's own mint teal-300 would leak in. */
+  --color-teal-300: #a6cdcd;
+  --color-teal-400: #8ebebe;
+  --color-teal-600: #4f8a8a;
+  --color-teal-700: #3c6c6c;
+  --color-teal-900: #234040;
 }
 
 :root {
-  --background: #f4f6fa;
-  --foreground: #16202e;
+  --background: #f5f6f6;
+  --foreground: #232426;
   --surface: #ffffff;
-  --border: #dfe5ee;
-  --muted: #64748b;
+  --border: #e4e6e6;
+  --muted: #6e7072;
 }
 
 body {

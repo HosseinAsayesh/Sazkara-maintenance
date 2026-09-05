@@ -141,7 +141,7 @@ export function ManualUidsForm({
             {pending ? tc('submitting') : tc('save')}
           </Button>
           {state.ok ? (
-            <span className="text-sm text-emerald-700">
+            <span className="text-sm text-teal-700">
               {t('committed', { count: state.ok.created })}
             </span>
           ) : null}

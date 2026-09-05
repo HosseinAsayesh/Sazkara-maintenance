@@ -42,7 +42,7 @@ export function PhotoInput({
 
   return (
     <div>
-      <div className="mb-1.5 text-sm font-medium text-slate-700">
+      <div className="mb-1.5 text-sm font-medium text-brand-600">
         {label}
         {required ? <span className="text-red-500"> *</span> : null}
       </div>
@@ -97,14 +97,14 @@ export function ExtraPhotoInput({ name }: { name: string }) {
 
   return (
     <div>
-      <div className="mb-1.5 text-sm font-medium text-slate-700">{t('photoOther')}</div>
+      <div className="mb-1.5 text-sm font-medium text-brand-600">{t('photoOther')}</div>
       <input
         type="file"
         name={name}
         accept="image/*"
         multiple
         onChange={(e) => setCount(e.target.files?.length ?? 0)}
-        className="block w-full text-sm text-slate-600 file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
+        className="block w-full text-sm text-ink-500 file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
       />
       {count > 0 ? (
         <p className="mt-1 text-xs text-[var(--muted)]">{count}</p>

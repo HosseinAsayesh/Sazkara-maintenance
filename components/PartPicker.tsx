@@ -171,7 +171,7 @@ export function PartPicker({
                 <button
                   type="button"
                   onClick={() => toggle(part)}
-                  className="block w-full text-start text-xs font-medium leading-5 text-slate-800"
+                  className="block w-full text-start text-xs font-medium leading-5 text-brand-700"
                 >
                   {nameOf(part)}
                   {isCm ? (

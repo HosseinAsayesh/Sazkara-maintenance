@@ -146,7 +146,7 @@ export function JalaliDateInput({
           type="button"
           aria-label="حذف تاریخ"
           onClick={() => onChange('')}
-          className="absolute inset-y-0 end-2 my-auto h-5 w-5 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="absolute inset-y-0 end-2 my-auto h-5 w-5 rounded text-brand-400 hover:bg-brand-100 hover:text-brand-600"
         >
           ×
         </button>
@@ -159,7 +159,7 @@ export function JalaliDateInput({
               type="button"
               onClick={() => shift(-1)}
               aria-label="ماه قبل"
-              className="h-7 w-7 rounded-md text-slate-600 hover:bg-slate-100"
+              className="h-7 w-7 rounded-md text-ink-500 hover:bg-brand-100"
             >
               ‹
             </button>
@@ -170,13 +170,13 @@ export function JalaliDateInput({
               type="button"
               onClick={() => shift(1)}
               aria-label="ماه بعد"
-              className="h-7 w-7 rounded-md text-slate-600 hover:bg-slate-100"
+              className="h-7 w-7 rounded-md text-ink-500 hover:bg-brand-100"
             >
               ›
             </button>
           </div>
 
-          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] text-slate-500">
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] text-ink-400">
             {JALALI_WEEKDAYS_FA.map((d, i) => (
               <div key={i}>{d}</div>
             ))}
@@ -207,7 +207,7 @@ export function JalaliDateInput({
                       ? 'bg-brand-600 font-semibold text-white'
                       : isToday
                         ? 'bg-brand-50 font-semibold text-brand-700'
-                        : 'text-slate-700 hover:bg-slate-100',
+                        : 'text-brand-600 hover:bg-brand-100',
                   )}
                 >
                   {toPersianDigits(day)}
@@ -233,7 +233,7 @@ export function JalaliDateInput({
                 onChange('');
                 setOpen(false);
               }}
-              className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+              className="rounded px-2 py-1 text-xs text-ink-400 hover:bg-brand-100"
             >
               پاک کردن
             </button>

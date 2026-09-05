@@ -37,7 +37,7 @@ export function LocaleSwitcher() {
           );
         });
       }}
-      className="rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none"
+      className="rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-xs text-brand-600 focus:outline-none"
     >
       {routing.locales.map((l) => (
         <option key={l} value={l}>

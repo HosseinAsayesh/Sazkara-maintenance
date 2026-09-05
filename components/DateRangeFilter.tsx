@@ -79,7 +79,7 @@ export function DateRangeFilter({
       <form onSubmit={apply} className="flex flex-wrap items-end gap-3">
         {projects?.length ? (
           <label className="min-w-[10rem] flex-1">
-            <span className="mb-1 block text-xs font-medium text-slate-600">
+            <span className="mb-1 block text-xs font-medium text-ink-500">
               {t('project')}
             </span>
             <Select
@@ -102,7 +102,7 @@ export function DateRangeFilter({
 
         {phases.length ? (
           <label className="min-w-[8rem] flex-1">
-            <span className="mb-1 block text-xs font-medium text-slate-600">
+            <span className="mb-1 block text-xs font-medium text-ink-500">
               {t('phase')}
             </span>
             <Select value={localPhase} onChange={(e) => setLocalPhase(e.target.value)}>
@@ -117,7 +117,7 @@ export function DateRangeFilter({
         ) : null}
 
         <label className="min-w-[9rem] flex-1">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{t('from')}</span>
+          <span className="mb-1 block text-xs font-medium text-ink-500">{t('from')}</span>
           <JalaliDateInput
             value={localFrom}
             onChange={setLocalFrom}
@@ -126,13 +126,13 @@ export function DateRangeFilter({
         </label>
 
         <label className="min-w-[9rem] flex-1">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{t('to')}</span>
+          <span className="mb-1 block text-xs font-medium text-ink-500">{t('to')}</span>
           <JalaliDateInput value={localTo} onChange={setLocalTo} ariaLabel={t('to')} />
         </label>
 
         {cities ? (
           <label className="min-w-[9rem] flex-1">
-            <span className="mb-1 block text-xs font-medium text-slate-600">{t('city')}</span>
+            <span className="mb-1 block text-xs font-medium text-ink-500">{t('city')}</span>
             <Select value={localCity} onChange={(e) => setLocalCity(e.target.value)}>
               <option value="">{t('all')}</option>
               {cities.map((c) => (

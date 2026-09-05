@@ -116,7 +116,7 @@ export function ImportWizard({ locale }: { locale: string }) {
     return (
       <Card className="p-6 text-center">
         <div className="text-3xl">✓</div>
-        <h2 className="mt-2 text-lg font-bold text-emerald-700">
+        <h2 className="mt-2 text-lg font-bold text-teal-700">
           {t('committed', { count: commitState.ok.created })}
         </h2>
         <p className="mt-1 text-sm text-[var(--muted)]">

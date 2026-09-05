@@ -131,9 +131,9 @@ export default async function ImportsPage({
                           <Badge tone="info">{t(`source.${batch.source}`)}</Badge>
                         </Td>
                         <Td className="tabular-nums">{batch._count.lines}</Td>
-                        <Td className="tabular-nums text-emerald-700">{counts.DONE ?? 0}</Td>
+                        <Td className="tabular-nums text-teal-700">{counts.DONE ?? 0}</Td>
                         <Td className="tabular-nums text-amber-700">{counts.PENDING ?? 0}</Td>
-                        <Td className="tabular-nums text-slate-500">{counts.EXCLUDED ?? 0}</Td>
+                        <Td className="tabular-nums text-ink-400">{counts.EXCLUDED ?? 0}</Td>
                         <Td>{batch.importedBy.name}</Td>
                         <Td className="whitespace-nowrap text-xs text-[var(--muted)]">
                           {formatDateForLocale(batch.importedAt, locale)}

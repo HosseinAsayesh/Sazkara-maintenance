@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 
 import { Link } from '@/i18n/navigation';
@@ -40,14 +41,31 @@ export async function AppShell({
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
-          <Link href="/" className="min-w-0">
-            <div className="truncate text-sm font-bold text-brand-900">{t('shortName')}</div>
-            <div className="truncate text-[11px] text-[var(--muted)]">{t('tagline')}</div>
+          {/* The mark carries the brand; the wordmark stays for the tagline and for
+              anyone whose images fail to load. `priority` because it is above the fold
+              on every page in the app. */}
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            <Image
+              src="/brand/logo.svg"
+              alt=""
+              width={96}
+              height={54}
+              priority
+              className="h-7 w-auto shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-bold text-brand-900">
+                {t('shortName')}
+              </span>
+              <span className="block truncate text-[11px] text-[var(--muted)]">
+                {t('tagline')}
+              </span>
+            </span>
           </Link>
 
           <div className="ms-auto flex items-center gap-2">
             <div className="hidden text-end sm:block">
-              <div className="text-xs font-medium text-slate-800">{userName}</div>
+              <div className="text-xs font-medium text-brand-700">{userName}</div>
               {userSubtitle ? (
                 <div className="text-[11px] text-[var(--muted)]">{userSubtitle}</div>
               ) : null}
@@ -64,7 +82,7 @@ export async function AppShell({
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-brand-50 hover:text-brand-800"
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-ink-500 hover:bg-brand-50 hover:text-brand-800"
                   >
                     {item.label}
                     {item.badge ? (
