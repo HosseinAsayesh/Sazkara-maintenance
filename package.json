@@ -21,7 +21,8 @@
     "db:merge-cities": "tsx --conditions=react-server scripts/merge-duplicate-cities.ts",
     "db:delete-import": "tsx --conditions=react-server scripts/delete-import.ts",
     "db:backup": "tsx --conditions=react-server scripts/backup.ts",
-    "docs:shots": "tsx --conditions=react-server scripts/docs-screenshots.ts"
+    "docs:shots": "tsx --conditions=react-server scripts/docs-screenshots.ts",
+    "docs:pdf": "tsx --conditions=react-server scripts/guide-pdf.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

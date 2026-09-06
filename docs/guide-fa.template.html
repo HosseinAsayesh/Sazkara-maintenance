@@ -364,10 +364,19 @@
     color: var(--ink-muted);
   }
 
+  .print-note { display: none; }
+
   @media print {
     .toc { display: none; }
     .layout { grid-template-columns: minmax(0, 1fr); }
-    .shot--tall { max-height: none; }
+    /* Not `max-height: none`: the tallest screenshot here is over 9,000px and would
+       run across nine sheets. Cap it to roughly a page and say it is an excerpt. */
+    .shot--tall { max-height: 190mm; }
+    .scrollhint { display: none; }
+    .print-note { display: inline; color: var(--ink-muted); }
+    section { break-inside: auto; }
+    figure, .note, .table-wrap { break-inside: avoid; }
+    h2, h3, h4 { break-after: avoid; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
@@ -704,7 +713,7 @@
         <div class="shot shot--tall"><img src="{{img:technician-stand-tabs}}" alt="فرم تعمیر با زبانه‌های استند"></div>
         <figcaption>
           فرم کامل تعمیر، با زبانه‌های استند در بالای بخش قطعات.
-          <span class="scrollhint">— برای دیدن ادامهٔ فرم داخل همین کادر اسکرول کنید.</span>
+          <span class="scrollhint">— برای دیدن ادامهٔ فرم داخل همین کادر اسکرول کنید.</span><span class="print-note">— این تصویر بریده‌ای از فرم است؛ تصویر کامل در نسخهٔ HTML راهنما دیده می‌شود.</span>
         </figcaption>
       </figure>
 
