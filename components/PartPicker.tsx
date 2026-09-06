@@ -98,22 +98,22 @@ export function PartPicker({
     <section
       className={clsx(
         'overflow-hidden rounded-xl border-2 bg-[var(--surface)]',
-        isReplace ? 'border-amber-300' : 'border-teal-300',
+        isReplace ? 'border-amber-700' : 'border-teal-700',
       )}
     >
       <header
         className={clsx(
           'flex flex-wrap items-baseline justify-between gap-2 border-b-2 px-4 py-2.5',
           isReplace
-            ? 'border-amber-300 bg-amber-50'
-            : 'border-teal-300 bg-teal-50',
+            ? 'border-amber-700 bg-amber-100'
+            : 'border-teal-700 bg-teal-100',
         )}
       >
         <div className="flex items-center gap-2">
           <span
             className={clsx(
               'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white',
-              isReplace ? 'bg-amber-500' : 'bg-teal-600',
+              isReplace ? 'bg-amber-700' : 'bg-teal-700',
             )}
             aria-hidden
           >
