@@ -123,7 +123,7 @@
     }
   },
   "technician": {
-    "enterUidTitle": "Enter the stand UID",
+    "enterUidTitle": "Enter the store UID",
     "enterUidHelp": "The UID is printed on the stand",
     "uidPlaceholder": "e.g. 123456",
     "continue": "Continue",

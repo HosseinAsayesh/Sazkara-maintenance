@@ -123,7 +123,7 @@
     }
   },
   "technician": {
-    "enterUidTitle": "شناسه استند را وارد کنید",
+    "enterUidTitle": "شناسه فروشگاه را وارد کنید",
     "enterUidHelp": "شناسه روی استند درج شده است",
     "uidPlaceholder": "مثلاً 123456",
     "continue": "ادامه",

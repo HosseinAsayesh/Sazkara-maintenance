@@ -1,0 +1,996 @@
+<title>راهنمای سامانه نگهداری سازکارا</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ── tokens ────────────────────────────────────────────────────────────
+     The application's own palette, not a new one: this guide is read beside
+     the screens it describes, so it uses the graphite/teal the app is built
+     from. Amber and red stay strictly semantic here, exactly as in the app. */
+  :root {
+    --canvas: #f5f6f6;
+    --surface: #ffffff;
+    --surface-sunken: #fafbfb;
+    --border: #e4e6e6;
+    --border-strong: #d2d4d5;
+
+    --ink: #232426;
+    --ink-soft: #58595b;
+    --ink-muted: #6e7072;
+
+    --teal: #3c6c6c;
+    --teal-bright: #8ebebe;
+    --teal-tint: #dcebeb;
+    --teal-wash: #f0f7f7;
+
+    --amber: #b45309;
+    --amber-wash: #fef6e7;
+    --danger: #b91c1c;
+    --danger-wash: #fdf0f0;
+
+    --rail: 15.5rem;
+    --measure: 68ch;
+
+    /* The masthead is graphite in BOTH themes — it is the app's bar, not a surface.
+       It needs its own tokens: --ink flips to near-white in dark, which would put
+       white text on a light band. */
+    --masthead-bg: #232426;
+    --masthead-fg: #ffffff;
+    --masthead-dim: #b4b6b8;
+    --masthead-meta: #9a9c9e;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --canvas: #191a1b;
+      --surface: #232426;
+      --surface-sunken: #1f2021;
+      --border: #343537;
+      --border-strong: #434446;
+
+      --ink: #ecedee;
+      --ink-soft: #c2c4c5;
+      --ink-muted: #9a9c9e;
+
+      --teal: #a6cdcd;
+      --teal-bright: #8ebebe;
+      --teal-tint: #24393a;
+      --teal-wash: #1d2b2c;
+
+      --amber: #e0a561;
+      --amber-wash: #2e2415;
+      --danger: #e88b8b;
+      --danger-wash: #2e1c1c;
+
+      --masthead-bg: #121314;
+      --masthead-dim: #a8aaac;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --canvas: #191a1b;
+    --surface: #232426;
+    --surface-sunken: #1f2021;
+    --border: #343537;
+    --border-strong: #434446;
+
+    --ink: #ecedee;
+    --ink-soft: #c2c4c5;
+    --ink-muted: #9a9c9e;
+
+    --teal: #a6cdcd;
+    --teal-bright: #8ebebe;
+    --teal-tint: #24393a;
+    --teal-wash: #1d2b2c;
+
+    --amber: #e0a561;
+    --amber-wash: #2e2415;
+    --danger: #e88b8b;
+    --danger-wash: #2e1c1c;
+
+    --masthead-bg: #121314;
+    --masthead-dim: #a8aaac;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Vazirmatn', Tahoma, 'Segoe UI', 'Noto Naskh Arabic', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.95;
+    direction: rtl;
+  }
+
+  /* Latin identifiers — uids, technician codes, column numbers — run all through
+     this domain's Persian prose. They get their own face so they never read as
+     body text that lost its shaping. */
+  code, .mono, .uid { font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+
+  code {
+    direction: ltr;
+    unicode-bidi: isolate;
+    display: inline-block;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0 .38em;
+    font-size: .85em;
+    color: var(--ink-soft);
+  }
+
+  a { color: var(--teal); text-underline-offset: .25em; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--teal-bright);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ── shell ─────────────────────────────────────────────────────────── */
+  .masthead {
+    background: var(--masthead-bg);
+    color: var(--masthead-fg);
+    padding: 3.2rem 1.5rem 2.8rem;
+  }
+  .masthead__inner {
+    max-width: 74rem;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+  .masthead h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
+    font-weight: 700;
+    line-height: 1.45;
+    text-wrap: balance;
+  }
+  .masthead .rule {
+    width: 46px;
+    height: 3px;
+    background: var(--teal-bright);
+    margin: 1.1rem 0 .9rem;
+  }
+  .masthead p {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--masthead-dim);
+    font-size: .95rem;
+    line-height: 1.9;
+  }
+  .masthead__meta {
+    font-size: .78rem;
+    color: var(--masthead-meta);
+    line-height: 2.1;
+  }
+  .masthead__meta b { color: var(--masthead-dim); font-weight: 500; }
+
+  .layout {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+  @media (max-width: 60rem) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  }
+
+  /* ── contents rail ─────────────────────────────────────────────────── */
+  .toc {
+    position: sticky;
+    top: 1.5rem;
+    font-size: .84rem;
+    line-height: 1.8;
+  }
+  @media (max-width: 60rem) {
+    .toc {
+      position: static;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.15rem;
+    }
+  }
+  .toc h2 {
+    margin: 0 0 .7rem;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    color: var(--ink-muted);
+  }
+  .toc ol { margin: 0; padding: 0; list-style: none; display: grid; gap: .1rem; }
+  .toc a {
+    display: block;
+    padding: .3rem .6rem;
+    border-radius: 6px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-inline-start: 2px solid transparent;
+  }
+  .toc a:hover { background: var(--teal-wash); color: var(--teal); border-inline-start-color: var(--teal-bright); }
+
+  /* ── prose ─────────────────────────────────────────────────────────── */
+  .content { min-width: 0; max-width: var(--measure); display: grid; gap: 3.2rem; }
+
+  section { scroll-margin-top: 1.5rem; }
+
+  h2 {
+    margin: 0 0 1.1rem;
+    font-size: 1.42rem;
+    font-weight: 700;
+    line-height: 1.5;
+    text-wrap: balance;
+    padding-bottom: .6rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    margin: 2.1rem 0 .7rem;
+    font-size: 1.06rem;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+  h4 {
+    margin: 1.5rem 0 .5rem;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  p { margin: 0 0 1rem; }
+  ul, ol { margin: 0 0 1rem; padding-inline-start: 1.3rem; }
+  li { margin-bottom: .35rem; }
+  li::marker { color: var(--ink-muted); }
+  strong { font-weight: 600; }
+
+  .lede {
+    font-size: 1.03rem;
+    color: var(--ink-soft);
+    line-height: 2;
+  }
+
+  /* ── numbered procedure ────────────────────────────────────────────
+     Numbers here are information: field work happens in this order, and a
+     step done out of order is a real mistake. Reference sections are not
+     numbered, because their order carries nothing. */
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.6rem; counter-reset: step; }
+  .steps > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0 .95rem;
+    margin: 0;
+  }
+  .steps > li::before {
+    content: counter(step, persian);
+    grid-row: span 2;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--surface);
+    display: grid;
+    place-items: center;
+    font-size: .85rem;
+    font-weight: 600;
+  }
+  .steps h4 { margin: .15rem 0 .35rem; font-size: 1rem; color: var(--ink); }
+  .steps p:last-child, .steps ul:last-child { margin-bottom: 0; }
+
+  /* ── callouts ─────────────────────────────────────────────────────── */
+  .note {
+    border-inline-start: 3px solid var(--teal-bright);
+    background: var(--teal-wash);
+    border-radius: 0 8px 8px 0;
+    padding: .85rem 1.1rem;
+    margin: 1.2rem 0;
+    font-size: .93rem;
+  }
+  .note--warn { border-inline-start-color: var(--amber); background: var(--amber-wash); }
+  .note--danger { border-inline-start-color: var(--danger); background: var(--danger-wash); }
+  .note p:last-child { margin-bottom: 0; }
+  .note b { display: block; margin-bottom: .2rem; font-weight: 600; }
+
+  /* ── tables ───────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; margin: 1.2rem 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 30rem; }
+  th, td { padding: .6rem .85rem; text-align: start; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { background: var(--surface-sunken); font-weight: 600; color: var(--ink-muted); font-size: .8rem; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── figures ──────────────────────────────────────────────────────
+     A phone screenshot is 9500px tall. Shown whole it would bury the text,
+     so each one scrolls inside its own frame at a readable width. */
+  figure { margin: 1.5rem 0; }
+  .shot {
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface-sunken);
+    overflow: hidden;
+  }
+  .shot--tall { max-height: 30rem; overflow-y: auto; }
+  .shot img { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: .55rem;
+    font-size: .82rem;
+    color: var(--ink-muted);
+    line-height: 1.8;
+  }
+  figcaption .scrollhint { color: var(--teal); }
+
+  /* ── role chips ───────────────────────────────────────────────────── */
+  .chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: .1rem .6rem;
+    font-size: .74rem;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    color: var(--ink-soft);
+    background: var(--surface);
+  }
+  .chip--tech { background: var(--teal-tint); border-color: transparent; color: var(--teal); }
+  .chip--lead { background: var(--amber-wash); border-color: transparent; color: var(--amber); }
+  .chip--mgr { background: var(--ink); border-color: transparent; color: var(--surface); }
+
+  /* ── definition list ──────────────────────────────────────────────── */
+  .terms { display: grid; gap: 0; margin: 1.2rem 0 0; }
+  .terms > div {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    gap: 0 1.2rem;
+    padding: .85rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .terms > div:last-child { border-bottom: 0; }
+  .terms dt { font-weight: 600; }
+  .terms dd { margin: 0; color: var(--ink-soft); }
+  .terms dt small { display: block; font-weight: 400; font-size: .78rem; color: var(--ink-muted); }
+  @media (max-width: 34rem) {
+    .terms > div { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
+  }
+
+  footer.page-foot {
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+    padding-top: 1.5rem;
+    font-size: .84rem;
+    color: var(--ink-muted);
+  }
+
+  @media print {
+    .toc { display: none; }
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .shot--tall { max-height: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<header class="masthead">
+  <div class="masthead__inner">
+    <div>
+      <h1>راهنمای سامانه نگهداری سازکارا</h1>
+      <div class="rule"></div>
+      <p>
+        ثبت گزارش تعمیر استند از محل فروشگاه، پیگیری پیشرفت پروژه و تحویل خروجی استاندارد
+        جی‌تی‌آی — جای فرم کاغذی و ورود دستی اکسل.
+      </p>
+    </div>
+    <div class="masthead__meta">
+      <div>این راهنما برای <b>تکنسین</b>، <b>سرپرست تیم</b> و <b>مدیر تعمیرات</b> نوشته شده است.</div>
+      <div>تصویرها از خودِ برنامه گرفته شده‌اند.</div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-label="فهرست مطالب">
+    <h2>فهرست</h2>
+    <ol>
+      <li><a href="#intro">این سامانه چه می‌کند</a></li>
+      <li><a href="#terms">واژه‌های کلیدی</a></li>
+      <li><a href="#roles">نقش‌ها و دسترسی‌ها</a></li>
+      <li><a href="#start">شروع کار و ورود</a></li>
+      <li><a href="#install">نصب روی گوشی</a></li>
+      <li><a href="#technician">راهنمای تکنسین</a></li>
+      <li><a href="#lead">راهنمای سرپرست تیم</a></li>
+      <li><a href="#manager">راهنمای مدیر تعمیرات</a></li>
+      <li><a href="#rules">قاعده‌هایی که سامانه خودکار اعمال می‌کند</a></li>
+      <li><a href="#outputs">خروجی‌ها</a></li>
+      <li><a href="#faq">پرسش‌های پرتکرار</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="intro">
+      <h2>این سامانه چه می‌کند</h2>
+      <p class="lede">
+        سازکارا استندهای نمایش سیگار را می‌سازد و نگهداری می‌کند. تا پیش از این، تکنسین در
+        فروشگاه یک فرم کاغذی پر می‌کرد و بعد کسی همان اطلاعات را دستی وارد اکسل می‌کرد. این
+        سامانه هر دو مرحله را یکی می‌کند: تکنسین گزارش را همان‌جا با گوشی ثبت می‌کند و مدیر
+        تعمیرات همان لحظه آن را می‌بیند.
+      </p>
+      <p>سه کار اصلی که این سامانه انجام می‌دهد:</p>
+      <ul>
+        <li><strong>ثبت گزارش تعمیر در محل.</strong> قطعات، کیفیت کار، عکس قبل و بعد و امضای مدیر فروشگاه، همه از روی گوشی.</li>
+        <li><strong>پیگیری پروژه.</strong> مدیر می‌بیند از یک سفارش چند شناسه انجام شده، چند مانده و چه چیزی تعمیر نشده و چرا.</li>
+        <li><strong>تحویل به جی‌تی‌آی.</strong> فایل اکسل استاندارد و مستندات تصویری، بدون بازتایپ کردن چیزی.</li>
+      </ul>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="terms">
+      <h2>واژه‌های کلیدی</h2>
+      <p>
+        اگر فقط یک بخش از این راهنما را می‌خوانید، همین بخش باشد. بیشتر سوءتفاهم‌ها از
+        اینجا شروع می‌شود که «شناسه» را متعلق به استند بدانیم.
+      </p>
+
+      <dl class="terms">
+        <div>
+          <dt>شناسه فروشگاه <small>UID</small></dt>
+          <dd>
+            کدی مثل <code>IR00123111</code> که <strong>فروشگاه</strong> را مشخص می‌کند، نه استند را.
+            یک فروشگاه ممکن است ۱، ۲ یا ۳ استند داشته باشد و <strong>هر سه یک شناسه مشترک دارند</strong>.
+            تکنسین یک شناسه وارد می‌کند و در همان بازدید وضعیت همهٔ استندهای آن فروشگاه را ثبت می‌کند.
+          </dd>
+        </div>
+        <div>
+          <dt>استند</dt>
+          <dd>
+            هر پایهٔ نمایش داخل فروشگاه. چون شناسه مشترک است، استندها با <strong>شمارهٔ جایگاهشان</strong>
+            در همان فروشگاه شناخته می‌شوند: استند ۱، استند ۲، استند ۳.
+          </dd>
+        </div>
+        <div>
+          <dt>پروژه</dt>
+          <dd>
+            یک کمپین جی‌تی‌آی. هر پروژه به چند <strong>فاز</strong> تقسیم می‌شود (مثلاً تهران، رشت، شیراز).
+            همیشه یکی از پروژه‌ها «جاری» است و کارهای تازه به آن نسبت داده می‌شود.
+          </dd>
+        </div>
+        <div>
+          <dt>سفارش</dt>
+          <dd>
+            فایل اکسلی که جی‌تی‌آی می‌فرستد و فهرست شناسه‌هایی است که باید سر آن‌ها رفت.
+            سفارش داخل یک فاز از یک پروژه قرار می‌گیرد. <strong>پروژه دورهٔ کاری است، سفارش فهرست کار.</strong>
+          </dd>
+        </div>
+        <div>
+          <dt>تعمیر مجدد</dt>
+          <dd>
+            وقتی یک استند <strong>در طول یک پروژه دو بار</strong> تعمیر شود. فاصلهٔ زمانی مهم نیست.
+            اگر همان استند در پروژهٔ بعدی دوباره تعمیر شود، کار عادی است و تعمیر مجدد شمرده نمی‌شود.
+          </dd>
+        </div>
+        <div>
+          <dt>کد فرم</dt>
+          <dd>شمارهٔ یکتای هر گزارش. هنگام ثبت به‌صورت خودکار اختصاص می‌یابد؛ کسی آن را وارد نمی‌کند.</dd>
+        </div>
+        <div>
+          <dt>کد تکنسین <small>مثلاً TC-041</small></dt>
+          <dd>
+            شناسهٔ کاری هر تکنسین. <strong>هنگام تأیید حساب توسط مدیر</strong> صادر می‌شود و در
+            مستندات تصویری به‌جای نام تکنسین درج می‌گردد.
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="roles">
+      <h2>نقش‌ها و دسترسی‌ها</h2>
+      <p>سه نقش وجود دارد. هر کسی فقط چیزی را می‌بیند که به کارش مربوط است.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>کار</th>
+              <th><span class="chip chip--tech">تکنسین</span></th>
+              <th><span class="chip chip--lead">سرپرست تیم</span></th>
+              <th><span class="chip chip--mgr">مدیر تعمیرات</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>ثبت گزارش تعمیر</td><td>✓</td><td>✓</td><td>—</td></tr>
+            <tr><td>دیدن کارنامهٔ خود و خروجی گرفتن از آن</td><td>✓</td><td>✓</td><td>✓</td></tr>
+            <tr><td>دیدن کار اعضای گروه خود</td><td>—</td><td>✓</td><td>✓</td></tr>
+            <tr><td>تأیید تکنسین و صدور کد</td><td>—</td><td>—</td><td>✓</td></tr>
+            <tr><td>بارگذاری سفارش و مدیریت پروژه</td><td>—</td><td>—</td><td>✓</td></tr>
+            <tr><td>خروجی جی‌تی‌آی، مستندات تصویری، تحلیل‌ها</td><td>—</td><td>—</td><td>✓</td></tr>
+            <tr><td>نرخ دستمزد و تنظیمات</td><td>—</td><td>—</td><td>✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <b>سرپرست تیم مدیر نیست</b>
+        <p>
+          سرپرست فقط کار گروه خودش را می‌بیند. به قطعات، خروجی‌ها، تحلیل‌ها و هزینه‌ها دسترسی
+          ندارد. این عمدی است: سرپرست برای پیگیری کار میدانی است، نه مدیریت مالی پروژه.
+        </p>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="start">
+      <h2>شروع کار و ورود</h2>
+
+      <h3>ورود</h3>
+      <p>با <strong>شمارهٔ موبایل</strong> و <strong>رمز عبور</strong> وارد می‌شوید. نام کاربری جداگانه‌ای وجود ندارد.</p>
+
+      <figure>
+        <div class="shot"><img src="{{img:login}}" alt="صفحهٔ ورود"></div>
+        <figcaption>صفحهٔ ورود. زبان از پایین همین صفحه بین فارسی و English قابل تغییر است.</figcaption>
+      </figure>
+
+      <h3>ثبت‌نام تکنسین</h3>
+      <p>
+        تکنسین خودش از دکمهٔ «ثبت‌نام» حساب می‌سازد: نام، شمارهٔ موبایل و رمز عبور.
+        حساب بلافاصله فعال <strong>نمی‌شود</strong>.
+      </p>
+
+      <figure>
+        <div class="shot"><img src="{{img:register}}" alt="فرم ثبت‌نام"></div>
+        <figcaption>فرم ثبت‌نام تکنسین.</figcaption>
+      </figure>
+
+      <div class="note note--warn">
+        <b>تا وقتی مدیر تأیید نکند، ورود ممکن نیست</b>
+        <p>
+          پس از ثبت‌نام پیام «در انتظار تأیید» نمایش داده می‌شود. مدیر باید حساب را از بخش
+          <strong>تکنسین‌ها</strong> تأیید کند؛ همان لحظه <strong>کد تکنسین</strong> صادر می‌شود.
+        </p>
+      </div>
+
+      <figure>
+        <div class="shot"><img src="{{img:register-pending}}" alt="پیام در انتظار تأیید"></div>
+        <figcaption>همین را می‌بینید تا وقتی مدیر حساب را تأیید کند.</figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><img src="{{img:manager-technicians}}" alt="فهرست تکنسین‌ها در پنل مدیر"></div>
+        <figcaption>مدیر: بخش «تکنسین‌ها» — تأیید یا رد حساب‌های تازه.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="install">
+      <h2>نصب روی گوشی</h2>
+      <p>
+        سامانه را می‌توان مثل یک برنامه روی صفحهٔ اصلی گوشی نصب کرد. اینجوری بدون نوار آدرس
+        مرورگر و تمام‌صفحه باز می‌شود و سریع‌تر بالا می‌آید. برنامه‌ای در کافه‌بازار یا استور
+        وجود ندارد؛ نصب از خود مرورگر انجام می‌شود.
+      </p>
+      <ul>
+        <li><strong>اندروید (کروم):</strong> منوی سه‌نقطه ← <em>Add to Home screen</em> / «افزودن به صفحهٔ اصلی».</li>
+        <li><strong>آیفون (سافاری):</strong> دکمهٔ اشتراک‌گذاری ← <em>Add to Home Screen</em>.</li>
+      </ul>
+
+      <div class="note note--warn">
+        <b>نصب یعنی سریع‌تر، نه آفلاین</b>
+        <p>
+          ثبت گزارش همچنان به اینترنت نیاز دارد. اگر آنتن نداشته باشید صفحهٔ «اتصال اینترنت
+          برقرار نیست» را می‌بینید. <strong>گزارش نیمه‌تمام ذخیره نمی‌شود</strong>، پس پیش از
+          زدن دکمهٔ ثبت از وصل بودن اینترنت مطمئن شوید.
+        </p>
+      </div>
+
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:login-phone}}" alt="نمای موبایل صفحهٔ ورود"></div>
+        <figcaption>نمای گوشی. کل کار تکنسین برای صفحهٔ موبایل طراحی شده است.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="technician">
+      <h2>راهنمای تکنسین</h2>
+      <p>
+        کار تکنسین دو صفحه بیشتر ندارد: <strong>گزارش جدید</strong> و <strong>کارنامه من</strong>.
+      </p>
+
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:technician-home}}" alt="صفحهٔ نخست تکنسین"></div>
+        <figcaption>«گزارش جدید» — همه‌چیز از وارد کردن شناسهٔ فروشگاه شروع می‌شود.</figcaption>
+      </figure>
+
+      <h3>ثبت یک گزارش، مرحله به مرحله</h3>
+
+      <ol class="steps">
+        <li>
+          <h4>شناسهٔ فروشگاه را وارد کنید</h4>
+          <p>
+            شناسه روی خود استند درج شده است. یک شناسه برای کل فروشگاه کافی است، حتی اگر
+            چند استند آنجا باشد.
+          </p>
+        </li>
+        <li>
+          <h4>سوابق را ببینید</h4>
+          <p>
+            پیش از شروع، سامانه نشان می‌دهد که قبلاً چه کاری روی این شناسه انجام شده است.
+            اگر سابقه‌ای نبود، پیام «برای این شناسه سابقه‌ای ثبت نشده است» را می‌بینید.
+          </p>
+          <div class="note note--warn">
+            <p>
+              اگر شناسه در سفارش جاری نباشد، برچسب <strong>«خارج از سفارش»</strong> نمایش داده
+              می‌شود. می‌توانید «ثبت به‌هرحال» را بزنید؛ گزارش ثبت می‌شود ولی تا تأیید مدیر در
+              فهرست <strong>«شناسه‌های در انتظار تأیید»</strong> می‌ماند. این حالت خطا نیست.
+            </p>
+          </div>
+        </li>
+        <li>
+          <h4>اطلاعات فروشگاه را کامل یا اصلاح کنید</h4>
+          <p>
+            اگر شناسه در سفارش باشد، نام و آدرس از قبل پر است. دکمهٔ <strong>«ثبت موقعیت فعلی»</strong>
+            لینک نقشه را از روی GPS گوشی می‌گذارد.
+          </p>
+        </li>
+        <li>
+          <h4>استند را انتخاب کنید</h4>
+          <p>
+            اگر فروشگاه بیش از یک استند دارد، بالای فرم برای هر استند یک زبانه هست. زیر هر
+            زبانه نوشته شده «تکمیل شده» یا «هنوز پر نشده»، تا بدانید کدام را هنوز پر نکرده‌اید.
+            با «افزودن استند دیگر» استند تازه اضافه می‌شود.
+          </p>
+          <div class="note">
+            <p>
+              هر استند <strong>قطعات، کیفیت و عکس قبل و بعدِ خودش</strong> را دارد. اما آدرس،
+              عکس فروشگاه و امضاها بین همهٔ استندها مشترک است — چون یک بازدید است.
+            </p>
+          </div>
+        </li>
+        <li>
+          <h4>قطعات را ثبت کنید</h4>
+          <p>دو جعبهٔ جداگانه وجود دارد و <strong>عمداً</strong> از هم مستقل‌اند:</p>
+          <ul>
+            <li><strong>قطعات تعویض‌شده</strong> — قطعه‌ای که از انبار مصرف شده و در صورتحساب می‌آید.</li>
+            <li><strong>قطعات تعمیرشده</strong> — قطعه‌ای که سر جایش درست شده و چیزی مصرف نکرده است.</li>
+          </ul>
+          <p>
+            همه‌چیز «عدد» شمرده می‌شود، جز دو نوار SMD که <strong>برحسب سانتی‌متر و در پله‌های ۵۰
+            تایی</strong> ثبت می‌شوند: ۵۰، ۱۰۰، ۱۵۰ و … عدد خارج از این پله‌ها پذیرفته نمی‌شود.
+          </p>
+        </li>
+        <li>
+          <h4>اگر تعمیری انجام نشد، دلیلش را بزنید</h4>
+          <p>
+            وضعیت «تعمیر شد / تعمیر نشد» <strong>انتخابی نیست</strong> و خودِ سامانه آن را از روی
+            قطعات تعیین می‌کند. اگر هیچ قطعه‌ای ثبت نکنید، باید یکی از این پنج دلیل را انتخاب کنید:
+          </p>
+          <ul>
+            <li>مدیر فروشگاه اجازهٔ تعمیر نداد</li>
+            <li>فروشگاه یا استند جمع‌آوری شده بود</li>
+            <li>استند سالم بود و نیاز به تعمیر نداشت</li>
+            <li>فروشگاه موقتاً تعطیل بود</li>
+            <li>وضعیت استند برای تعمیر بسیار نامناسب بود</li>
+          </ul>
+        </li>
+        <li>
+          <h4>کیفیت، زمان و توضیحات</h4>
+          <p>اگر تعمیری انجام شده باشد، نمرهٔ کیفیت از ۰ تا ۵ <strong>الزامی</strong> است.</p>
+        </li>
+        <li>
+          <h4>عکس‌ها</h4>
+          <p>
+            برای هر استند <strong>عکس قبل</strong> و <strong>عکس بعد</strong>، و برای کل بازدید یک
+            <strong>عکس فروشگاه</strong> لازم است. عکس‌های اضافه اختیاری است.
+          </p>
+        </li>
+        <li>
+          <h4>امضاها</h4>
+          <p>امضای <strong>تکنسین</strong> و امضا یا مهر <strong>مدیر فروشگاه</strong>، هر دو روی صفحه.</p>
+        </li>
+        <li>
+          <h4>ثبت گزارش</h4>
+          <p>
+            پس از ثبت، <strong>کد فرم</strong> نمایش داده می‌شود. اگر چند استند ثبت کرده باشید،
+            برای هرکدام یک کد جداگانه صادر می‌شود.
+          </p>
+        </li>
+      </ol>
+
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:technician-stand-tabs}}" alt="فرم تعمیر با زبانه‌های استند"></div>
+        <figcaption>
+          فرم کامل تعمیر، با زبانه‌های استند در بالای بخش قطعات.
+          <span class="scrollhint">— برای دیدن ادامهٔ فرم داخل همین کادر اسکرول کنید.</span>
+        </figcaption>
+      </figure>
+
+      <div class="note note--danger">
+        <b>پیش از زدن «ثبت گزارش» حواستان به این‌ها باشد</b>
+        <p>
+          اگر خطایی مثل «عکس‌ها الزامی است» دیدید، سامانه خودش زبانهٔ همان استندی را باز می‌کند
+          که مشکل دارد. گزارش ثبت‌شده را تکنسین نمی‌تواند پاک کند؛ اصلاح آن فقط از طریق مدیر
+          ممکن است.
+        </p>
+      </div>
+
+      <h3>کارنامه من</h3>
+      <p>
+        فهرست کارهای خودتان، با امکان گرفتن خروجی <strong>بر اساس بازهٔ زمانی یا پروژه</strong>.
+        تکنسین دستمزد برآوردی را در این صفحه نمی‌بیند؛ محاسبهٔ مالی کار مدیر است.
+      </p>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="lead">
+      <h2>راهنمای سرپرست تیم</h2>
+      <p>
+        سرپرست تیم خودش تکنسین است و مثل بقیه گزارش ثبت می‌کند، ولی یک بخش اضافه دارد:
+        <strong>گروه من</strong>.
+      </p>
+      <ul>
+        <li>دیدن اعضای گروه و کاری که هرکدام انجام داده‌اند.</li>
+        <li>پیگیری پیشرفت گروه در بازهٔ زمانی یا پروژهٔ مشخص.</li>
+      </ul>
+      <p>
+        سرپرست <strong>نمی‌تواند</strong> تکنسین تأیید کند، سفارش بارگذاری کند، خروجی جی‌تی‌آی
+        بگیرد یا نرخ دستمزد را ببیند.
+      </p>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="manager">
+      <h2>راهنمای مدیر تعمیرات</h2>
+
+      <h3>داشبورد</h3>
+      <p>
+        وضعیت لحظه‌ای پروژه. عددها با فیلتر بالای صفحه (پروژه، فاز، بازهٔ تاریخ، شهر) محدود
+        می‌شوند؛ پس از تغییر فیلتر باید <strong>«اعمال فیلتر»</strong> را بزنید. صفحه هر ۲۰ ثانیه
+        خودش به‌روز می‌شود.
+      </p>
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:manager-dashboard}}" alt="داشبورد مدیر تعمیرات"></div>
+        <figcaption>داشبورد؛ «تعداد کل شناسه‌ها» واحد اصلی کار میدانی است و صدرنشین کارت‌هاست.</figcaption>
+      </figure>
+
+      <h3>پروژه‌ها و فازها</h3>
+      <p>
+        ساخت پروژه، تعریف فاز، و تعیین پروژهٔ جاری. کار تازه همیشه به پروژهٔ جاری نسبت داده
+        می‌شود و <strong>مرز تشخیص تعمیر مجدد هم همین پروژه است</strong>.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-projects}}" alt="مدیریت پروژه‌ها و فازها"></div>
+        <figcaption>پروژه‌ها و فازها.</figcaption>
+      </figure>
+      <div class="note note--danger">
+        <b>حذف پروژه برگشت‌پذیر نیست</b>
+        <p>
+          پیش از حذف هشدار داده می‌شود. اگر <strong>هیچ پروژه‌ای باقی نماند</strong>، تشخیص تعمیر
+          مجدد از کار می‌افتد، چون مرزی برای مقایسه وجود ندارد. دست‌کم یک پروژه نگه دارید.
+        </p>
+      </div>
+
+      <h3>سفارش‌های جی‌تی‌آی</h3>
+      <p>
+        بارگذاری فایل اکسل سفارش. سامانه ستون‌ها را تشخیص می‌دهد و پیش از ورود، فهرست را برای
+        بازبینی نشان می‌دهد. شناسه‌های تکراری — یعنی شناسه‌هایی که <strong>قبلاً در هر سفارش یا
+        سالی</strong> تعمیر شده‌اند — با تاریخ و شهر و کد فرم علامت می‌خورند و
+        <strong>به‌صورت پیش‌فرض کنار گذاشته می‌شوند</strong>. هیچ سطری بدون تیک زدن شما وارد یا حذف
+        نمی‌شود.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-imports}}" alt="بارگذاری سفارش جی‌تی‌آی"></div>
+        <figcaption>سفارش‌ها و بارگذاری اکسل.</figcaption>
+      </figure>
+      <p>
+        برای داده‌های پیش از راه‌اندازی این سامانه، بخش جداگانهٔ
+        <strong>«بارگذاری داده‌های گذشته»</strong> وجود دارد که فایل‌های قدیمی با ساختار متفاوت را
+        هم می‌پذیرد.
+      </p>
+
+      <h3>شناسه‌ها</h3>
+      <p>
+        <strong>بایگانی شناسه‌ها</strong> همهٔ شناسه‌هایی است که سامانه می‌شناسد، با سابقهٔ کامل هر
+        کدام. <strong>شناسه‌های در انتظار تأیید</strong> آن‌هایی است که تکنسین در میدان پیدا کرده
+        ولی در سفارش نبوده؛ تا وقتی تأیید نکنید در همین فهرست می‌مانند.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-uids}}" alt="بایگانی شناسه‌ها"></div>
+        <figcaption>بایگانی شناسه‌ها.</figcaption>
+      </figure>
+
+      <h3>تکنسین‌ها</h3>
+      <p>
+        تأیید یا رد ثبت‌نام‌ها. <strong>تأیید همان لحظه‌ای است که کد تکنسین صادر می‌شود.</strong>
+        اگر حسابی بعداً دوباره تأیید شود، کد قبلی‌اش حفظ می‌ماند.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-approve-technician}}" alt="تأیید تکنسین"></div>
+        <figcaption>پس از تأیید، کد تکنسین در همین فهرست دیده می‌شود.</figcaption>
+      </figure>
+
+      <h3>کاتالوگ قطعات</h3>
+      <p>
+        فهرست ۳۰ قطعه، فقط برای مشاهده. این محدودیت عمدی است:
+        <strong>ترتیب قطعه‌ها همان ترتیب ستون‌های فایل خروجی جی‌تی‌آی است</strong>، و جابه‌جا کردن
+        یا حذف یک قطعه شکل همهٔ فایل‌های آینده را عوض می‌کند.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-parts}}" alt="کاتالوگ قطعات"></div>
+        <figcaption>کاتالوگ قطعات و واحد شمارش هرکدام.</figcaption>
+      </figure>
+
+      <h3>تحلیل‌ها</h3>
+      <p>
+        نرخ خرابی هر قطعه، روند کار و پیش‌بینی مصرف. عنوان اصلی این بخش
+        <strong>«درصد تعویض قطعات به استند»</strong> است: یعنی هر قطعه در چند درصد استندها تعویض شده.
+      </p>
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:manager-analytics}}" alt="تحلیل‌ها"></div>
+        <figcaption>تحلیل‌ها.</figcaption>
+      </figure>
+
+      <h3>تنظیمات</h3>
+      <p>
+        نرخ دستمزد و مدیریت شهرها. هیچ نرخی در کد ثابت نشده است. اگر دو شهر تکراری ثبت شده
+        باشد (مثلاً <span class="mono">Tehran</span> و «تهران») از همین‌جا می‌توان آن‌ها را
+        <strong>ادغام</strong> کرد.
+      </p>
+      <figure>
+        <div class="shot"><img src="{{img:manager-settings}}" alt="تنظیمات و نرخ‌ها"></div>
+        <figcaption>تنظیمات: نرخ‌ها و شهرها.</figcaption>
+      </figure>
+      <div class="note">
+        <p>
+          تغییر نرخ فقط روی کارهای <strong>بعدی</strong> اثر دارد. هر گزارش دستمزد خودش را در لحظهٔ
+          ثبت ذخیره می‌کند، پس اصلاح نرخ هرگز تاریخچه را بازنویسی نمی‌کند.
+        </p>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="rules">
+      <h2>قاعده‌هایی که سامانه خودکار اعمال می‌کند</h2>
+      <p>
+        این‌ها تصمیم‌هایی است که سامانه خودش می‌گیرد. دانستنشان جلوی خیلی از سؤال‌ها را می‌گیرد.
+      </p>
+
+      <h3>«تعمیر شد» انتخابی نیست</h3>
+      <p>
+        اگر دست‌کم یک قطعه تعویض <strong>یا</strong> تعمیر شده باشد، وضعیت «تعمیر شد» است. در غیر
+        این صورت «تعمیر نشد» و انتخاب یکی از پنج دلیل الزامی است.
+      </p>
+
+      <h3>دستمزد چند استند در یک فروشگاه</h3>
+      <p>
+        وقتی یک تکنسین در یک روز چند استند از یک فروشگاه را سرویس می‌کند، پله‌های دستمزد
+        اعمال می‌شود:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>استند</th><th>دستمزد</th></tr></thead>
+          <tbody>
+            <tr><td>اول</td><td>نرخ همان شهر (تهران نرخ جداگانه دارد)</td></tr>
+            <tr><td>دوم</td><td>نرخ استند دوم</td></tr>
+            <tr><td>سوم به بعد</td><td>نرخ استند سوم به بعد</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>بازدید بی‌نتیجه هم دستمزد دارد</h3>
+      <p>
+        هر بازدیدی که به تعمیر نرسیده، <strong>صرف‌نظر از دلیلش</strong>، نرخ ثابت «بازدید
+        بدون تعمیر» را می‌گیرد؛ تکنسین در هر صورت رفته است. چنین بازدیدی
+        <strong>یک پلهٔ دستمزد را مصرف نمی‌کند</strong>، بنابراین یک سفر بی‌نتیجه هرگز باعث
+        نمی‌شود استندی که بعداً در همان فروشگاه تعمیر می‌شود به نرخ پایین‌تر بیفتد.
+      </p>
+
+      <h3>تعمیر مجدد</h3>
+      <ul>
+        <li>معیار، <strong>تکرار در همان پروژه</strong> است، نه فاصلهٔ زمانی.</li>
+        <li>از شمارش «استندهای تعمیرشده» <strong>کنار گذاشته می‌شود</strong>، ولی قطعاتش در مصرف انبار حساب می‌شود.</li>
+        <li>اکسل و مستندات تصویری <strong>جداگانه</strong> دارد.</li>
+        <li>اگر خرابی خیلی زود (کمتر از ۱۴ روز) تکرار شود، فقط به‌عنوان <strong>نشانهٔ شدت</strong> علامت می‌خورد.</li>
+      </ul>
+
+      <h3>روزِ کاری به وقت تهران است</h3>
+      <p>
+        «امروز» در داشبورد، مستندات تصویری روزانه و بازه‌های تاریخ، همه بر مبنای ساعت تهران
+        محاسبه می‌شوند.
+      </p>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="outputs">
+      <h2>خروجی‌ها</h2>
+
+      <h3>اکسل جی‌تی‌آی</h3>
+      <p>
+        فایل استاندارد تحویل به جی‌تی‌آی. نکته‌های مهمی که باید بدانید:
+      </p>
+      <ul>
+        <li><strong>هر استند یک سطر.</strong> فروشگاهی با سه استند سه سطر با شناسهٔ یکسان می‌سازد، چون قطعات و کیفیت برای هر استند جداست.</li>
+        <li><strong>بازدیدهای بی‌نتیجه هم در فایل هستند.</strong></li>
+        <li><strong>تاریخ‌ها شمسی‌اند</strong> (مثلاً <span class="mono">۱۴۰۵/۰۶/۱۳</span>).</li>
+        <li><strong>ستون‌های قطعات فقط «تعویض» را نشان می‌دهند.</strong> قطعهٔ تعمیرشده در آن ستون‌ها صفر است و در ستون شرح توضیح داده می‌شود.</li>
+        <li>دو نوار SMD در فایل هم <strong>سانتی‌متر</strong> هستند، نه تعداد.</li>
+      </ul>
+      <p>رنگ سطرها معنا دارد و برگهٔ راهنما هم داخل فایل هست:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>رنگ</th><th>یعنی</th></tr></thead>
+          <tbody>
+            <tr><td>قرمز</td><td>تعمیر نشده</td></tr>
+            <tr><td>آبی</td><td>یکی از چند استند همان شناسه</td></tr>
+            <tr><td>کرم</td><td>این شناسه در پروژه‌ای قبلی هم تعمیر شده بود</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <div class="shot"><img src="{{img:manager-exports}}" alt="بخش خروجی‌ها"></div>
+        <figcaption>خروجی‌ها: اکسل جی‌تی‌آی و گزارش مصرف قطعات.</figcaption>
+      </figure>
+
+      <h3>مستندات تصویری</h3>
+      <p>
+        فایل PDF روزانه به تفکیک شهر، شامل عکس‌ها و امضاها. در این فایل
+        <strong>فقط کد تکنسین درج می‌شود، نه نامش</strong>.
+      </p>
+
+      <h3>گزارش مصرف قطعات</h3>
+      <p>
+        برای حسابداری. <strong>فقط قطعات تعویض‌شده</strong> به‌عنوان مصرف انبار شمرده می‌شوند؛
+        قطعه‌ای که سر جایش تعمیر شده مصرفی نداشته است.
+      </p>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <section id="faq">
+      <h2>پرسش‌های پرتکرار</h2>
+
+      <h4>فروشگاه سه استند دارد. سه شناسه وارد کنم؟</h4>
+      <p>نه. یک شناسه وارد کنید و از زبانه‌های بالای فرم برای هر استند یک بخش پر کنید.</p>
+
+      <h4>شناسه‌ای که روی استند نوشته در سامانه نیست.</h4>
+      <p>
+        «ثبت به‌هرحال» را بزنید و گزارش را کامل کنید. شناسه به فهرست
+        «شناسه‌های در انتظار تأیید» مدیر می‌رود. کار شما از بین نمی‌رود.
+      </p>
+
+      <h4>گزارش را اشتباه ثبت کردم.</h4>
+      <p>
+        تکنسین نمی‌تواند گزارش ثبت‌شده را پاک یا اصلاح کند. به مدیر تعمیرات بگویید؛ مدیر
+        امکان اصلاح و حذف فرم را دارد.
+      </p>
+
+      <h4>چرا نمرهٔ کیفیت را نمی‌پرسد؟</h4>
+      <p>چون هیچ قطعه‌ای ثبت نکرده‌اید. در این حالت به‌جای کیفیت، دلیل عدم تعمیر خواسته می‌شود.</p>
+
+      <h4>عدد SMD را ۷۰ زدم و قبول نکرد.</h4>
+      <p>نوارهای SMD فقط در پله‌های ۵۰ تایی ثبت می‌شوند: ۵۰، ۱۰۰، ۱۵۰ … عدد ۷۰ معتبر نیست.</p>
+
+      <h4>داشبورد هنوز عددهای سفارش حذف‌شده را نشان می‌دهد.</h4>
+      <p>فیلتر بالای صفحه را بررسی کنید و «اعمال فیلتر» را بزنید. صفحه هر ۲۰ ثانیه هم خودش تازه می‌شود.</p>
+
+      <h4>رمز عبورم را فراموش کرده‌ام.</h4>
+      <p>بازیابی خودکار رمز وجود ندارد. با مدیر تعمیرات تماس بگیرید.</p>
+
+      <h4>می‌شود بدون اینترنت کار کرد؟</h4>
+      <p>
+        فعلاً نه. برنامه روی گوشی نصب می‌شود و سریع بالا می‌آید، ولی ثبت گزارش به اینترنت
+        نیاز دارد.
+      </p>
+    </section>
+
+    <footer class="page-foot">
+      <p>
+        این راهنما بر اساس نسخهٔ جاری سامانه نوشته شده و تصویرهای آن مستقیماً از خودِ برنامه
+        گرفته شده‌اند. برای سؤال‌های فنی یا دسترسی، با مدیر تعمیرات هماهنگ کنید.
+      </p>
+    </footer>
+  </main>
+</div>
