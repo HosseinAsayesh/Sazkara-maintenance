@@ -259,16 +259,20 @@
      step done out of order is a real mistake. Reference sections are not
      numbered, because their order carries nothing. */
   .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.6rem; counter-reset: step; }
+  /* The marker is positioned, not a grid column. As a two-column grid whose marker
+     spanned two rows, every child after the first two wrapped back into the 2rem
+     marker column — which set whole paragraphs one word per line. */
   .steps > li {
     counter-increment: step;
-    display: grid;
-    grid-template-columns: 2rem minmax(0, 1fr);
-    gap: 0 .95rem;
+    position: relative;
+    padding-inline-start: 2.95rem;
     margin: 0;
   }
   .steps > li::before {
     content: counter(step, persian);
-    grid-row: span 2;
+    position: absolute;
+    inset-inline-start: 0;
+    top: .15rem;
     width: 2rem;
     height: 2rem;
     border-radius: 999px;
@@ -710,10 +714,18 @@
       </ol>
 
       <figure>
-        <div class="shot shot--tall"><img src="{{img:technician-stand-tabs}}" alt="فرم تعمیر با زبانه‌های استند"></div>
+        <div class="shot"><img src="{{img:technician-tabs-closeup}}" alt="زبانه‌های استند و جعبهٔ قطعات تعویض‌شده"></div>
         <figcaption>
-          فرم کامل تعمیر، با زبانه‌های استند در بالای بخش قطعات.
-          <span class="scrollhint">— برای دیدن ادامهٔ فرم داخل همین کادر اسکرول کنید.</span><span class="print-note">— این تصویر بریده‌ای از فرم است؛ تصویر کامل در نسخهٔ HTML راهنما دیده می‌شود.</span>
+          زبانه‌های استند. زبانهٔ فعال تیره است و زیر هرکدام نوشته شده که پر شده یا نه.
+          پایین‌تر، جعبهٔ «قطعات تعویض‌شده» با کادر نارنجی از جعبهٔ «قطعات تعمیرشده» جدا می‌شود.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot shot--tall"><img src="{{img:technician-stand-tabs}}" alt="نمای کامل فرم تعمیر"></div>
+        <figcaption>
+          نمای کامل فرم، از شناسهٔ فروشگاه تا امضاها.
+          <span class="scrollhint">— برای دیدن ادامهٔ فرم داخل همین کادر اسکرول کنید.</span><span class="print-note">— در نسخهٔ چاپی فقط ابتدای فرم دیده می‌شود؛ تصویر کامل در نسخهٔ HTML راهنماست.</span>
         </figcaption>
       </figure>
 

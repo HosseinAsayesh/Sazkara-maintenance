@@ -57,13 +57,13 @@ async function shot(page: Page, name: string, fullPage = false) {
  * fast enough, since Next streams the shell first and fills it in.
  */
 async function go(page: Page, url: string) {
-  await page.goto(`${BASE}${url}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.waitForSelector('main, form', { timeout: 60_000 }).catch(() => null);
+  await page.goto(`${BASE}${url}`, { waitUntil: 'domcontentloaded', timeout: 300_000 });
+  await page.waitForSelector('main, form', { timeout: 120_000 }).catch(() => null);
   await new Promise((r) => setTimeout(r, 1200));
 }
 
 const settle = (page: Page) =>
-  page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 120_000 }).catch(() => null);
+  page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 300_000 }).catch(() => null);
 
 /** Each role gets its own context; one shared cookie jar would sign them over each other. */
 async function newPage(context: BrowserContext, viewport = DESKTOP) {
@@ -221,6 +221,45 @@ async function captureTechnician(context: BrowserContext, uid: string | null) {
   if (added) {
     await new Promise((r) => setTimeout(r, 600));
     await shot(page, 'technician-stand-tabs', true);
+
+    /*
+     * A close-up of just the tab strip and the box below it.
+     *
+     * The full-page shot is over 9000px tall, which is fine on screen inside a scroll
+     * box but cannot be printed — capping it at a page height slices whatever happens
+     * to be there. Measuring the real element instead means the printed crop always
+     * frames the thing the surrounding text is explaining, whatever the layout does
+     * later.
+     */
+    const box = await page.evaluate(() => {
+      const strip = [...document.querySelectorAll('div')].find((el) => {
+        const buttons = el.querySelectorAll(':scope > button');
+        return (
+          buttons.length >= 2 &&
+          [...buttons].some((b) => b.textContent?.includes('افزودن'))
+        );
+      });
+      if (!strip) return null;
+      const r = strip.getBoundingClientRect();
+      return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height };
+    });
+
+    if (box) {
+      const pad = 12;
+      await page.screenshot({
+        path: path.join(OUT, 'technician-tabs-closeup.png') as `${string}.png`,
+        clip: {
+          x: Math.max(0, box.x - pad),
+          y: Math.max(0, box.y - pad),
+          width: box.width + pad * 2,
+          // Enough below the strip to carry the first parts box into frame.
+          height: box.height + 520,
+        },
+      });
+      console.log('  ✓ technician-tabs-closeup.png (clipped to the tab strip)');
+    } else {
+      console.log('  ! could not locate the tab strip — close-up skipped');
+    }
   }
 
   await page.close();
