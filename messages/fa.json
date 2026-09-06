@@ -146,9 +146,9 @@
       "estimatedWage": "دستمزد برآوردی"
     },
     "previousProjectNotice": "این استند در پروژه‌ی قبلی تعمیر شده است. این گزارش تعمیر مجدد محسوب نمی‌شود و در خروجی اصلی می‌آید.",
-    "standRepairedOn": "استند {n} در تاریخ {date}",
-    "standsAtStore": "این فروشگاه {n} استند دارد",
-    "standLabel": "استند {n}"
+    "standRepairedOn": "استند {n, number} در تاریخ {date}",
+    "standsAtStore": "این فروشگاه {n, number} استند دارد",
+    "standLabel": "استند {n, number}"
   },
   "form": {
     "title": "فرم تعمیر استند",
@@ -210,21 +210,21 @@
       "invalidQuantity": "تعداد یکی از قطعات معتبر نیست.",
       "uidRequired": "شناسه استند الزامی است",
       "submitFailed": "ثبت گزارش ناموفق بود",
-      "extraUidRequired": "شناسه‌ی استند {n} را وارد کنید."
+      "extraUidRequired": "شناسه‌ی استند {n, number} را وارد کنید."
     },
     "secondStand": "استند دیگر در همین فروشگاه",
     "addStand": "افزودن استند دیگر",
     "removeStand": "حذف این استند",
-    "standNumber": "استند {n}",
+    "standNumber": "استند {n, number}",
     "primaryStand": "استند اصلی",
     "extraStandHelp": "اگر این فروشگاه بیش از یک استند دارد، شناسه و اطلاعات تعمیر هر کدام را جداگانه اینجا وارد کنید.",
     "replacedSection": "قطعات تعویض‌شده",
     "repairedSection": "قطعات تعمیر‌شده",
     "cmHint": "بر حسب سانتی‌متر (گام ۵۰)",
-    "sharedUidNote": "استند {n} از همین شناسه ({uid}) — شناسه‌ی جداگانه ندارد.",
+    "sharedUidNote": "استند {n, number} از همین شناسه ({uid}) — شناسه‌ی جداگانه ندارد.",
     "sectionStorePhoto": "عکس فروشگاه",
     "standPhotosHelp": "عکس قبل و بعد همین استند",
-    "standCount": "{n} استند",
+    "standCount": "{n, number} استند",
     "standReady": "تکمیل شده",
     "standIncomplete": "هنوز پر نشده"
   },

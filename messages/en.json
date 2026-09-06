@@ -146,9 +146,9 @@
       "estimatedWage": "Estimated wage"
     },
     "previousProjectNotice": "This stand was repaired in an earlier project. This report is not a re-repair and goes in the main export.",
-    "standRepairedOn": "stand {n} on {date}",
-    "standsAtStore": "This store has {n} stands",
-    "standLabel": "Stand {n}"
+    "standRepairedOn": "stand {n, number} on {date}",
+    "standsAtStore": "This store has {n, number} stands",
+    "standLabel": "Stand {n, number}"
   },
   "form": {
     "title": "Stand repair form",
@@ -210,18 +210,18 @@
       "invalidQuantity": "One of the part quantities is not valid.",
       "uidRequired": "A stand UID is required",
       "submitFailed": "Could not submit the report",
-      "extraUidRequired": "Enter the UID for stand {n}."
+      "extraUidRequired": "Enter the UID for stand {n, number}."
     },
     "secondStand": "Another stand at this store",
     "addStand": "Add another stand",
     "removeStand": "Remove this stand",
-    "standNumber": "Stand {n}",
+    "standNumber": "Stand {n, number}",
     "primaryStand": "Primary stand",
     "extraStandHelp": "If this store has more than one stand, enter each UID and its repair details separately here.",
     "replacedSection": "Replaced parts",
     "repairedSection": "Repaired parts",
     "cmHint": "in centimetres (steps of 50)",
-    "sharedUidNote": "Stand {n} at the same UID ({uid}) — it has no separate UID.",
+    "sharedUidNote": "Stand {n, number} at the same UID ({uid}) — it has no separate UID.",
     "sectionStorePhoto": "Store photo",
     "standPhotosHelp": "Before and after photos of THIS stand",
     "standCount": "{n, plural, one {# stand} other {# stands}}",
