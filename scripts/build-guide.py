@@ -22,9 +22,14 @@ import sys
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE = os.path.join(ROOT, 'docs', 'guide-fa.template.html')
 IMAGES = os.path.join(ROOT, 'docs', 'images')
-OUTPUT = os.path.join(ROOT, 'docs', 'guide-fa.html')
+
+# Two documents share this builder: the user guide and the case for replacing the paper
+# workflow. Both are single self-contained files for the same reason — they get emailed.
+DOCUMENTS = {
+    'guide': ('guide-fa.template.html', 'guide-fa.html'),
+    'case': ('case-fa.template.html', 'case-fa.html'),
+}
 
 MAX_WIDTH = 720
 COLORS = 200
@@ -46,16 +51,20 @@ def encode(name: str) -> str:
     return f'data:image/png;base64,{data}', buffer.tell(), os.path.getsize(path)
 
 
-def main() -> None:
-    html = io.open(TEMPLATE, encoding='utf-8').read()
+def build(name: str) -> None:
+    template_name, output_name = DOCUMENTS[name]
+    template = os.path.join(ROOT, 'docs', template_name)
+    output = os.path.join(ROOT, 'docs', output_name)
+
+    html = io.open(template, encoding='utf-8').read()
 
     used, before, after = [], 0, 0
 
     def replace(match: 're.Match[str]') -> str:
         nonlocal before, after
-        name = match.group(1)
-        uri, packed, original = encode(name)
-        used.append(name)
+        image_name = match.group(1)
+        uri, packed, original = encode(image_name)
+        used.append(image_name)
         before += original
         after += packed
         return uri
@@ -66,16 +75,20 @@ def main() -> None:
     if leftover:
         raise SystemExit(f'unresolved placeholders: {sorted(set(leftover))}')
 
-    io.open(OUTPUT, 'w', encoding='utf-8', newline='\n').write(html)
+    io.open(output, 'w', encoding='utf-8', newline='\n').write(html)
 
-    size = os.path.getsize(OUTPUT)
-    print(f'{len(used)} screenshots inlined')
+    size = os.path.getsize(output)
+    print(f'{name}: {len(used)} screenshots inlined')
     print(f'  images {before / 1024 / 1024:.2f} MB -> {after / 1024 / 1024:.2f} MB')
-    print(f'  {os.path.relpath(OUTPUT, ROOT)}  {size / 1024 / 1024:.2f} MB')
+    print(f'  {os.path.relpath(output, ROOT)}  {size / 1024 / 1024:.2f} MB')
 
     # The Artifact ceiling is 16 MB for the rendered page.
     if size > 15 * 1024 * 1024:
         print('  ! close to the 16 MB publish limit', file=sys.stderr)
 
 
-main()
+targets = sys.argv[1:] or list(DOCUMENTS)
+for target in targets:
+    if target not in DOCUMENTS:
+        raise SystemExit(f'unknown document "{target}" — expected one of {", ".join(DOCUMENTS)}')
+    build(target)

@@ -1,0 +1,528 @@
+<title>از کاغذ تا سامانه</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Same palette as the product and the user guide — this is a Sazkara document and is
+     read beside both. The structure is what differs: the guide is a reference with a
+     contents rail, this is an argument read top to bottom. */
+  :root {
+    --canvas: #f5f6f6;
+    --surface: #ffffff;
+    --sunken: #fafbfb;
+    --border: #e4e6e6;
+    --border-strong: #d2d4d5;
+
+    --ink: #232426;
+    --ink-soft: #58595b;
+    --ink-muted: #6e7072;
+
+    --teal: #3c6c6c;
+    --teal-bright: #8ebebe;
+    --teal-tint: #dcebeb;
+    --teal-wash: #f0f7f7;
+
+    --amber: #b45309;
+    --amber-wash: #fdf4e7;
+
+    --band-bg: #232426;
+    --band-fg: #ffffff;
+    --band-dim: #b4b6b8;
+
+    --measure: 66ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --canvas: #191a1b;
+      --surface: #232426;
+      --sunken: #1f2021;
+      --border: #343537;
+      --border-strong: #434446;
+
+      --ink: #ecedee;
+      --ink-soft: #c2c4c5;
+      --ink-muted: #9a9c9e;
+
+      --teal: #a6cdcd;
+      --teal-tint: #24393a;
+      --teal-wash: #1d2b2c;
+
+      --amber: #e0a561;
+      --amber-wash: #2e2415;
+
+      --band-bg: #121314;
+      --band-dim: #a8aaac;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --canvas: #191a1b;
+    --surface: #232426;
+    --sunken: #1f2021;
+    --border: #343537;
+    --border-strong: #434446;
+
+    --ink: #ecedee;
+    --ink-soft: #c2c4c5;
+    --ink-muted: #9a9c9e;
+
+    --teal: #a6cdcd;
+    --teal-tint: #24393a;
+    --teal-wash: #1d2b2c;
+
+    --amber: #e0a561;
+    --amber-wash: #2e2415;
+
+    --band-bg: #121314;
+    --band-dim: #a8aaac;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Vazirmatn', Tahoma, 'Segoe UI', 'Noto Naskh Arabic', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.95;
+    direction: rtl;
+  }
+
+  .mono, .fig { font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  .wrap { max-width: 58rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ── opening ──────────────────────────────────────────────────────── */
+  .hero {
+    background: var(--band-bg);
+    color: var(--band-fg);
+    padding: 3.4rem 0 3rem;
+  }
+  .hero .eyebrow {
+    font-size: .74rem;
+    letter-spacing: .1em;
+    color: var(--teal-bright);
+    margin-bottom: .9rem;
+  }
+  .hero h1 {
+    margin: 0;
+    font-size: clamp(1.9rem, 1.3rem + 2.4vw, 2.7rem);
+    font-weight: 800;
+    line-height: 1.4;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .hero .rule { width: 46px; height: 3px; background: var(--teal-bright); margin: 1.4rem 0 1.1rem; }
+  .hero p {
+    margin: 0;
+    max-width: 52ch;
+    color: var(--band-dim);
+    font-size: 1rem;
+    line-height: 1.95;
+  }
+
+  main { padding: 2.8rem 0 4rem; }
+  section { margin-bottom: 3.4rem; max-width: var(--measure); }
+  section.wide { max-width: none; }
+
+  h2 {
+    margin: 0 0 1rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+  h3 { margin: 0 0 .5rem; font-size: 1.02rem; font-weight: 600; }
+  p { margin: 0 0 1rem; }
+  ul { margin: 0 0 1rem; padding-inline-start: 1.25rem; }
+  li { margin-bottom: .4rem; }
+  li::marker { color: var(--ink-muted); }
+  strong { font-weight: 600; }
+
+  .lede { font-size: 1.06rem; line-height: 2.05; color: var(--ink-soft); }
+
+  /* ── the comparison, which IS the document ─────────────────────────
+     Paired blocks rather than a table: each pair is a claim and its evidence,
+     and they read as prose on a phone where a two-column table would not. */
+  .pairs { display: grid; gap: 1.1rem; }
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  @media (max-width: 40rem) { .pair { grid-template-columns: 1fr; } }
+  .pair > div { background: var(--surface); padding: 1rem 1.15rem; }
+  .pair .then { background: var(--sunken); }
+  .pair .label {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    margin-bottom: .5rem;
+  }
+  .pair .then .label { color: var(--ink-muted); }
+  .pair .now .label { color: var(--teal); }
+  .pair p { margin: 0; font-size: .93rem; line-height: 1.85; }
+  .pair .then p { color: var(--ink-muted); }
+
+  .claim {
+    margin: 2.2rem 0 .8rem;
+    font-size: 1.08rem;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+  .claim:first-of-type { margin-top: 0; }
+
+  /* ── figures pulled out of the evidence ───────────────────────────── */
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 1.4rem 0;
+  }
+  .figures > div { background: var(--surface); padding: 1.1rem 1.15rem; }
+  .figures .n {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--teal);
+  }
+  .figures .n.warn { color: var(--amber); }
+  .figures .k { font-size: .78rem; color: var(--ink-muted); line-height: 1.7; margin-top: .15rem; }
+
+  .note {
+    border-inline-start: 3px solid var(--teal-bright);
+    background: var(--teal-wash);
+    border-radius: 0 8px 8px 0;
+    padding: .9rem 1.15rem;
+    margin: 1.3rem 0;
+    font-size: .94rem;
+  }
+  .note.warn { border-inline-start-color: var(--amber); background: var(--amber-wash); }
+  .note b { display: block; margin-bottom: .25rem; font-weight: 600; }
+  .note p:last-child { margin-bottom: 0; }
+
+  /* ── questions ────────────────────────────────────────────────────── */
+  .qa { border-top: 1px solid var(--border); }
+  .qa > div { border-bottom: 1px solid var(--border); padding: 1.05rem 0; }
+  .qa h3 { margin: 0 0 .35rem; font-size: .98rem; }
+  .qa p { margin: 0; color: var(--ink-soft); font-size: .94rem; }
+
+  figure { margin: 1.5rem 0; max-width: none; }
+  .shot {
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--sunken);
+    overflow: hidden;
+  }
+  .shot--tall { max-height: 26rem; overflow-y: auto; }
+  .shot img { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: .5rem; font-size: .82rem; color: var(--ink-muted); line-height: 1.8; }
+
+  .close {
+    background: var(--band-bg);
+    color: var(--band-fg);
+    border-radius: 14px;
+    padding: 1.8rem 1.6rem;
+    margin-top: 1rem;
+  }
+  .close h2 { color: var(--band-fg); margin-bottom: .7rem; }
+  .close p { color: var(--band-dim); margin-bottom: 0; max-width: 56ch; }
+
+  footer { margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1.4rem; font-size: .82rem; color: var(--ink-muted); }
+
+  .print-note { display: none; }
+  @media print {
+    .shot--tall { max-height: 150mm; }
+    .print-note { display: inline; }
+    .scrollhint { display: none; }
+    figure, .note, .pair, .figures { break-inside: avoid; }
+    h2, .claim { break-after: avoid; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">سامانه نگهداری سازکارا</div>
+    <h1>از فرم کاغذی تا سامانه‌ای که خودش حساب می‌کند</h1>
+    <div class="rule"></div>
+    <p>
+      این سند برای کسی نوشته شده که می‌پرسد «مگر روش قبلی چه مشکلی داشت؟». پاسخ با
+      نمونه‌ی واقعی از پرونده‌های خودِ شما داده شده است، نه با ادعای کلی.
+    </p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>خلاصه در پنج خط</h2>
+    <p class="lede">
+      روش قبلی کار را <strong>دو بار</strong> ثبت می‌کرد: یک بار روی کاغذ در فروشگاه و یک بار
+      دستی در اکسل. هر بار ثبت، یک فرصت برای خطا بود و هیچ‌کدام قابل بازبینی نبود. این سامانه
+      همان کار را <strong>یک بار</strong> و در محل ثبت می‌کند، خروجی استاندارد جی‌تی‌آی را
+      خودش می‌سازد، و به سؤال‌هایی پاسخ می‌دهد که روش قبلی اصلاً نمی‌توانست پاسخ دهد —
+      مثل «از این سفارش چه چیزی باقی مانده؟».
+    </p>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>هزینه‌ی واقعی روش قبلی</h2>
+    <p>
+      مشکل روش کاغذی «کند بودن» نبود؛ مشکل این بود که <strong>اطلاعات پس از ثبت، مرده بود</strong>.
+      یک برگه در زونکن و یک سطر در اکسل، هیچ‌کدام به شما نمی‌گفتند وضعیت کل پروژه چیست.
+    </p>
+    <ul>
+      <li><strong>ورود دوباره‌ی اطلاعات.</strong> هر فرم دو بار نوشته می‌شد؛ زمانِ صرف‌شده دو برابر و احتمال خطا دو برابر.</li>
+      <li><strong>خطاها دیده نمی‌شدند.</strong> یک عدد اشتباه در ستون قطعات، تا زمان صورتحساب کشف نمی‌شد — اگر اصلاً می‌شد.</li>
+      <li><strong>پیشرفت پروژه فقط در پایان معلوم می‌شد.</strong> تا وقتی همه‌ی برگه‌ها جمع و وارد نشده بودند، هیچ عددی وجود نداشت.</li>
+      <li><strong>هیچ مدرکی برای کار انجام‌شده نبود.</strong> جز امضای روی کاغذ، تصویری از وضعیت قبل و بعد وجود نداشت.</li>
+      <li><strong>دستمزد محل اختلاف بود.</strong> پله‌های دستمزد دستی حساب می‌شد و هیچ سابقه‌ای از نرخِ لحظه‌ی ثبت نمی‌ماند.</li>
+    </ul>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section class="wide">
+    <h2>هفت تفاوتی که در عمل حس می‌شود</h2>
+
+    <div class="claim">۱. کار یک بار ثبت می‌شود، نه دو بار</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>تکنسین فرم کاغذی را پر می‌کرد؛ بعداً کسی در دفتر همان اطلاعات را دستی وارد اکسل می‌کرد.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>تکنسین همان‌جا با گوشی ثبت می‌کند. فایل اکسل جی‌تی‌آی از همان داده ساخته می‌شود؛ کسی چیزی را بازتایپ نمی‌کند.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="claim">۲. خطاهایی که کاغذ نمی‌تواند بگیرد</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>«تعمیر شد» را تکنسین خودش تیک می‌زد، حتی اگر هیچ قطعه‌ای ثبت نکرده بود. نوار SMD گاهی ۷۰ سانتی‌متر نوشته می‌شد که در انبار وجود ندارد.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>وضعیت «تعمیر شد» <strong>انتخابی نیست</strong> و از روی قطعات تعیین می‌شود. نوار SMD فقط در پله‌های ۵۰ تایی پذیرفته می‌شود. اگر تعمیری نشده باشد، ذکر دلیل اجباری است.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="claim">۳. «از این سفارش چه چیزی باقی مانده؟»</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>باید فایل سفارش را کنار گزارش‌ها می‌گذاشتید و شناسه‌ها را دستی تطبیق می‌دادید. با ۱۰۰ شناسه، پیدا کردن آن ۵ موردِ انجام‌نشده یک بعدازظهر کار بود.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>روی عدد «باقی‌مانده» در داشبورد می‌زنید و فهرست همان شناسه‌ها با نام فروشگاه، شهر و فاز باز می‌شود. یک کلیک.</p>
+        </div>
+      </div>
+    </div>
+
+
+    <figure>
+      <div class="shot shot--tall"><img src="{{img:technician-tabs-closeup}}" alt="فرم تعمیر روی گوشی"></div>
+      <figcaption>
+        فرم تکنسین روی گوشی: هر استندِ یک فروشگاه زبانه‌ی خودش را دارد، و قطعات
+        «تعویض‌شده» و «تعمیرشده» دو جعبه‌ی مستقل‌اند — چون فقط اولی مصرف انبار است.
+      </figcaption>
+    </figure>
+
+    <div class="claim">۴. تعمیر مجدد دیگر پنهان نیست</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>اگر استندی در یک کمپین دو بار تعمیر می‌شد، دو سطر جداگانه در اکسل بود و کسی متوجه نمی‌شد؛ یعنی دو بار هم به‌عنوان «تعمیر موفق» شمرده می‌شد.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>تکرار در همان پروژه خودکار تشخیص داده می‌شود، از شمارش «تعمیر شده» کنار می‌رود، و اکسل و مستندات جداگانه‌ی خودش را دارد. قطعاتش اما در مصرف انبار می‌ماند.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="claim">۵. دستمزد بدون اختلاف</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>پله‌های دستمزد (استند اول، دوم، سوم) دستی حساب می‌شد. اگر نرخی تغییر می‌کرد، معلوم نبود کار قدیمی با کدام نرخ حساب شده است.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>پله‌ها خودکار و بر مبنای ترتیب سرویس در همان روز اعمال می‌شود؛ تهران نرخ جداگانه دارد. هر گزارش <strong>دستمزد لحظه‌ی ثبت خود را ذخیره می‌کند</strong>، پس تغییر نرخ هرگز تاریخچه را بازنویسی نمی‌کند.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>بازدید بی‌نتیجه هم دستمزد دارد</b>
+      <p>
+        اگر فروشگاه تعطیل بود یا اجازه ندادند، تکنسین در هر صورت رفته است و نرخ ثابت آن بازدید
+        را می‌گیرد. مهم‌تر: چنین بازدیدی یک پله‌ی دستمزد را مصرف نمی‌کند، پس یک سفر بی‌نتیجه
+        باعث نمی‌شود استندی که بعداً در همان فروشگاه تعمیر می‌شود به نرخ پایین‌تر بیفتد.
+      </p>
+    </div>
+
+    <div class="claim">۶. مدرک، به‌جای ادعا</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>تنها مدرک، امضای روی برگه بود. اگر فروشگاه ادعا می‌کرد کاری انجام نشده، چیزی برای نشان دادن نبود.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>هر استند عکس قبل و بعدِ خودش را دارد، به‌علاوه عکس فروشگاه و امضای مدیر فروشگاه. خروجی PDF روزانه به تفکیک شهر آماده‌ی تحویل است.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="claim">۷. خروجی استاندارد، بدون بازتایپ</div>
+    <div class="pairs">
+      <div class="pair">
+        <div class="then">
+          <div class="label">روش قبلی</div>
+          <p>فایل تحویلی دستی ساخته و قالب‌بندی می‌شد؛ هر بار احتمال جابه‌جایی ستون‌ها وجود داشت.</p>
+        </div>
+        <div class="now">
+          <div class="label">با سامانه</div>
+          <p>فایل با ساختار ثابت ساخته می‌شود، تاریخ‌ها شمسی، سطرها رنگ‌بندی‌شده (قرمز: تعمیر نشده، آبی: استند دوم همان شناسه، کرم: سابقه در پروژه‌ی قبلی) و یک برگه‌ی راهنما داخل خود فایل.</p>
+        </div>
+      </div>
+    </div>
+
+    <figure>
+      <div class="shot"><img src="{{img:manager-exports}}" alt="بخش خروجی‌ها"></div>
+      <figcaption>خروجی‌ها: فایل جی‌تی‌آی و گزارش مصرف قطعات برای حسابداری.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section class="wide">
+    <h2>شواهد، از داده‌های خودِ شما</h2>
+    <p>
+      این ادعا نیست. دو فایل سفارش واقعی <span class="mono">PO(1164)</span> — تهران و رشت —
+      وارد سامانه شد. آنچه در آن‌ها بود:
+    </p>
+
+    <div class="figures">
+      <div><div class="n">۱٬۲۶۵</div><div class="k">سطر گزارش در دو فایل</div></div>
+      <div><div class="n">۱٬۱۶۱</div><div class="k">تعمیر موفق</div></div>
+      <div><div class="n warn">۱۰۴</div><div class="k">بازدید بدون تعمیر</div></div>
+      <div><div class="n">۹۱٫۸٪</div><div class="k">نرخ موفقیت واقعی</div></div>
+    </div>
+
+    <p>
+      آن ۱۰۴ مورد در فایل‌های شما <strong>ثبت شده بود</strong> — هر کدام با دلیلش، در ستون‌های
+      انتهایی. اما هیچ‌کس آن‌ها را جمع نمی‌زد. یعنی نرخ موفقیت واقعی این کمپین
+      <strong>۹۱٫۸٪</strong> بود، نه ۱۰۰٪؛ و ۱۰۴ فروشگاه بدون نتیجه ترک شده بود بدون آنکه
+      فهرستی از آن‌ها وجود داشته باشد.
+    </p>
+
+    <div class="note warn">
+      <b>دلیل‌ها هم شمرده می‌شوند</b>
+      <p>
+        از همان ۱۰۴ مورد: تقاضای تعویض استند ۳۷، عدم صدور اجازه ۲۳، استند سالم ۱۷،
+        تغییر کاربری ۱۲، وضعیت نامساعد ۶، عدم امکان تعمیر ۵، آدرس اشتباه ۲، تعطیل ۲.
+        این تفکیک تصمیم‌ساز است: «تقاضای تعویض استند» یعنی سفارش ساخت، نه تعمیر.
+      </p>
+    </div>
+
+    <p>
+      همچنین در همین بررسی مشخص شد یکی از اقلام کاتالوگ با نام اشتباه ثبت شده بود
+      («درب» به‌جای «پک هواکش»)، که یعنی مصرف آن قطعه سال‌ها به نام قطعه‌ی دیگری نوشته می‌شد.
+      در روش کاغذی چنین خطایی هرگز خودش را نشان نمی‌داد.
+    </p>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>سؤال‌هایی که معمولاً پرسیده می‌شود</h2>
+    <div class="qa">
+      <div>
+        <h3>تکنسین‌ها باید آموزش ببینند؟</h3>
+        <p>کل کار تکنسین دو صفحه است: وارد کردن شناسه، و پر کردن فرم. ترتیب فرم همان ترتیب کار در فروشگاه است. راهنمای فارسی جداگانه‌ای هم برای همین وجود دارد.</p>
+      </div>
+      <div>
+        <h3>اگر تکنسین گوشی هوشمند نداشته باشد؟</h3>
+        <p>هر گوشی با مرورگر کافی است؛ برنامه‌ای برای نصب از استور لازم نیست. می‌توان آن را روی صفحه‌ی اصلی گوشی نصب کرد تا مثل یک اپلیکیشن باز شود.</p>
+      </div>
+      <div>
+        <h3>اگر در فروشگاه اینترنت ضعیف باشد؟</h3>
+        <p>ثبت گزارش به اینترنت نیاز دارد. صفحه‌ها و تصاویر برنامه روی گوشی ذخیره می‌شوند و سریع باز می‌شوند، اما فرم باید در لحظه‌ی اتصال ثبت شود. ثبت آفلاین در دست بررسی است.</p>
+      </div>
+      <div>
+        <h3>داده‌ها کجا می‌ماند؟</h3>
+        <p>روی سرور خودتان، در پایگاه‌داده‌ی خودتان. عکس‌ها و فایل‌ها بیرون از پوشه‌ی عمومی نگهداری می‌شوند و فقط با ورود به حساب کاربری قابل دسترسی‌اند.</p>
+      </div>
+      <div>
+        <h3>سابقه‌ی سال‌های قبل از بین می‌رود؟</h3>
+        <p>خیر. فایل‌های اکسل قدیمی — با ساختار متفاوتشان — قابل بارگذاری‌اند و در آمار و تحلیل‌ها لحاظ می‌شوند. همان کاری که برای <span class="mono">PO(1164)</span> انجام شد.</p>
+      </div>
+      <div>
+        <h3>اگر گزارشی اشتباه ثبت شود؟</h3>
+        <p>تکنسین نمی‌تواند گزارش ثبت‌شده را تغییر دهد؛ مدیر تعمیرات می‌تواند اصلاح یا حذف کند. این مرز عمدی است تا سابقه قابل اتکا بماند.</p>
+      </div>
+      <div>
+        <h3>چه چیزی جای فرم کاغذی را برای فروشگاه می‌گیرد؟</h3>
+        <p>امضای مدیر فروشگاه روی صفحه‌ی گوشی گرفته می‌شود و در مستندات تصویری همان بازدید ذخیره می‌ماند.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>آنچه هنوز انجام نمی‌دهد</h2>
+    <p>
+      برای اینکه انتظارها درست بماند، این‌ها را صریح می‌گوییم:
+    </p>
+    <ul>
+      <li><strong>ثبت آفلاین ندارد.</strong> فرم باید با اتصال اینترنت ثبت شود.</li>
+      <li><strong>بازیابی رمز با پیامک ندارد.</strong> رمز را مدیر تعمیرات تنظیم می‌کند.</li>
+      <li><strong>کاتالوگ قطعات فقط خواندنی است.</strong> این عمدی است: ترتیب قطعه‌ها همان ترتیب ستون‌های فایل جی‌تی‌آی است و جابه‌جایی آن، شکل همه‌ی فایل‌های آینده را عوض می‌کند.</li>
+      <li><strong>انتخاب بازه‌ی تاریخ میلادی است</strong> (نمایش و خروجی شمسی است).</li>
+    </ul>
+    <p>
+      هیچ‌کدام از این‌ها مانع کار روزمره نیست، و هر کدام در صورت نیاز قابل افزودن است.
+    </p>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── -->
+  <section class="wide">
+    <div class="close">
+      <h2>جمع‌بندی</h2>
+      <p>
+        روش قبلی کار را ثبت می‌کرد؛ این سامانه کار را <strong>قابل مدیریت</strong> می‌کند.
+        تفاوت در سرعت تایپ نیست — در این است که وقتی مدیر می‌پرسد «چند تا مانده و کدام‌ها؟»،
+        «چرا این استند دوباره خراب شد؟» یا «امسال چند ترانس مصرف کردیم؟»، پاسخ در چند ثانیه
+        روی صفحه است، نه در زونکن.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    عددهای این سند از بارگذاری واقعی دو فایل سفارش <span class="mono">PO(1164)</span>
+    (تهران و رشت) در سامانه به دست آمده‌اند و تصویرها از خودِ برنامه گرفته شده‌اند.
+  </footer>
+</main>

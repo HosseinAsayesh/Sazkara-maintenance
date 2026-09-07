@@ -20,8 +20,20 @@ import puppeteer from 'puppeteer-core';
 
 import { findChromeExecutable } from '../lib/pdf/chrome';
 
-const SOURCE = path.join(process.cwd(), 'docs', 'guide-fa.html');
-const OUTPUT = path.join(process.cwd(), 'docs', 'guide-fa.pdf');
+/** Both Persian documents print the same way; pick one with `npm run docs:pdf case`. */
+const DOCUMENTS: Record<string, string> = {
+  guide: 'guide-fa',
+  case: 'case-fa',
+};
+
+const which = process.argv[2] ?? 'guide';
+const stem = DOCUMENTS[which];
+if (!stem) {
+  throw new Error(`unknown document "${which}" — expected one of ${Object.keys(DOCUMENTS).join(', ')}`);
+}
+
+const SOURCE = path.join(process.cwd(), 'docs', `${stem}.html`);
+const OUTPUT = path.join(process.cwd(), 'docs', `${stem}.pdf`);
 
 async function main() {
   if (!existsSync(SOURCE)) {
