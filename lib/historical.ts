@@ -66,18 +66,46 @@ export type ArchiveLayout = 'CURRENT' | 'LEGACY';
 export type ArchiveFormat = 'AUTO' | 'CURRENT' | 'LEGACY';
 
 /**
- * The part row a legacy sheet is expected to carry, in column order (5..32). Compared
- * against the uploaded file so a sheet with a different part list is flagged rather than
- * silently mis-filed. Taken from real archives, hence the spelling drift from the
- * catalogue ("پایه میکروسیچ", "سیم آداپتوری") — matching is normalised, so those pass.
+ * The legacy part headers, column 5 to column 32, each with the spellings actually seen
+ * in the client's files.
+ *
+ * A single expected string per column produced false alarms that were indistinguishable
+ * from real ones: «سیم نمره1 یک متر» was reported as a mismatch against «سیم نمره1»
+ * although they are the same part, which trains the manager to ignore the warnings —
+ * and the one genuine mismatch beside it, «درب» where the sheet says «پک هواکش», was
+ * the catalogue actually being wrong. The first spelling is the canonical one.
  */
-const LEGACY_PART_HEADERS_FA = [
-  'شلف پلکسی', 'لایت باکس', 'شلف روی در', 'کلیدبرق12Amp', 'سیم نمره1',
-  'پایه فیوز', 'فیوز', 'ترانس', 'میکروسوئیچ', 'پایه میکروسیچ',
-  'سیم آداپتوری', 'سیم تلفنی', 'سوکت سیم تلفنی', 'کابل3/60', 'سنت نگهدارنده در',
-  'لایت فریم', 'آرام بند', 'فنر', 'برد استند', '(smd)LEDسفید',
-  '(smd)LEDآبی', 'کلید', 'ریل وپوشرL', 'ریل وپوشرU', 'سوکت کولری',
-  'درب پلاستیکی شلف', 'پلکسی سفید', 'درب',
+const LEGACY_PART_HEADER_ALIASES: string[][] = [
+  ['شلف پلکسی', 'پلکسی شلف'],
+  ['لایت باکس'],
+  ['شلف روی در'],
+  ['کلیدبرق12Amp', 'کلید برق 12 آمپر'],
+  ['سیم نمره1 یک متر', 'سیم نمره1', 'سیم نمره 1', 'سیم نمره ۱ متر'],
+  ['پایه فیوز'],
+  ['فیوز'],
+  ['ترانس'],
+  ['میکروسوئیچ', 'میکروسویئچ'],
+  ['پایه میکروسیچ', 'پایه میکروسوئیچ', 'پایه میکروسویئچ'],
+  ['سیم آداپتوری', 'سیم آداپتور'],
+  ['سیم تلفنی'],
+  ['سوکت سیم تلفنی'],
+  ['کابل3/60', 'کابل ۳/۶۰', 'کابل برق اصلی'],
+  ['سنت نگهدارنده در', 'سنت نگهدارنده'],
+  ['لایت فریم'],
+  ['آرام بند', 'آرام‌بند'],
+  ['فنر'],
+  ['برد استند'],
+  ['(smd)LEDسفید', 'SMD سفید', 'نوار SMD سفید'],
+  ['(smd)LEDآبی', 'SMD آبی', 'نوار SMD آبی'],
+  ['کلید'],
+  ['ریل وپوشرL', 'ریل‌وپوشر L', 'ریل پوشر L'],
+  ['ریل وپوشرU', 'ریل و پوشر U', 'ریل پوشر U'],
+  ['سوکت کولری'],
+  ['درب پلاستیکی شلف', 'درب پلاستیکی'],
+  ['پلکسی سفید'],
+  // «درب» is accepted because older sheets carry it in this column, but it is the wrong
+  // name for the part — see the catalogue note in lib/parts.ts.
+  ['پک هواکش', 'درب'],
 ];
 
 interface ResolvedLayout {
@@ -121,6 +149,67 @@ const LEGACY_COLUMNS = {
   /** Column AP — the final review. */
   maintenance: 42,
 } as const;
+
+type NotRepairedReasonValue =
+  | 'MANAGER_NOT_AUTHORIZED'
+  | 'STORE_OR_STAND_REMOVED'
+  | 'ALREADY_HEALTHY'
+  | 'STORE_TEMPORARILY_CLOSED'
+  | 'CONDITION_TOO_POOR';
+
+/**
+ * The reason block that follows column AP on real order files (AQ..AX, 43..50).
+ *
+ * These columns are the only reliable record of an unsuccessful visit. Column AP does
+ * carry the reason in prose — "اجازه تعمیر داده نشد."، "استند سالم است." — but it is
+ * free text with no fixed wording, so reading the outcome from it means guessing at
+ * phrasing. A tick in one of these columns does not.
+ *
+ * Eight archive reasons collapse onto the five the form offers (§6.5), which is a real
+ * loss of nuance, so the archive's own wording is kept verbatim in the notes rather than
+ * being thrown away. Extending the enum instead would put reasons in the technician's
+ * picker that the spec fixes at five.
+ */
+const LEGACY_REASON_LABELS: Array<[label: string, reason: NotRepairedReasonValue]> = [
+  ['استند سالم', 'ALREADY_HEALTHY'],
+  ['تغییر کاربری', 'STORE_OR_STAND_REMOVED'],
+  ['تعطیل', 'STORE_TEMPORARILY_CLOSED'],
+  ['تقاضای تعویض', 'CONDITION_TOO_POOR'],
+  ['عدم امکان تعمیر', 'CONDITION_TOO_POOR'],
+  ['عدم صدور اجازه', 'MANAGER_NOT_AUTHORIZED'],
+  ['وضعیت نامساعد', 'CONDITION_TOO_POOR'],
+  ['آدرس اشتباه', 'STORE_OR_STAND_REMOVED'],
+];
+
+export interface ReasonColumn {
+  column: number;
+  label: string;
+  reason: NotRepairedReasonValue;
+}
+
+/**
+ * Finds the reason block by reading the header row rather than trusting fixed positions.
+ *
+ * Positions have been stable at 43..50 in every file seen, but these columns were added
+ * to the sheet by hand over the years and a shifted block would otherwise be read as
+ * "no unsuccessful visits at all" — silently, and in the direction that overstates the
+ * work done. Matching on the header means a shift is harmless and an absent block is
+ * detected rather than assumed.
+ */
+function detectReasonColumns(sheet: ExcelJS.Worksheet, headerRow: number): ReasonColumn[] {
+  const found: ReasonColumn[] = [];
+  const header = sheet.getRow(headerRow);
+
+  for (let column = 1; column <= sheet.columnCount; column++) {
+    const text = cellText(header.getCell(column)).trim();
+    if (!text) continue;
+    const key = makeStoreMatchKey(text);
+    const match = LEGACY_REASON_LABELS.find(([label]) => makeStoreMatchKey(label) === key);
+    if (match) found.push({ column, label: match[0], reason: match[1] });
+  }
+
+  return found;
+}
 
 function legacyLayout(): ResolvedLayout {
   return {
@@ -318,6 +407,16 @@ export interface HistoricalPreview {
   columnWarnings: ColumnWarning[];
   rows: number;
   forms: number;
+  /** Successful visits in the file. */
+  repaired: number;
+  /** Unsuccessful visits, read from the archive's reason columns. */
+  notRepaired: number;
+  /**
+   * Unsuccessful visits by the archive's own wording, so the manager can see at a glance
+   * that an import of 1,031 rows really does contain 85 failures — the number that was
+   * silently coming through as zero.
+   */
+  reasonBreakdown: Array<{ label: string; count: number }>;
   /** Distinct uids in the file. A uid is a location, so this is "how many shops". */
   distinctUids: number;
   /** Of those, the ones this system has never seen. */
@@ -346,6 +445,10 @@ interface HistoricalRow {
   quality: number | null;
   notes?: string;
   outcome: 'REPAIRED' | 'NOT_REPAIRED';
+  /** Mapped from the archive's own reason column; null on a successful visit. */
+  notRepairedReason: NotRepairedReasonValue | null;
+  /** The archive's own wording, before it was collapsed onto the five. */
+  archiveReasonLabel: string | null;
   parts: Array<{ sortOrder: number; quantity: number }>;
 }
 
@@ -402,6 +505,7 @@ function readRows(
     }
 
     const cols = detectLayout(sheet, headerRow, format);
+    const reasonColumns = detectReasonColumns(sheet, headerRow);
 
     // A legacy sheet spreads its header over two rows: section labels on the first, part
     // names on the second. Data therefore starts one row later than the marker row.
@@ -420,19 +524,20 @@ function readRows(
     // parts bill. Real evidence this matters: one city's sheet ends column 32 with `درب`
     // while another ends it with `پک هواکش`, which is not in the catalogue at all.
     const partHeaderRow = secondRowIsHeader ? partNameRow : sheet.getRow(headerRow);
-    const expectedNames =
+    const acceptedNames: string[][] =
       cols.layout === 'LEGACY'
-        ? LEGACY_PART_HEADERS_FA
-        : PART_CATALOG.map((p) => p.nameFa);
+        ? LEGACY_PART_HEADER_ALIASES
+        : PART_CATALOG.map((p) => [p.nameFa]);
 
     const columnWarnings: ColumnWarning[] = [];
     for (let offset = 0; offset < cols.partCount; offset++) {
       const column = COL_FIRST_PART + offset;
       const found = cellText(partHeaderRow.getCell(column)).trim();
       if (!found) continue; // an unlabelled column tells us nothing either way
-      const expected = expectedNames[offset] ?? '';
-      if (makeStoreMatchKey(found) !== makeStoreMatchKey(expected)) {
-        columnWarnings.push({ column, expected, found });
+      const accepted = acceptedNames[offset] ?? [];
+      const foundKey = makeStoreMatchKey(found);
+      if (!accepted.some((name) => makeStoreMatchKey(name) === foundKey)) {
+        columnWarnings.push({ column, expected: accepted[0] ?? '', found });
       }
     }
 
@@ -463,18 +568,33 @@ function readRows(
       const qualityRaw = cellText(row.getCell(cols.colQuality));
       const quality = qualityRaw ? Math.max(0, Math.min(5, cellNumber(qualityRaw))) : null;
 
-      // Column AP carries the technician's final review, e.g. "تعمیرات موفقیت آمیز بود"
-      // or "... نبود". It is the only outcome signal an archive has.
       const feedback = cellText(row.getCell(cols.colMaintenance)).trim();
       const storeDetails = cols.colStoreDetails
         ? cellText(row.getCell(cols.colStoreDetails)).trim()
         : '';
 
-      // §6.1 stays intact: parts decide the outcome. The review only settles rows that
-      // recorded no parts at all, which is exactly the unsuccessful visits.
-      const reviewSaysFailed = /نبود|unsuccessful|not\s*success/i.test(feedback);
+      /*
+       * The outcome comes from the reason block, not from the prose in column AP.
+       *
+       * Reading AP for the word "نبود" missed every unsuccessful visit in the client's
+       * real files, because those rows say things like "اجازه تعمیر داده نشد." or
+       * "استند سالم است." — and the fallback then defaulted them to REPAIRED. A whole
+       * project imported as 100% successful, which is the worst possible direction for
+       * this error: it inflates the completion figures the manager reports to Jti.
+       *
+       * A ticked reason column is unambiguous. In the client's files the two signals
+       * never contradict each other — no row carries both parts and a reason — so a tick
+       * decides the row outright, and everything else is a repair, including the handful
+       * of successful visits that consumed no parts (an adjustment, a re-seated
+       * connector) and would otherwise be misfiled as failures.
+       */
+      const ticked = reasonColumns.filter(
+        (rc) => cellText(row.getCell(rc.column)).trim() !== '',
+      );
+
       const outcome: 'REPAIRED' | 'NOT_REPAIRED' =
-        parts.length > 0 ? 'REPAIRED' : reviewSaysFailed ? 'NOT_REPAIRED' : 'REPAIRED';
+        ticked.length > 0 ? 'NOT_REPAIRED' : 'REPAIRED';
+      const notRepairedReason = ticked[0]?.reason ?? null;
 
       rows.push({
         uid,
@@ -489,9 +609,17 @@ function readRows(
         formCode: cleanOptional(cellText(row.getCell(cols.colFormCode))),
         quality,
         // Store Details exists only on legacy sheets; keeping it means no column between
-        // A and AP is silently dropped.
-        notes: cleanOptional([feedback, storeDetails].filter(Boolean).join(' | ')),
+        // A and AP is silently dropped. The archive's own reason wording leads, because
+        // eight archive reasons collapse onto five and this is where the distinction
+        // between «تقاضای تعویض» and «وضعیت نامساعد» survives.
+        notes: cleanOptional(
+          [ticked.map((rc) => rc.label).join('، '), feedback, storeDetails]
+            .filter(Boolean)
+            .join(' | '),
+        ),
         outcome,
+        notRepairedReason,
+        archiveReasonLabel: ticked.map((rc) => rc.label).join('، ') || null,
         parts,
       });
     }
@@ -525,9 +653,22 @@ export async function previewHistorical(
   const uidCounts = new Map<string, number>();
   for (const row of rows) uidCounts.set(row.uid, (uidCounts.get(row.uid) ?? 0) + 1);
 
+  const reasonCounts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.outcome !== 'NOT_REPAIRED') continue;
+    const label = row.archiveReasonLabel ?? 'نامشخص';
+    reasonCounts.set(label, (reasonCounts.get(label) ?? 0) + 1);
+  }
+  const notRepaired = rows.filter((r) => r.outcome === 'NOT_REPAIRED').length;
+
   return {
     rows: rows.length,
     forms: rows.length,
+    repaired: rows.length - notRepaired,
+    notRepaired,
+    reasonBreakdown: [...reasonCounts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count),
     layout,
     columnWarnings,
     distinctUids: uids.length,
@@ -785,6 +926,7 @@ export async function commitHistorical(
               qualityScore: row.outcome === 'REPAIRED' ? row.quality : null,
               notes: row.notes ?? null,
               outcome: row.outcome,
+              notRepairedReason: row.notRepairedReason,
               // Wages are not reconstructed for pre-system work — the rates in effect
               // then are unknown, and inventing them would corrupt payroll reporting.
               wageAmount: 0,

@@ -68,7 +68,11 @@ const NAMES: Array<[fa: string, en: string]> = [
   ['سوکت کولری', 'Cooler socket'],
   ['درب پلاستیکی', 'Plastic door'],
   ['پلکسی سفید', 'White plexiglass'],
-  ['درب', 'Door'],
+  // Column 34 / legacy column 32. Recorded as «درب» from a misread archive header; the
+  // client confirmed against the source order files that the part is «پک هواکش». The
+  // position is unchanged, so no export column moves — only the label was wrong, and it
+  // was wrong in a way that silently filed vent packs against a door.
+  ['پک هواکش', 'Vent pack'],
 ];
 
 export const PART_CATALOG: PartCatalogSeed[] = NAMES.map(([nameFa, nameEn], i) => {
