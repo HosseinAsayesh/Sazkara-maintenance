@@ -64,6 +64,19 @@ export default async function ManagerDashboard({
 
   const num = (n: number) => n.toLocaleString(locale === 'fa' ? 'fa-IR' : 'en-US');
 
+  // Each figure links to the list behind it, carrying the filters the manager is
+  // currently looking at so the list can never describe a different population than the
+  // number they clicked.
+  const scope = new URLSearchParams();
+  for (const [key, value] of Object.entries({ from, to, cityId, projectId, phaseId })) {
+    if (value) scope.set(key, value);
+  }
+  const drill = (metric: string) => {
+    const params = new URLSearchParams(scope);
+    params.set('metric', metric);
+    return `/manager/breakdown?${params}`;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -95,13 +108,19 @@ export default async function ManagerDashboard({
           value={num(overview.totals.totalUids)}
           hint={t('totalUidsHelp')}
           lead
+          href={drill('totalUids')}
         />
         <StatCard
           label={t('subStands')}
           value={num(overview.totals.subStands)}
           hint={t('subStandsHelp')}
+          href={drill('subStands')}
         />
-        <StatCard label={t('totalOrdered')} value={num(overview.totals.totalOrdered)} />
+        <StatCard
+          label={t('totalOrdered')}
+          value={num(overview.totals.totalOrdered)}
+          href={drill('totalOrdered')}
+        />
         <StatCard
           label={t('successRate')}
           value={`${num(overview.totals.successRate)}٪`}
@@ -110,14 +129,30 @@ export default async function ManagerDashboard({
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label={t('repaired')} value={num(overview.totals.repaired)} tone="success" />
+        <StatCard
+          label={t('repaired')}
+          value={num(overview.totals.repaired)}
+          tone="success"
+          href={drill('repaired')}
+        />
         <StatCard
           label={t('notRepaired')}
           value={num(overview.totals.notRepaired)}
           tone="danger"
+          href={drill('notRepaired')}
         />
-        <StatCard label={t('remaining')} value={num(overview.totals.remaining)} tone="warning" />
-        <StatCard label={t('reRepairs')} value={num(overview.totals.reRepairs)} tone="warning" />
+        <StatCard
+          label={t('remaining')}
+          value={num(overview.totals.remaining)}
+          tone="warning"
+          href={drill('remaining')}
+        />
+        <StatCard
+          label={t('reRepairs')}
+          value={num(overview.totals.reRepairs)}
+          tone="warning"
+          href={drill('reRepairs')}
+        />
       </div>
 
       {/* §7 — Tehran vs all-other-cities vs grand total, because pay is split this way. */}

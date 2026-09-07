@@ -1,6 +1,8 @@
 import clsx from 'clsx';
 import type { ComponentProps, ReactNode } from 'react';
 
+import { Link } from '@/i18n/navigation';
+
 /**
  * Small presentational primitives shared by both the technician (mobile-first) and
  * manager (desktop-first) surfaces. Deliberately plain — Tailwind logical properties
@@ -164,6 +166,7 @@ export function StatCard({
   hint,
   tone = 'neutral',
   lead = false,
+  href,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -172,6 +175,9 @@ export function StatCard({
   /** Marks the headline figure of a row with a teal rule, so a grid of equal cards
       still has an obvious place to start reading. Use it once per row. */
   lead?: boolean;
+  /** Makes the card open the list behind the figure. A number the manager has to act
+      on — five unvisited uids — is useless until it can be turned into names. */
+  href?: string;
 }) {
   const accent: Record<Tone, string> = {
     neutral: 'text-brand-900',
@@ -180,11 +186,34 @@ export function StatCard({
     warning: 'text-amber-700',
     info: 'text-teal-700',
   };
-  return (
-    <Card className={clsx('px-4 py-3.5', lead && 'border-t-[3px] border-t-teal-600')}>
+
+  const body = (
+    <>
       <div className="text-xs font-medium text-[var(--muted)]">{label}</div>
       <div className={clsx('mt-1 text-3xl font-bold tabular-nums', accent[tone])}>{value}</div>
       {hint ? <div className="mt-0.5 text-[11px] text-[var(--muted)]">{hint}</div> : null}
+    </>
+  );
+
+  const shell = clsx('px-4 py-3.5', lead && 'border-t-[3px] border-t-teal-600');
+
+  if (!href) return <Card className={shell}>{body}</Card>;
+
+  return (
+    <Card
+      className={clsx(
+        shell,
+        // Signals it is clickable without turning a quiet grid into a row of buttons.
+        'group relative transition-colors hover:border-teal-400 hover:bg-teal-50/40',
+        'focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-teal-100',
+      )}
+    >
+      {body}
+      {/* Stretched link: the whole card is the target, and the accessible name stays
+          on a real anchor rather than a click handler on a div. */}
+      <Link href={href} className="absolute inset-0 rounded-xl focus:outline-none">
+        <span className="sr-only">{label}</span>
+      </Link>
     </Card>
   );
 }

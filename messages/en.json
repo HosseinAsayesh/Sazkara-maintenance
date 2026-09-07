@@ -659,5 +659,16 @@
     "scopeNote": "This page shows your crew’s work only; wages, the Jti export and settings stay with the manager.",
     "assignLead": "Lead",
     "noLead": "No lead"
+  },
+  "breakdown": {
+    "title": "UID breakdown",
+    "backToDashboard": "← Back to dashboard",
+    "count": "{shown, number} of {total, number} rows",
+    "truncated": "Showing the first {shown, number} rows only.",
+    "empty": "Nothing to list for this figure.",
+    "emptyRemaining": "Nothing left — every ordered UID has been visited.",
+    "order": "Order",
+    "stand": "Stand",
+    "openUid": "Open"
   }
 }
