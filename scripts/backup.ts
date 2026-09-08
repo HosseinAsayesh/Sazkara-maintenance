@@ -47,6 +47,27 @@ function copyDir(from: string, to: string): number {
   return count;
 }
 
+/**
+ * Prisma's connection string carries options pg_dump does not understand — `schema`,
+ * `connection_limit`, `pgbouncer` and friends — and pg_dump rejects the whole URI rather
+ * than ignoring them ("invalid URI query parameter"). That failure was silent in the
+ * sense that the script carried on and reported a successful backup with only the
+ * uploads in it, which is the worst way to discover a backup is half missing.
+ */
+function dumpUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    const keep = new URLSearchParams();
+    for (const [key, value] of url.searchParams) {
+      if (['sslmode', 'sslcert', 'sslkey', 'sslrootcert'].includes(key)) keep.set(key, value);
+    }
+    url.search = keep.toString();
+    return url.toString();
+  } catch {
+    return raw; // not a URL we can parse — hand it over untouched and let pg_dump judge
+  }
+}
+
 function main() {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -60,7 +81,7 @@ function main() {
 
   // --- database ---
   const dumpPath = path.join(dir, 'database.sql');
-  const dump = spawnSync('pg_dump', ['--no-owner', '--no-privileges', '--file', dumpPath, url], {
+  const dump = spawnSync('pg_dump', ['--no-owner', '--no-privileges', '--file', dumpPath, dumpUrl(url)], {
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 
