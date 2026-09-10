@@ -3,6 +3,7 @@ import 'server-only';
 import type { NotRepairedReason, PartAction, PhotoType, Prisma } from '@prisma/client';
 
 import { nextFormCode } from './codes';
+import { requiredStandPhotos } from './photo-rules';
 import { DAY_MS, RE_REPAIR_WINDOW_DAYS } from './dates';
 import { prisma } from './prisma';
 import { resolveCityId as resolveCityByName } from './cities';
@@ -216,8 +217,14 @@ export async function createRepairForm(input: CreateRepairFormInput) {
     throw new RepairFormError('SIGNATURES_REQUIRED');
   }
 
-  // §4.4 — store photo + before + after are all required; extras are allowed.
-  for (const required of ['STORE', 'BEFORE', 'AFTER'] as const) {
+  // §4.4 — the store photo proves the visit and is always required. The stand's own
+  // photos depend on the outcome: there is no "after" when nothing was repaired, and no
+  // "before" either when the stand was gone or the shop was shut. See lib/photo-rules.ts.
+  const requiredPhotos: PhotoType[] = [
+    'STORE',
+    ...requiredStandPhotos(outcome, input.notRepairedReason),
+  ];
+  for (const required of requiredPhotos) {
     if (!input.photos.some((p) => p.type === required)) {
       throw new RepairFormError('PHOTOS_REQUIRED');
     }

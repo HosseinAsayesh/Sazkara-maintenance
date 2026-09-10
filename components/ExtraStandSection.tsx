@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { PhotoInput } from './PhotoInput';
+import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Button, Card, CardHeader, Field, Input, Textarea } from './ui';
 
 /** §6.5 — the same fixed list the primary stand uses. */
@@ -68,6 +69,11 @@ export function ExtraStandSection({
 
   const hasParts =
     Object.keys(value.replaced).length + Object.keys(value.repaired).length > 0;
+
+  const standPhotos = requiredStandPhotos(
+    hasParts ? 'REPAIRED' : 'NOT_REPAIRED',
+    value.reason || null,
+  );
 
   const set = <K extends keyof ExtraStandValue>(key: K, next: ExtraStandValue[K]) =>
     onChange({ ...value, [key]: next });
@@ -168,13 +174,16 @@ export function ExtraStandSection({
           <PhotoInput
             label={t('photoBefore')}
             name={`extra_${index}_photoBefore`}
-            required
+            required={standPhotos.includes('BEFORE')}
           />
-          <PhotoInput
-            label={t('photoAfter')}
-            name={`extra_${index}_photoAfter`}
-            required
-          />
+          {/* No "after" when this stand was not repaired — see lib/photo-rules.ts. */}
+          {standPhotos.includes('AFTER') ? (
+            <PhotoInput
+              label={t('photoAfter')}
+              name={`extra_${index}_photoAfter`}
+              required
+            />
+          ) : null}
           <Field label={t('timeSpent')}>
             <Input
               name={`extra_${index}_time`}

@@ -16,6 +16,7 @@ import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { ExtraPhotoInput, PhotoInput } from './PhotoInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
 import { StandTabs } from './StandTabs';
+import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
 
 /** A store may carry up to three stands (§6.6). */
@@ -93,6 +94,8 @@ export function RepairFormClient(props: RepairFormProps) {
   const hasParts = Object.keys(replaced).length + Object.keys(repaired).length > 0;
   const outcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
 
+  const standPhotos = requiredStandPhotos(outcome, reason || null);
+
   const standCount = 1 + extraStands.length;
   const standTabs = [
     { label: t('standNumber', { n: 1 }), ready: hasParts || Boolean(reason) },
@@ -159,8 +162,10 @@ export function RepairFormClient(props: RepairFormProps) {
       failOn(0, t('errors.qualityRequired'));
       return;
     }
-    for (const field of ['photoBefore', 'photoAfter']) {
-      const file = formData.get(field);
+    // Same rule the server applies, so the technician is never asked for a photo the
+    // server would reject — or refused for one it never wanted.
+    for (const kind of requiredStandPhotos(outcome, reason || null)) {
+      const file = formData.get(kind === 'BEFORE' ? 'photoBefore' : 'photoAfter');
       if (!(file instanceof File) || file.size === 0) {
         failOn(0, t('errors.photosRequired'));
         return;
@@ -186,7 +191,9 @@ export function RepairFormClient(props: RepairFormProps) {
         failOn(i + 1, t('errors.qualityRequired'));
         return;
       }
-      for (const field of [`extra_${i}_photoBefore`, `extra_${i}_photoAfter`]) {
+      const standOutcome = standHasParts ? 'REPAIRED' : 'NOT_REPAIRED';
+      for (const kind of requiredStandPhotos(standOutcome, stand.reason || null)) {
+        const field = kind === 'BEFORE' ? `extra_${i}_photoBefore` : `extra_${i}_photoAfter`;
         const file = formData.get(field);
         if (!(file instanceof File) || file.size === 0) {
           failOn(i + 1, t('errors.photosRequired'));
@@ -468,8 +475,16 @@ export function RepairFormClient(props: RepairFormProps) {
         <Card>
           <CardHeader title={t('sectionPhotos')} description={t('standPhotosHelp')} />
           <div className="grid gap-4 p-4 sm:grid-cols-2">
-            <PhotoInput label={t('photoBefore')} name="photoBefore" required />
-            <PhotoInput label={t('photoAfter')} name="photoAfter" required />
+            <PhotoInput
+              label={t('photoBefore')}
+              name="photoBefore"
+              required={standPhotos.includes('BEFORE')}
+            />
+            {/* Hidden entirely when nothing was repaired: there is no "after" state to
+                photograph, and leaving the tile visible invites a meaningless picture. */}
+            {standPhotos.includes('AFTER') ? (
+              <PhotoInput label={t('photoAfter')} name="photoAfter" required />
+            ) : null}
           </div>
         </Card>
       </div>
