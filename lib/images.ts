@@ -17,14 +17,31 @@
  * still be able to file their report; a slow upload beats a lost visit.
  */
 
-/** Long edge in pixels. Comfortably above what the evidence PDF renders. */
-const MAX_EDGE = 1600;
+/**
+ * Byte budget per photo, and the ladder used to hit it.
+ *
+ * A fixed 1600px/0.82 was not enough. Measured against the demo tunnel, a report of
+ * three photos plus two signatures lands near 1.2 MB, and this link carries roughly
+ * 100 KB/s: the body arrives after ~13 seconds and the connection is reset before the
+ * reply comes back. 500 KB completes in 6 seconds; 1 MB does not complete at all.
+ *
+ * So the target is a whole report under ~500 KB rather than a fixed quality. Each photo
+ * is re-encoded down the ladder until it fits the budget, because how well a JPEG
+ * compresses depends on the picture — a dim shop interior and a bright shelf of parts
+ * do not land in the same place from the same settings.
+ */
+const TARGET_BYTES = 150 * 1024;
 
-/** JPEG quality. 0.82 keeps part labels and damage legible when zoomed. */
-const QUALITY = 0.82;
+/** Long edge / quality pairs, tried in order until one comes in under the budget. */
+const LADDER: Array<{ edge: number; quality: number }> = [
+  { edge: 1400, quality: 0.78 },
+  { edge: 1200, quality: 0.7 },
+  { edge: 1000, quality: 0.62 },
+  { edge: 900, quality: 0.55 },
+];
 
 /** Below this, re-encoding costs more than it saves. */
-const SKIP_UNDER_BYTES = 300 * 1024;
+const SKIP_UNDER_BYTES = 120 * 1024;
 
 export async function compressImage(file: File): Promise<File> {
   if (typeof document === 'undefined') return file;
@@ -37,31 +54,40 @@ export async function compressImage(file: File): Promise<File> {
     // flag does not survive a redraw.
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
 
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
+    let best: Blob | null = null;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    for (const rung of LADDER) {
+      const scale = Math.min(1, rung.edge / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      bitmap.close();
-      return file;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) break;
+
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', rung.quality),
+      );
+      if (!blob) break;
+
+      // Keep the smallest seen, so a failure to reach the budget still returns the best
+      // attempt rather than the first one.
+      if (!best || blob.size < best.size) best = blob;
+      if (blob.size <= TARGET_BYTES) break;
     }
-    ctx.drawImage(bitmap, 0, 0, width, height);
+
     bitmap.close();
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', QUALITY),
-    );
-
     // An already-small or well-compressed original can come out bigger; keep the better one.
-    if (!blob || blob.size >= file.size) return file;
+    if (!best || best.size >= file.size) return file;
 
     const base = file.name.replace(/\.[^.]+$/, '') || 'photo';
-    return new File([blob], `${base}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    return new File([best], `${base}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
   } catch {
     return file;
   }
