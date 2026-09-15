@@ -106,6 +106,9 @@ export default async function StandFormPage({
           cityId: lookup.prefill.cityId,
         }}
         isUnmatched={lookup.isUnmatched}
+        // Mirrors the server guard: with no store on file and no city name on an order
+        // row, nothing can supply the city, so the technician has to pick one.
+        cityRequired={!lookup.store && !lookup.prefill.cityName}
         knownStandCount={lookup.standCount}
         repairedStandIndexes={repairedThisProject.map((f) => f.standIndex)}
       />

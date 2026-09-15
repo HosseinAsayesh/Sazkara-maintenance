@@ -209,8 +209,16 @@ export async function submitRepairFormAction(
         IMAGE_TOO_LARGE: 'photosRequired',
         INVALID_QUANTITY: 'invalidQuantity',
         UNKNOWN_PART: 'submitFailed',
+        CITY_REQUIRED: 'cityRequired',
       };
-      return { error: map[err.code] ?? 'submitFailed' };
+      const message = map[err.code];
+      if (!message) {
+        // An unmapped code reaches the technician as the generic "could not submit",
+        // which is unactionable in a shop. Log it so the gap is visible here rather
+        // than only in a confused phone call.
+        console.error('submitRepairFormAction: unmapped RepairFormError', err.code);
+      }
+      return { error: message ?? 'submitFailed' };
     }
     console.error('submitRepairFormAction failed', err);
     return { error: 'submitFailed' };

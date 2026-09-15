@@ -49,6 +49,11 @@ export interface RepairFormProps {
     cityId: string | null;
   };
   isUnmatched: boolean;
+  /**
+   * True when this location is not on file and no order row carries a city name — the
+   * one case where the server cannot derive the city and the technician must choose it.
+   */
+  cityRequired: boolean;
   /** Stands already on file at this location — the form starts pre-expanded to match. */
   knownStandCount: number;
   /** Stand positions already repaired in this campaign; reporting them again is a re-repair. */
@@ -160,6 +165,13 @@ export function RepairFormClient(props: RepairFormProps) {
     }
     if (hasParts && quality === null) {
       failOn(0, t('errors.qualityRequired'));
+      return;
+    }
+    // Cheap, and checked before the photos: the server rejects a cityless form for an
+    // unknown location, and finding that out after a multi-megabyte upload is the
+    // rejection a technician cannot act on.
+    if (props.cityRequired && !formData.get('cityId')) {
+      setClientError(t('errors.cityRequired'));
       return;
     }
     // Same rule the server applies, so the technician is never asked for a photo the
@@ -302,7 +314,7 @@ export function RepairFormClient(props: RepairFormProps) {
           <Field label={t('storeName')}>
             <Input name="storeName" defaultValue={props.prefill.storeName} />
           </Field>
-          <Field label={tc('city')}>
+          <Field label={tc('city')} required={props.cityRequired}>
             <Select name="cityId" defaultValue={props.prefill.cityId ?? ''}>
               <option value="">—</option>
               {props.cities.map((c) => (
