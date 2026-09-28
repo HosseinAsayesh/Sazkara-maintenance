@@ -51,6 +51,10 @@ export async function proxy(request: NextRequest) {
     // A manager may look at the lead surface; a plain technician may not.
     (rest.startsWith('/lead') &&
       session.role !== 'LEAD_TECHNICIAN' &&
+      session.role !== 'MANAGER') ||
+    // Jti's panel. A manager may look at it; nobody else may.
+    (rest.startsWith('/client') &&
+      session.role !== 'CLIENT_SUPERVISOR' &&
       session.role !== 'MANAGER');
 
   if (wrongArea) {
@@ -60,7 +64,9 @@ export async function proxy(request: NextRequest) {
         ? `/${locale}/manager`
         : session.role === 'LEAD_TECHNICIAN'
           ? `/${locale}/lead`
-          : `/${locale}/technician`;
+          : session.role === 'CLIENT_SUPERVISOR'
+            ? `/${locale}/client`
+            : `/${locale}/technician`;
     url.search = '';
     return NextResponse.redirect(url);
   }

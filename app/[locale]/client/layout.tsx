@@ -1,0 +1,43 @@
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+
+import { AppShell } from '@/components/AppShell';
+import { requireClientViewer } from '@/lib/auth';
+
+/**
+ * Jti's panel.
+ *
+ * Read-only by construction rather than by hidden buttons: there is no action on this
+ * surface that writes anything except raising a query and requesting a download, and
+ * both of those are requests rather than changes. proxy.ts keeps everyone else out;
+ * requireClientViewer lets a manager in so they can see exactly what the client sees.
+ *
+ * The nav is short on purpose. A client given fifteen tabs reads none of them.
+ */
+export default async function ClientLayout({
+  children,
+  params,
+}: LayoutProps<'/[locale]/client'>) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const user = await requireClientViewer(locale);
+  const t = await getTranslations({ locale, namespace: 'client' });
+
+  return (
+    <AppShell
+      locale={locale}
+      userName={user.name}
+      userSubtitle={t('roleLabel')}
+      nav={[
+        { href: '/client', label: t('navReportCard') },
+        { href: '/client/today', label: t('navToday') },
+        { href: '/client/reports', label: t('navReports') },
+        { href: '/client/parts', label: t('navParts') },
+        { href: '/client/re-repairs', label: t('navReRepairs') },
+        { href: '/client/downloads', label: t('navDownloads') },
+      ]}
+    >
+      {children}
+    </AppShell>
+  );
+}

@@ -27,6 +27,10 @@ enum Role {
   /// exports, no analytics, no imports.
   LEAD_TECHNICIAN
   MANAGER
+  /// Jti's own supervisor. Read-only, locked to the active project, and blind to
+  /// anything commercial: no wages, no rates, no technician identities, no photographs,
+  /// no earlier campaigns. Files leave only through an approved DownloadRequest.
+  CLIENT_SUPERVISOR
 }
 
 enum UserStatus {
@@ -110,6 +114,11 @@ model User {
   importBatches     ImportBatch[]
   storesCreated     Store[]            @relation("StoreCreatedBy")
   evidencePdfBatchs EvidencePdfBatch[]
+
+  downloadsRequested DownloadRequest[]  @relation("DownloadRequester")
+  downloadsDecided   DownloadRequest[]  @relation("DownloadDecider")
+  queriesOpened      FormQuery[]        @relation("QueryOpener")
+  queryMessages      FormQueryMessage[] @relation("QueryAuthor")
 
   @@index([role, status])
   @@index([leadId])
@@ -218,6 +227,7 @@ model Project {
   updatedAt DateTime  @updatedAt
 
   phases      Phase[]
+  downloadRequests DownloadRequest[]
   batches     ImportBatch[]
   repairForms RepairForm[]
 
@@ -409,8 +419,9 @@ model RepairForm {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parts  PartUsage[]
-  photos Photo[]
+  parts   PartUsage[]
+  photos  Photo[]
+  queries FormQuery[]
 
   @@index([date])
   @@index([cityId, date])
@@ -491,4 +502,114 @@ model EvidencePdfBatch {
 model Counter {
   key   String @id
   value Int    @default(0)
+}
+
+
+// ---------------------------------------------------------------------------
+// Client supervisor (Jti) — the two models that make a read-only panel workable.
+// ---------------------------------------------------------------------------
+
+enum DownloadKind {
+  JTI_EXPORT_MAIN
+  JTI_EXPORT_REREPAIRS
+  PARTS_USAGE_REPORT
+  EVIDENCE_PDF
+}
+
+enum DownloadStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+/// Jti can see figures on screen but cannot take a file without the manager agreeing to
+/// it, each time. The request carries what was asked for and why; approving it is what
+/// mints the download. Denied and expired requests are kept, because "what did they ask
+/// for and what did we release" is the audit trail that matters in a dispute.
+model DownloadRequest {
+  id String @id @default(cuid())
+
+  kind DownloadKind
+
+  requestedById String
+  requestedBy   User   @relation("DownloadRequester", fields: [requestedById], references: [id])
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  /// What was asked for: date range, city, and for evidence the day in question.
+  /// Free-form so a new export type does not need a migration.
+  params Json
+
+  /// Jti's stated reason. Required — an unexplained request is the one a manager
+  /// cannot judge.
+  reason String
+
+  status DownloadStatus @default(PENDING)
+
+  decidedById String?
+  decidedBy   User?     @relation("DownloadDecider", fields: [decidedById], references: [id])
+  decidedAt   DateTime?
+  /// Why it was refused, shown to Jti. Silence on a refusal breeds a phone call.
+  decisionNote String?
+
+  /// Generated at approval time, so the file matches what the manager agreed to rather
+  /// than whatever the data says when Jti eventually clicks.
+  fileRef      String?
+  downloadedAt DateTime?
+  /// Approval is not permanent: a stale workbook circulating inside Jti is worse than
+  /// asking again.
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([projectId, status])
+}
+
+enum QueryStatus {
+  OPEN
+  ANSWERED
+  RESOLVED
+}
+
+/// A question Jti raises against one repair form, and the manager's answer.
+///
+/// This is the point of the shared panel: today a disagreement about a stand lives in
+/// WhatsApp, where it is unsearchable and nobody can prove what was agreed. Attached to
+/// the form, it is answerable, closable, and still there in six months.
+model FormQuery {
+  id String @id @default(cuid())
+
+  repairFormId String
+  repairForm   RepairForm @relation(fields: [repairFormId], references: [id], onDelete: Cascade)
+
+  openedById String
+  openedBy   User   @relation("QueryOpener", fields: [openedById], references: [id])
+
+  status QueryStatus @default(OPEN)
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  messages FormQueryMessage[]
+
+  @@index([status, createdAt])
+  @@index([repairFormId])
+}
+
+model FormQueryMessage {
+  id String @id @default(cuid())
+
+  queryId String
+  query   FormQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation("QueryAuthor", fields: [authorId], references: [id])
+
+  body String
+
+  createdAt DateTime @default(now())
+
+  @@index([queryId, createdAt])
 }

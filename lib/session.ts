@@ -13,7 +13,11 @@ import { jwtVerify, SignJWT } from 'jose';
 export const SESSION_COOKIE = 'sazkara_session';
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
-export type SessionRole = 'TECHNICIAN' | 'LEAD_TECHNICIAN' | 'MANAGER';
+export type SessionRole =
+  | 'TECHNICIAN'
+  | 'LEAD_TECHNICIAN'
+  | 'MANAGER'
+  | 'CLIENT_SUPERVISOR';
 
 export interface SessionPayload {
   userId: string;

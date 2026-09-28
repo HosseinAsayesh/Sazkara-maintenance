@@ -78,6 +78,7 @@ export async function requireUser(locale: string) {
 export function homeFor(role: string, locale: string): string {
   if (role === 'MANAGER') return `/${locale}/manager`;
   if (role === 'LEAD_TECHNICIAN') return `/${locale}/lead`;
+  if (role === 'CLIENT_SUPERVISOR') return `/${locale}/client`;
   return `/${locale}/technician`;
 }
 
@@ -101,6 +102,20 @@ export async function requireTechnician(locale: string) {
 export async function requireLead(locale: string) {
   const user = await requireUser(locale);
   if (user.role !== 'LEAD_TECHNICIAN' && user.role !== 'MANAGER') {
+    redirect(homeFor(user.role, locale));
+  }
+  return user;
+}
+
+/**
+ * Jti's supervisor. Gates /client, which is read-only and locked to the active project.
+ * A manager is allowed in for the same reason they are allowed into /lead — they must be
+ * able to see exactly what the client sees, on the same code, without a second account.
+ * That is the whole point of the surface: two parties reading one set of figures.
+ */
+export async function requireClientViewer(locale: string) {
+  const user = await requireUser(locale);
+  if (user.role !== 'CLIENT_SUPERVISOR' && user.role !== 'MANAGER') {
     redirect(homeFor(user.role, locale));
   }
   return user;
