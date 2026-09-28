@@ -112,6 +112,7 @@ export function RepairFormClient(props: RepairFormProps) {
       ready:
         Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0 ||
         Boolean(stand.reason),
+      removable: true,
     })),
   ];
 
@@ -130,7 +131,20 @@ export function RepairFormClient(props: RepairFormProps) {
     setActiveStand(standCount); // the tab the new stand will occupy
   };
 
+  /** `i` indexes extraStands; the tab strip passes a tab index, where 0 is the primary. */
   const removeStand = (i: number) => {
+    const stand = extraStands[i];
+    const hasWork = Boolean(
+      stand &&
+        (Object.keys(stand.replaced).length + Object.keys(stand.repaired).length > 0 ||
+          stand.reason ||
+          stand.quality !== null),
+    );
+    // Only ask when there is something to lose. A stand added by a mistaken tap and
+    // removed a second later should not need a dialogue; one with parts already on it
+    // should never vanish to a stray tap.
+    if (hasWork && !window.confirm(t('removeStandConfirm', { n: i + 2 }))) return;
+
     setExtraStands((prev) => prev.filter((_, j) => j !== i));
     // Removing the stand on screen, or one before it, would otherwise leave the tab
     // index pointing past the end or at the wrong panel.
@@ -379,6 +393,9 @@ export function RepairFormClient(props: RepairFormProps) {
         active={activeStand}
         onSelect={setActiveStand}
         onAdd={addStand}
+        // Tab 0 is the store's own stand and is never removable, so a tab index maps
+        // onto extraStands by subtracting one.
+        onRemove={(tabIndex) => removeStand(tabIndex - 1)}
         canAdd={standCount < MAX_STANDS}
       />
 

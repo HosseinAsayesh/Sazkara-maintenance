@@ -229,7 +229,8 @@
     "standPhotosHelp": "عکس قبل و بعد همین استند",
     "standCount": "{n, number} استند",
     "standReady": "تکمیل شده",
-    "standIncomplete": "هنوز پر نشده"
+    "standIncomplete": "هنوز پر نشده",
+    "removeStandConfirm": "اطلاعات ثبت‌شده برای استند {n, number} حذف شود؟"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "مدیر فروشگاه اجازهٔ تعمیر نداد",

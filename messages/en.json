@@ -229,7 +229,8 @@
     "standPhotosHelp": "Before and after photos of THIS stand",
     "standCount": "{n, plural, one {# stand} other {# stands}}",
     "standReady": "Filled in",
-    "standIncomplete": "Not filled in yet"
+    "standIncomplete": "Not filled in yet",
+    "removeStandConfirm": "Discard what you entered for stand {n, number}?"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",

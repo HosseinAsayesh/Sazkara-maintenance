@@ -85,7 +85,7 @@ export function ExtraStandSection({
         title={t('standNumber', { n: index + 2 })}
         description={t('secondStand')}
         action={
-          <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+          <Button type="button" variant="danger" size="sm" onClick={onRemove}>
             {t('removeStand')}
           </Button>
         }
