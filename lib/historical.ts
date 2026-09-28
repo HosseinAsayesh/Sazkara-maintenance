@@ -329,12 +329,25 @@ function cellText(value: ExcelJS.CellValue): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'object') {
     const v = value as unknown as Record<string, unknown>;
-    if (typeof v.text === 'string') return v.text;
-    if ('result' in v) return String(v.result ?? '');
+    // richText FIRST: a rich-text cell inside a formula result carries both keys, and
+    // reading `result` there yields the object rather than the words in the cell.
     if (Array.isArray(v.richText)) {
       return (v.richText as Array<{ text: string }>).map((r) => r.text).join('');
     }
+    if (typeof v.text === 'string') return v.text;
     if ('hyperlink' in v) return String(v.hyperlink ?? '');
+    if ('error' in v) return '';
+    if ('result' in v) {
+      const r = v.result;
+      // A formula whose result is itself an object (a rich-text or error result) must
+      // not be stringified — that is what wrote "[object Object]" into 988 archive rows.
+      if (r === null || r === undefined) return '';
+      if (typeof r === 'object') return cellText(r as ExcelJS.CellValue);
+      return String(r);
+    }
+    // An unrecognised object shape. Returning nothing is honest; returning
+    // "[object Object]" is a value that looks like data and travels to a client's screen.
+    return '';
   }
   return String(value).trim();
 }

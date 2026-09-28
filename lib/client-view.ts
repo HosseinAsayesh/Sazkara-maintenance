@@ -7,6 +7,7 @@ import { endOfLocalDayExclusive, startOfLocalDay } from './dates';
 import { buildPartsUsageReport, type PartsUsageReport } from './exports/parts-usage';
 import { prisma } from './prisma';
 import { getActiveProject, projectScopeWhere } from './projects';
+import { isBlank } from './text';
 
 /**
  * Everything Jti's supervisor is allowed to see, and nothing else.
@@ -165,7 +166,9 @@ function toClientRow(f: RawClientForm): ClientFormRow {
     uid: f.uid,
     standIndex: f.standIndex,
     cityName: f.city?.name ?? '—',
-    storeName: f.storeName ?? f.uid,
+    // Falls back to the uid for a blank name — and isBlank counts the "[object Object]"
+    // left in the archive as blank, because a client should see the uid, not our bug.
+    storeName: isBlank(f.storeName) ? f.uid : (f.storeName as string),
     outcome: f.outcome as 'REPAIRED' | 'NOT_REPAIRED',
     notRepairedReason: f.notRepairedReason,
     qualityScore: f.qualityScore,

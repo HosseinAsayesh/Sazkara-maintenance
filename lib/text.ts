@@ -70,8 +70,19 @@ export function makeStoreMatchKey(name: string): string {
   return normalisePersian(name).toLowerCase().replace(/\s+/g, '');
 }
 
+/**
+ * What JavaScript prints when an object reaches a string slot. It is never a real store
+ * name, and 988 order lines in the PO(1164) archive carry it — an Excel cell shape the
+ * importer did not unwrap, stringified and stored. Treated as blank wherever text is
+ * read, so the corruption shows as a missing name rather than as itself on a client's
+ * screen.
+ */
+export const OBJECT_SENTINEL = '[object Object]';
+
 export function isBlank(v: unknown): boolean {
-  return v === null || v === undefined || String(v).trim() === '';
+  if (v === null || v === undefined) return true;
+  const s = String(v).trim();
+  return s === '' || s === OBJECT_SENTINEL;
 }
 
 /** `undefined` for blank cells, so Prisma leaves the column alone instead of nulling it. */
