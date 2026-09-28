@@ -36,6 +36,7 @@ export default async function ClientLayout({
         { href: '/client/reports', label: t('navReports') },
         { href: '/client/parts', label: t('navParts') },
         { href: '/client/re-repairs', label: t('navReRepairs') },
+        { href: '/client/queries', label: t('queriesTitle') },
         { href: '/client/downloads', label: t('navDownloads') },
         // A manager who followed the Jti View tab must not be stranded on a surface with
         // no dashboard, no exports and no settings.

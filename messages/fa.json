@@ -95,7 +95,8 @@
     "uidArchive": "بایگانی شناسه‌ها",
     "crew": "گروه من",
     "clientView": "نمای جی‌تی‌آی",
-    "downloadRequests": "درخواست‌های فایل"
+    "downloadRequests": "درخواست‌های فایل",
+    "queries": "پرسش‌های جی‌تی‌آی"
   },
   "auth": {
     "loginTitle": "ورود",
@@ -230,7 +231,8 @@
     "standCount": "{n, number} استند",
     "standReady": "تکمیل شده",
     "standIncomplete": "هنوز پر نشده",
-    "removeStandConfirm": "اطلاعات ثبت‌شده برای استند {n, number} حذف شود؟"
+    "removeStandConfirm": "اطلاعات ثبت‌شده برای استند {n, number} حذف شود؟",
+    "notes": "توضیحات"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "مدیر فروشگاه اجازهٔ تعمیر نداد",
@@ -787,6 +789,38 @@
       "notFound": "درخواست پیدا نشد.",
       "alreadyDecided": "برای این درخواست قبلاً تصمیم گرفته شده است.",
       "buildFailed": "ساخت فایل ناموفق بود؛ درخواست در انتظار باقی ماند."
+    },
+    "visitTitle": "جزئیات مراجعه",
+    "standIndexLabel": "شماره استند",
+    "queriesOnThisForm": "پرسش‌های این گزارش",
+    "queryAskTitle": "پرسش درباره‌ی این مراجعه",
+    "queryAskHelp": "پرسش شما به همین گزارش پیوست می‌شود و پاسخ در همین‌جا ثبت می‌گردد.",
+    "queryAskPlaceholder": "چه چیزی برایتان روشن نیست؟",
+    "queryAskAction": "ثبت پرسش",
+    "queryRaised": "پرسش شما ثبت شد.",
+    "queryOpen": "در انتظار پاسخ",
+    "queryAnswered": "پاسخ داده شد",
+    "queryResolved": "بسته شده",
+    "queryResolveAction": "بستن پرسش",
+    "queryReplyAction": "ارسال پاسخ",
+    "queryReplyPlaceholder": "پاسخ خود را بنویسید…",
+    "queryClosedNote": "این گفت‌وگو بسته شده است.",
+    "sideClient": "جی‌تی‌آی",
+    "sideTeam": "تیم تعمیرات",
+    "queriesTitle": "پرسش‌های من",
+    "queriesHelp": "هر پرسشی که درباره‌ی یک گزارش ثبت کرده‌اید، همراه با پاسخ‌ها.",
+    "queriesEmpty": "پرسشی ثبت نشده است.",
+    "queriesListNote": "پرسش‌های باز در ابتدای فهرست نمایش داده می‌شوند.",
+    "managerQueriesTitle": "پرسش‌های جی‌تی‌آی",
+    "managerQueriesHelp": "پرسش‌های بی‌پاسخ در ابتدای فهرست می‌آیند. تا پاسخی ثبت نشود، پرسش قابل بستن نیست.",
+    "queryError": {
+      "generic": "درخواست نامعتبر است.",
+      "bodyRequired": "متن پیام را بنویسید.",
+      "bodyTooLong": "متن پیام بیش از حد طولانی است.",
+      "noActiveProject": "پروژه‌ی فعالی وجود ندارد.",
+      "notFound": "گزارش یا پرسش پیدا نشد.",
+      "alreadyResolved": "این گفت‌وگو بسته شده است.",
+      "answerBeforeResolving": "پیش از بستن، به پرسش پاسخ دهید."
     }
   }
 }

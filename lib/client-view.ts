@@ -249,3 +249,198 @@ export async function getClientForms(
 export async function getClientPartsUsage(projectId: string): Promise<PartsUsageReport> {
   return buildPartsUsageReport({ projectId });
 }
+
+/**
+ * One visit, and the conversation about it.
+ *
+ * Authorship is reduced to a side, not a person: "Jti" or "the repair team". Naming the
+ * manager who replied would be harmless, but naming the technician whose work is being
+ * questioned would not — it turns a query about a stand into a complaint about a named
+ * individual, and this panel withholds technician identity everywhere else.
+ */
+export type QuerySide = 'CLIENT' | 'TEAM';
+
+export interface ClientQueryMessage {
+  id: string;
+  body: string;
+  createdAt: Date;
+  side: QuerySide;
+}
+
+export interface ClientQueryThread {
+  id: string;
+  status: 'OPEN' | 'ANSWERED' | 'RESOLVED';
+  createdAt: Date;
+  resolvedAt: Date | null;
+  messages: ClientQueryMessage[];
+}
+
+export interface ClientFormDetail extends ClientFormRow {
+  storeAddress: string | null;
+  timeSpentMinutes: number | null;
+  notes: string | null;
+  queries: ClientQueryThread[];
+}
+
+const sideOf = (role: string): QuerySide =>
+  role === 'CLIENT_SUPERVISOR' ? 'CLIENT' : 'TEAM';
+
+/**
+ * A single form, scoped to the campaign.
+ *
+ * Scoped deliberately: a form id is guessable enough that "the id was in the URL" is not
+ * an authorisation argument. A form from an earlier project returns null here even
+ * though it exists.
+ */
+export async function getClientFormDetail(
+  projectId: string,
+  formId: string,
+): Promise<ClientFormDetail | null> {
+  const form = await prisma.repairForm.findFirst({
+    where: { id: formId, ...projectScopeWhere(projectId) },
+    select: {
+      ...CLIENT_FORM_SELECT,
+      storeAddress: true,
+      timeSpentMinutes: true,
+      notes: true,
+      queries: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          resolvedAt: true,
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              body: true,
+              createdAt: true,
+              author: { select: { role: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!form) return null;
+
+  const raw = form as unknown as RawClientForm & {
+    storeAddress: string | null;
+    timeSpentMinutes: number | null;
+    notes: string | null;
+    queries: Array<{
+      id: string;
+      status: 'OPEN' | 'ANSWERED' | 'RESOLVED';
+      createdAt: Date;
+      resolvedAt: Date | null;
+      messages: Array<{
+        id: string;
+        body: string;
+        createdAt: Date;
+        author: { role: string };
+      }>;
+    }>;
+  };
+
+  return {
+    ...toClientRow(raw),
+    storeAddress: isBlank(raw.storeAddress) ? null : raw.storeAddress,
+    timeSpentMinutes: raw.timeSpentMinutes,
+    notes: isBlank(raw.notes) ? null : raw.notes,
+    queries: raw.queries.map((q) => ({
+      id: q.id,
+      status: q.status,
+      createdAt: q.createdAt,
+      resolvedAt: q.resolvedAt,
+      messages: q.messages.map((m) => ({
+        id: m.id,
+        body: m.body,
+        createdAt: m.createdAt,
+        side: sideOf(m.author.role),
+      })),
+    })),
+  };
+}
+
+export interface QueryListItem extends ClientQueryThread {
+  formId: string;
+  formCode: string;
+  uid: string;
+  storeName: string;
+  cityName: string;
+  date: Date;
+}
+
+/**
+ * Every thread in the campaign, newest first, unresolved before resolved.
+ *
+ * Both sides read this same list. The manager needs it to find what is waiting on them;
+ * Jti needs it to see what they have asked and what came back, without hunting through
+ * a thousand forms for the one they queried.
+ */
+export async function getQueryThreads(
+  projectId: string,
+  opts: { openOnly?: boolean } = {},
+): Promise<QueryListItem[]> {
+  const threads = await prisma.formQuery.findMany({
+    where: {
+      repairForm: projectScopeWhere(projectId),
+      ...(opts.openOnly ? { status: { not: 'RESOLVED' } } : {}),
+    },
+    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      resolvedAt: true,
+      repairForm: {
+        select: {
+          id: true,
+          formCode: true,
+          uid: true,
+          storeName: true,
+          date: true,
+          city: { select: { name: true } },
+        },
+      },
+      messages: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          author: { select: { role: true } },
+        },
+      },
+    },
+  });
+
+  return threads.map((t) => ({
+    id: t.id,
+    status: t.status,
+    createdAt: t.createdAt,
+    resolvedAt: t.resolvedAt,
+    formId: t.repairForm.id,
+    formCode: t.repairForm.formCode,
+    uid: t.repairForm.uid,
+    storeName: isBlank(t.repairForm.storeName) ? t.repairForm.uid : (t.repairForm.storeName as string),
+    cityName: t.repairForm.city?.name ?? '—',
+    date: t.repairForm.date,
+    messages: t.messages.map((m) => ({
+      id: m.id,
+      body: m.body,
+      createdAt: m.createdAt,
+      side: sideOf(m.author.role),
+    })),
+  }));
+}
+
+/** Waiting on the repair team: what the manager's badge counts. */
+export async function countOpenQueries(projectId: string): Promise<number> {
+  return prisma.formQuery.count({
+    where: { repairForm: projectScopeWhere(projectId), status: { not: 'RESOLVED' } },
+  });
+}

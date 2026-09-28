@@ -95,7 +95,8 @@
     "uidArchive": "UID archive",
     "crew": "My crew",
     "clientView": "Jti view",
-    "downloadRequests": "File requests"
+    "downloadRequests": "File requests",
+    "queries": "Jti's questions"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -230,7 +231,8 @@
     "standCount": "{n, plural, one {# stand} other {# stands}}",
     "standReady": "Filled in",
     "standIncomplete": "Not filled in yet",
-    "removeStandConfirm": "Discard what you entered for stand {n, number}?"
+    "removeStandConfirm": "Discard what you entered for stand {n, number}?",
+    "notes": "Notes"
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
@@ -787,6 +789,38 @@
       "notFound": "Request not found.",
       "alreadyDecided": "This request has already been decided.",
       "buildFailed": "Building the file failed; the request is still pending."
+    },
+    "visitTitle": "Visit details",
+    "standIndexLabel": "Stand number",
+    "queriesOnThisForm": "Questions on this report",
+    "queryAskTitle": "Ask about this visit",
+    "queryAskHelp": "Your question is attached to this report, and the answer is recorded here.",
+    "queryAskPlaceholder": "What is unclear?",
+    "queryAskAction": "Send question",
+    "queryRaised": "Your question has been sent.",
+    "queryOpen": "Awaiting an answer",
+    "queryAnswered": "Answered",
+    "queryResolved": "Closed",
+    "queryResolveAction": "Close question",
+    "queryReplyAction": "Send reply",
+    "queryReplyPlaceholder": "Write your reply…",
+    "queryClosedNote": "This conversation is closed.",
+    "sideClient": "Jti",
+    "sideTeam": "Repair team",
+    "queriesTitle": "My questions",
+    "queriesHelp": "Every question you have raised on a report, with the answers.",
+    "queriesEmpty": "No questions raised.",
+    "queriesListNote": "Unresolved questions are listed first.",
+    "managerQueriesTitle": "Jti's questions",
+    "managerQueriesHelp": "Unanswered questions come first. A question cannot be closed until it has been answered.",
+    "queryError": {
+      "generic": "That request was not valid.",
+      "bodyRequired": "Write a message.",
+      "bodyTooLong": "That message is too long.",
+      "noActiveProject": "There is no active project.",
+      "notFound": "Report or question not found.",
+      "alreadyResolved": "This conversation is closed.",
+      "answerBeforeResolving": "Answer the question before closing it."
     }
   }
 }

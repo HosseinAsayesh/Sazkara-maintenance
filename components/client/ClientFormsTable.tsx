@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { Badge, EmptyState, Table, TableWrap, Td, Th } from '@/components/ui';
+import { Link } from '@/i18n/navigation';
 import type { ClientFormRow } from '@/lib/client-view';
 import { formatDateForLocale } from '@/lib/dates';
 
@@ -73,7 +74,13 @@ export async function ClientFormsTable({
           {rows.map((row) => (
             <tr key={row.id}>
               <Td className="whitespace-nowrap font-medium dir-ltr">
-                {row.formCode}
+                {/* The form code is the way into one visit and its question thread. */}
+                <Link
+                  href={`/client/form/${row.id}`}
+                  className="text-teal-700 hover:underline"
+                >
+                  {row.formCode}
+                </Link>
                 {row.isReRepair ? (
                   <Badge tone="warning" className="ms-2">
                     {t('reRepairBadge')}
