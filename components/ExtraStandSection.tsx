@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { PhotoInput } from './PhotoInput';
+import { repairShortlist } from '@/lib/parts';
 import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Button, Card, CardHeader, Field, Input, Textarea } from './ui';
 
@@ -106,7 +107,7 @@ export function ExtraStandSection({
           onChange={(next) => set('replaced', next)}
         />
         <PartPicker
-          parts={parts}
+          parts={repairShortlist(parts)}
           action="REPAIRED"
           fieldName={`extra_${index}_parts`}
           title={t('repairedParts')}

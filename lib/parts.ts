@@ -221,3 +221,85 @@ if (Object.keys(LEGACY_TO_CURRENT_SORT_ORDER).length !== LEGACY_PART_COLUMN_COUN
 if (new Set(Object.values(LEGACY_TO_CURRENT_SORT_ORDER)).size !== LEGACY_PART_COLUMN_COUNT) {
   throw new Error('Legacy map must not send two archive columns to the same part');
 }
+
+/**
+ * The shortened picker for parts REPAIRED IN PLACE.
+ *
+ * Replacing a part can be any of the thirty; repairing one in place is, in practice, a
+ * much shorter list, and a technician scrolling thirty buttons on a phone in a shop to
+ * find the six that ever apply is how the wrong one gets tapped. Client's list.
+ *
+ * Safe to shorten because §6.8 keeps repaired parts out of export columns 5-34 (they
+ * export as 0 and are described in column 37 instead), so nothing here can move a
+ * column or change what Jti is billed. The REPLACED picker still offers all thirty.
+ *
+ * Some buttons cover more than one catalogue part. The quantity is recorded against
+ * `canonicalFa` and the button's own label is what column 37 prints, because "کلید" is
+ * what the technician actually chose — printing "کلید گرد" would assert a shape nobody
+ * recorded. The distinction is lost only for repairs, where no part is billed.
+ */
+export interface RepairPickerGroup {
+  /** Shown on the button, and printed in column 37. */
+  labelFa: string;
+  labelEn: string;
+  /** Catalogue part the usage row is stored against. */
+  canonicalFa: string;
+  /** Every catalogue part this button stands for, canonical included. */
+  membersFa: string[];
+}
+
+export const REPAIR_PICKER_GROUPS: RepairPickerGroup[] = [
+  { labelFa: 'پلکسی شلف', labelEn: 'Plexiglass shelf', canonicalFa: 'پلکسی شلف', membersFa: ['پلکسی شلف'] },
+  { labelFa: 'لایت فریم', labelEn: 'Light frame', canonicalFa: 'لایت فریم', membersFa: ['لایت فریم'] },
+  { labelFa: 'نوار SMD سفید', labelEn: 'White SMD strip', canonicalFa: 'نوار SMD سفید', membersFa: ['نوار SMD سفید'] },
+  { labelFa: 'نوار SMD آبی', labelEn: 'Blue SMD strip', canonicalFa: 'نوار SMD آبی', membersFa: ['نوار SMD آبی'] },
+  {
+    labelFa: 'کابل برق',
+    labelEn: 'Power cable',
+    canonicalFa: 'کابل ۳/۶۰',
+    membersFa: ['کابل ۳/۶۰', 'سیم آداپتور'],
+  },
+  { labelFa: 'میکروسوئیچ', labelEn: 'Micro-switch', canonicalFa: 'میکروسوئیچ', membersFa: ['میکروسوئیچ'] },
+  { labelFa: 'فنر', labelEn: 'Spring', canonicalFa: 'فنر', membersFa: ['فنر'] },
+  {
+    labelFa: 'درب',
+    labelEn: 'Door',
+    canonicalFa: 'درب پلاستیکی',
+    membersFa: ['درب پلاستیکی', 'شلف روی در'],
+  },
+  {
+    labelFa: 'کلید',
+    labelEn: 'Switch',
+    canonicalFa: 'کلید گرد',
+    membersFa: ['کلید گرد', 'کلید مستطیلی'],
+  },
+  { labelFa: 'برد استند', labelEn: 'Stand board (PCB)', canonicalFa: 'برد استند', membersFa: ['برد استند'] },
+];
+
+/** Canonical Persian name -> the label column 37 should print for a REPAIRED part. */
+export const REPAIR_LABEL_BY_CANONICAL_FA = new Map(
+  REPAIR_PICKER_GROUPS.map((g) => [g.canonicalFa, g.labelFa]),
+);
+
+/**
+ * Narrow a full catalogue down to the repaired-in-place shortlist, relabelled.
+ *
+ * Returns one entry per button in REPAIR_PICKER_GROUPS, carrying the canonical part's
+ * id — so a selection still stores against a real catalogue row — under the group's own
+ * label. Order follows the group list, not the catalogue's export order, because this
+ * list exists to be read quickly rather than to mirror a spreadsheet.
+ */
+export function repairShortlist<
+  T extends { nameFa: string; nameEn: string; sortOrder: number },
+>(catalogue: T[]): T[] {
+  const byName = new Map(catalogue.map((p) => [p.nameFa, p]));
+  const out: T[] = [];
+  for (const [i, group] of REPAIR_PICKER_GROUPS.entries()) {
+    const part = byName.get(group.canonicalFa);
+    // A catalogue missing the canonical part means a seed/catalogue mismatch. Skip the
+    // button rather than crash the form a technician is standing in a shop with.
+    if (!part) continue;
+    out.push({ ...part, nameFa: group.labelFa, nameEn: group.labelEn, sortOrder: i + 1 });
+  }
+  return out;
+}

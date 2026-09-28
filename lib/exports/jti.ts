@@ -3,7 +3,12 @@ import 'server-only';
 import ExcelJS from 'exceljs';
 
 import { formatJalali } from '../dates';
-import { JTI_EXPORT_COLUMN_COUNT, JTI_EXPORT_HEADERS, PART_CATALOG } from '../parts';
+import {
+  JTI_EXPORT_COLUMN_COUNT,
+  JTI_EXPORT_HEADERS,
+  PART_CATALOG,
+  REPAIR_LABEL_BY_CANONICAL_FA,
+} from '../parts';
 import { prisma } from '../prisma';
 import { projectScopeWhere } from '../projects';
 
@@ -118,8 +123,16 @@ function buildMaintenanceDetail(
     );
   }
   if (repaired.length) {
+    // A repaired part is recorded against a canonical catalogue row, but several rows
+    // share one button in the technician's shortened picker — so print the button's
+    // label. Writing "کلید گرد" would assert a shape nobody actually recorded.
     segments.push(
-      `تعمیر: ${repaired.map((p) => `${p.part.nameFa} (${p.quantity})`).join('، ')}`,
+      `تعمیر: ${repaired
+        .map(
+          (p) =>
+            `${REPAIR_LABEL_BY_CANONICAL_FA.get(p.part.nameFa) ?? p.part.nameFa} (${p.quantity})`,
+        )
+        .join('، ')}`,
     );
   }
   if (notes?.trim()) segments.push(`توضیحات: ${notes.trim()}`);

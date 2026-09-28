@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { useActionState, useRef, useState, useTransition } from 'react';
+import { useActionState, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { submitRepairFormAction, type RepairFormState } from '@/app/actions/repair-form';
@@ -16,6 +16,7 @@ import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { ExtraPhotoInput, PhotoInput } from './PhotoInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
 import { StandTabs } from './StandTabs';
+import { repairShortlist } from '@/lib/parts';
 import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
 
@@ -100,6 +101,8 @@ export function RepairFormClient(props: RepairFormProps) {
   const outcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
 
   const standPhotos = requiredStandPhotos(outcome, reason || null);
+  // Repairing in place uses a short client-supplied list, not all thirty parts.
+  const repairableParts = useMemo(() => repairShortlist(props.parts), [props.parts]);
 
   const standCount = 1 + extraStands.length;
   const standTabs = [
@@ -398,7 +401,7 @@ export function RepairFormClient(props: RepairFormProps) {
         onChange={setReplaced}
       />
       <PartPicker
-        parts={props.parts}
+        parts={repairableParts}
         action="REPAIRED"
         fieldName="parts"
         title={t('repairedParts')}
