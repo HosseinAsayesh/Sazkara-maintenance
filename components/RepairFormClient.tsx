@@ -101,6 +101,23 @@ export function RepairFormClient(props: RepairFormProps) {
   const outcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
 
   const standPhotos = requiredStandPhotos(outcome, reason || null);
+
+  /**
+   * §4.4 — photograph the stand BEFORE touching it.
+   *
+   * A technician who repairs first and opens the app afterwards has no "before" state
+   * left to photograph, and the evidence for the whole visit is gone. So the parts
+   * pickers stay shut until the shot exists, and the photo card is the first thing in
+   * the panel rather than the last.
+   *
+   * The gate reads the same rule as the server (lib/photo-rules.ts): where no "before"
+   * is required — the stand was removed, or the shop was shut, and the technician never
+   * reached it — there is nothing to wait for and the gate is already open. Deriving it
+   * rather than listing those reasons again keeps one rule in one place.
+   */
+  const [hasBeforePhoto, setHasBeforePhoto] = useState(false);
+  const beforeRequired = standPhotos.includes('BEFORE');
+  const standUnlocked = !beforeRequired || hasBeforePhoto;
   // Repairing in place uses a short client-supplied list, not all thirty parts.
   const repairableParts = useMemo(() => repairShortlist(props.parts), [props.parts]);
 
@@ -401,31 +418,66 @@ export function RepairFormClient(props: RepairFormProps) {
 
       <div className={clsx('space-y-4', activeStand !== 0 && 'hidden')}>
 
-      <Alert tone={outcome === 'REPAIRED' ? 'success' : 'warning'}>
-        <span className="font-semibold">
-          {outcome === 'REPAIRED' ? t('outcomeRepaired') : t('outcomeNotRepaired')}
-        </span>
-        <span className="block text-xs">{t('outcomeAuto')}</span>
-      </Alert>
+      {/* First in the panel, on purpose: the photograph has to happen before the work,
+          and a card at the bottom of a long form is one a technician reaches afterwards. */}
+      <Card className={clsx(!standUnlocked && 'border-amber-300')}>
+        <CardHeader title={t('sectionPhotos')} description={t('beforeFirstHelp')} />
+        <div className="grid gap-4 p-4 sm:grid-cols-2">
+          {/* Hidden, not merely optional, where no "before" can exist — the stand was
+              removed or the shop was shut, so the technician never reached it. Same
+              reasoning as the "after" tile below: an empty optional tile invites a
+              meaningless photograph. */}
+          {beforeRequired ? (
+            <PhotoInput
+              label={t('photoBefore')}
+              name="photoBefore"
+              required
+              onChange={(file) => setHasBeforePhoto(Boolean(file))}
+            />
+          ) : null}
+          {/* Hidden entirely when nothing was repaired: there is no "after" state to
+              photograph, and leaving the tile visible invites a meaningless picture. */}
+          {standPhotos.includes('AFTER') ? (
+            <PhotoInput label={t('photoAfter')} name="photoAfter" required />
+          ) : null}
+        </div>
+      </Card>
 
-      <PartPicker
-        parts={props.parts}
-        action="REPLACED"
-        fieldName="parts"
-        title={t('replacedParts')}
-        help={t('replacedHelp')}
-        value={replaced}
-        onChange={setReplaced}
-      />
-      <PartPicker
-        parts={repairableParts}
-        action="REPAIRED"
-        fieldName="parts"
-        title={t('repairedParts')}
-        help={t('repairedHelp')}
-        value={repaired}
-        onChange={setRepaired}
-      />
+      {!standUnlocked ? (
+        <Alert tone="warning" title={t('beforeGateTitle')}>
+          {t('beforeGateBody')}
+        </Alert>
+      ) : null}
+
+      {standUnlocked ? (
+        <>
+          <Alert tone={outcome === 'REPAIRED' ? 'success' : 'warning'}>
+            <span className="font-semibold">
+              {outcome === 'REPAIRED' ? t('outcomeRepaired') : t('outcomeNotRepaired')}
+            </span>
+            <span className="block text-xs">{t('outcomeAuto')}</span>
+          </Alert>
+
+          <PartPicker
+            parts={props.parts}
+            action="REPLACED"
+            fieldName="parts"
+            title={t('replacedParts')}
+            help={t('replacedHelp')}
+            value={replaced}
+            onChange={setReplaced}
+          />
+          <PartPicker
+            parts={repairableParts}
+            action="REPAIRED"
+            fieldName="parts"
+            title={t('repairedParts')}
+            help={t('repairedHelp')}
+            value={repaired}
+            onChange={setRepaired}
+          />
+        </>
+      ) : null}
 
       {!hasParts ? (
         <Card>
@@ -502,23 +554,6 @@ export function RepairFormClient(props: RepairFormProps) {
         </div>
       </Card>
 
-        {/* This stand's own before/after shots, captured while it is still in front of
-            the technician. */}
-        <Card>
-          <CardHeader title={t('sectionPhotos')} description={t('standPhotosHelp')} />
-          <div className="grid gap-4 p-4 sm:grid-cols-2">
-            <PhotoInput
-              label={t('photoBefore')}
-              name="photoBefore"
-              required={standPhotos.includes('BEFORE')}
-            />
-            {/* Hidden entirely when nothing was repaired: there is no "after" state to
-                photograph, and leaving the tile visible invites a meaningless picture. */}
-            {standPhotos.includes('AFTER') ? (
-              <PhotoInput label={t('photoAfter')} name="photoAfter" required />
-            ) : null}
-          </div>
-        </Card>
       </div>
 
       {extraStands.map((stand, i) => (

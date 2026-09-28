@@ -1,13 +1,14 @@
 'use client';
 
 import clsx from 'clsx';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { PhotoInput } from './PhotoInput';
 import { repairShortlist } from '@/lib/parts';
 import { requiredStandPhotos } from '@/lib/photo-rules';
-import { Button, Card, CardHeader, Field, Input, Textarea } from './ui';
+import { Alert, Button, Card, CardHeader, Field, Input, Textarea } from './ui';
 
 /** §6.5 — the same fixed list the primary stand uses. */
 const NOT_REPAIRED_REASONS = [
@@ -76,6 +77,13 @@ export function ExtraStandSection({
     value.reason || null,
   );
 
+  // Same gate as the primary stand: photograph it before working on it. See
+  // RepairFormClient for why this is derived from requiredStandPhotos rather than
+  // re-listing the reasons where no "before" can exist.
+  const [hasBeforePhoto, setHasBeforePhoto] = useState(false);
+  const beforeRequired = standPhotos.includes('BEFORE');
+  const standUnlocked = !beforeRequired || hasBeforePhoto;
+
   const set = <K extends keyof ExtraStandValue>(key: K, next: ExtraStandValue[K]) =>
     onChange({ ...value, [key]: next });
 
@@ -97,24 +105,55 @@ export function ExtraStandSection({
           {t('sharedUidNote', { uid, n: index + 2 })}
         </p>
 
-        <PartPicker
-          parts={parts}
-          action="REPLACED"
-          fieldName={`extra_${index}_parts`}
-          title={t('replacedParts')}
-          help={t('replacedHelp')}
-          value={value.replaced}
-          onChange={(next) => set('replaced', next)}
-        />
-        <PartPicker
-          parts={repairShortlist(parts)}
-          action="REPAIRED"
-          fieldName={`extra_${index}_parts`}
-          title={t('repairedParts')}
-          help={t('repairedHelp')}
-          value={value.repaired}
-          onChange={(next) => set('repaired', next)}
-        />
+        {/* Photograph it before working on it, same as the primary stand. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Hidden where no "before" can exist — see RepairFormClient. */}
+          {beforeRequired ? (
+            <PhotoInput
+              label={t('photoBefore')}
+              name={`extra_${index}_photoBefore`}
+              required
+              onChange={(file) => setHasBeforePhoto(Boolean(file))}
+            />
+          ) : null}
+          {/* No "after" when this stand was not repaired — see lib/photo-rules.ts. */}
+          {standPhotos.includes('AFTER') ? (
+            <PhotoInput
+              label={t('photoAfter')}
+              name={`extra_${index}_photoAfter`}
+              required
+            />
+          ) : null}
+        </div>
+
+        {!standUnlocked ? (
+          <Alert tone="warning" title={t('beforeGateTitle')}>
+            {t('beforeGateBody')}
+          </Alert>
+        ) : null}
+
+        {standUnlocked ? (
+          <>
+            <PartPicker
+              parts={parts}
+              action="REPLACED"
+              fieldName={`extra_${index}_parts`}
+              title={t('replacedParts')}
+              help={t('replacedHelp')}
+              value={value.replaced}
+              onChange={(next) => set('replaced', next)}
+            />
+            <PartPicker
+              parts={repairShortlist(parts)}
+              action="REPAIRED"
+              fieldName={`extra_${index}_parts`}
+              title={t('repairedParts')}
+              help={t('repairedHelp')}
+              value={value.repaired}
+              onChange={(next) => set('repaired', next)}
+            />
+          </>
+        ) : null}
 
         {hasParts ? (
           <Field label={t('qualityScore')} required>
@@ -172,19 +211,6 @@ export function ExtraStandSection({
         )}
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <PhotoInput
-            label={t('photoBefore')}
-            name={`extra_${index}_photoBefore`}
-            required={standPhotos.includes('BEFORE')}
-          />
-          {/* No "after" when this stand was not repaired — see lib/photo-rules.ts. */}
-          {standPhotos.includes('AFTER') ? (
-            <PhotoInput
-              label={t('photoAfter')}
-              name={`extra_${index}_photoAfter`}
-              required
-            />
-          ) : null}
           <Field label={t('timeSpent')}>
             <Input
               name={`extra_${index}_time`}

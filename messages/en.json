@@ -232,7 +232,10 @@
     "standReady": "Filled in",
     "standIncomplete": "Not filled in yet",
     "removeStandConfirm": "Discard what you entered for stand {n, number}?",
-    "notes": "Notes"
+    "notes": "Notes",
+    "beforeFirstHelp": "Before anything else, photograph the stand as you found it.",
+    "beforeGateTitle": "The “before” photo comes first",
+    "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page."
   },
   "reasons": {
     "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
