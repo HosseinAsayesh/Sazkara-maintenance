@@ -13,11 +13,22 @@ import { jwtVerify, SignJWT } from 'jose';
 export const SESSION_COOKIE = 'sazkara_session';
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
-export type SessionRole =
-  | 'TECHNICIAN'
-  | 'LEAD_TECHNICIAN'
-  | 'MANAGER'
-  | 'CLIENT_SUPERVISOR';
+/**
+ * Every role a cookie may carry — and the runtime allowlist, from one source.
+ *
+ * These were two separate lists: a union type here and a hardcoded array inside
+ * verifySession. Adding CLIENT_SUPERVISOR to the type while missing the array meant
+ * every Jti session verified as forged and was bounced to the login page, with the
+ * account itself perfectly valid. A union derived from the array cannot drift from it.
+ */
+export const SESSION_ROLES = [
+  'TECHNICIAN',
+  'LEAD_TECHNICIAN',
+  'MANAGER',
+  'CLIENT_SUPERVISOR',
+] as const;
+
+export type SessionRole = (typeof SESSION_ROLES)[number];
 
 export interface SessionPayload {
   userId: string;
@@ -52,7 +63,7 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
     const { userId, name, phone, role, technicianCode } = payload as unknown as SessionPayload;
-    if (!userId || !['TECHNICIAN', 'LEAD_TECHNICIAN', 'MANAGER'].includes(role)) {
+    if (!userId || !SESSION_ROLES.includes(role)) {
       return null;
     }
     return { userId, name, phone, role, technicianCode: technicianCode ?? null };

@@ -150,7 +150,36 @@ async function main() {
     },
     update: { role: 'MANAGER', status: 'APPROVED' },
   });
-  console.log(`✓ manager account — phone: ${phone}  password: ${password}`);
+  console.log(`✓ manager account — phone: ${phone}`);
+
+  // --- Jti's supervisor account ------------------------------------------------
+  // One shared login for the client's team, at the client's request. It buys
+  // simplicity at the cost of accountability: queries and download requests will all
+  // read "Jti" rather than naming a person, and revoking one individual means changing
+  // the password for everyone. Named accounts are a smaller change now than later.
+  const clientPhone = process.env.SEED_CLIENT_PHONE || '09121112000';
+  const clientPassword = process.env.SEED_CLIENT_PASSWORD;
+  const clientName = process.env.SEED_CLIENT_NAME || 'ناظر جی‌تی‌آی';
+
+  if (!clientPassword) {
+    // Deliberately not defaulted. A predictable password on the one account belonging
+    // to someone outside the company is the kind of convenience that ends up in a
+    // README, and this account sees the client's whole campaign.
+    console.log('… Jti account skipped — set SEED_CLIENT_PASSWORD in .env to create it');
+  } else {
+    await prisma.user.upsert({
+      where: { phone: clientPhone },
+      create: {
+        name: clientName,
+        phone: clientPhone,
+        passwordHash: await bcrypt.hash(clientPassword, 10),
+        role: 'CLIENT_SUPERVISOR',
+        status: 'APPROVED',
+      },
+      update: { role: 'CLIENT_SUPERVISOR', status: 'APPROVED' },
+    });
+    console.log(`✓ Jti supervisor account — phone: ${clientPhone}`);
+  }
 
   // Counters start at 0; nextFormCode()/nextTechnicianCode() create them on demand.
   console.log('\nSeed complete.');
