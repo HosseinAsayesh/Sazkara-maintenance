@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { Card, CardHeader, StatCard, Table, TableWrap, Td, Th } from '@/components/ui';
 import type { PartsUsageReport } from '@/lib/exports/parts-usage';
+import { CENTIMETER_PARTS, CENTIMETER_STEP } from '@/lib/parts';
 
 /**
  * Parts consumed across the campaign: how many, and how often a stand needed them.
@@ -37,6 +38,20 @@ export async function ClientPartsTable({
     .sort((a, b) => b.standCount - a.standCount || b.total - a.total);
   const unused = report.rows.length - used.length;
 
+  /**
+   * The SMD strips are cut from a reel and recorded in centimetres, so their raw
+   * quantity dwarfs everything else: 23,137 next to 740 fuses reads as though the reel
+   * were the main thing consumed. Counted in the 50 cm cuts they are actually fitted in,
+   * the same figure is 463 — a number that sits sensibly beside the rest.
+   *
+   * The centimetres are still shown on the row, because that is what was recorded and
+   * what a parts bill is reconciled against.
+   */
+  const isCut = (nameFa: string) => CENTIMETER_PARTS.has(nameFa);
+  const inCuts = (row: { nameFa: string; total: number }) =>
+    isCut(row.nameFa) ? Math.round(row.total / CENTIMETER_STEP) : row.total;
+  const totalItems = used.reduce((sum, r) => sum + inCuts(r), 0);
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -53,7 +68,7 @@ export async function ClientPartsTable({
         />
         <StatCard
           label={t('partsGrandTotal')}
-          value={num(report.grandTotal)}
+          value={num(totalItems)}
           hint={t('partsGrandTotalHint')}
         />
       </div>
@@ -65,9 +80,9 @@ export async function ClientPartsTable({
             <thead>
               <tr>
                 <Th>{t('part')}</Th>
-                <Th className="text-end">{t('partTotal')}</Th>
-                <Th className="text-end">{t('partStands')}</Th>
-                <Th className="text-end">{t('partShare')}</Th>
+                <Th numeric>{t('partTotal')}</Th>
+                <Th numeric>{t('partStands')}</Th>
+                <Th numeric>{t('partShare')}</Th>
               </tr>
             </thead>
             <tbody>
@@ -81,9 +96,16 @@ export async function ClientPartsTable({
                     <Td className="font-medium">
                       {locale === 'fa' ? row.nameFa : row.nameEn}
                     </Td>
-                    <Td className="text-end tabular-nums">{num(row.total)}</Td>
-                    <Td className="text-end tabular-nums">{num(row.standCount)}</Td>
-                    <Td className="text-end tabular-nums">{pct(share)}</Td>
+                    <Td numeric>
+                      {num(inCuts(row))}
+                      {isCut(row.nameFa) ? (
+                        <span className="ms-1 text-xs font-normal text-[var(--muted)]">
+                          ({t('cmTotal', { n: num(row.total) })})
+                        </span>
+                      ) : null}
+                    </Td>
+                    <Td numeric>{num(row.standCount)}</Td>
+                    <Td numeric>{pct(share)}</Td>
                   </tr>
                 );
               })}

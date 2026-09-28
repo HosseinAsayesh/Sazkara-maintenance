@@ -259,11 +259,25 @@ export function Table({ className, ...rest }: ComponentProps<'table'>) {
   return <table className={clsx('w-full min-w-[36rem] text-sm', className)} {...rest} />;
 }
 
-export function Th({ className, ...rest }: ComponentProps<'th'>) {
+/**
+ * `numeric` rather than `className="text-end"`.
+ *
+ * These are composed with clsx, not tailwind-merge, so passing `text-end` alongside the
+ * base `text-start` leaves BOTH classes on the element and the winner is decided by the
+ * order Tailwind happens to emit them — which put every numeric header at the start of
+ * the cell while its figures sat at the end. A prop picks one class instead of stacking
+ * two that contradict each other.
+ */
+export function Th({
+  className,
+  numeric,
+  ...rest
+}: ComponentProps<'th'> & { numeric?: boolean }) {
   return (
     <th
       className={clsx(
-        'whitespace-nowrap border-b border-[var(--border)] bg-brand-50 px-3 py-2 text-start text-xs font-semibold text-ink-500',
+        'whitespace-nowrap border-b border-[var(--border)] bg-brand-50 px-3 py-2 text-xs font-semibold text-ink-500',
+        numeric ? 'text-end' : 'text-start',
         className,
       )}
       {...rest}
@@ -271,10 +285,20 @@ export function Th({ className, ...rest }: ComponentProps<'th'>) {
   );
 }
 
-export function Td({ className, ...rest }: ComponentProps<'td'>) {
+export function Td({
+  className,
+  numeric,
+  ...rest
+}: ComponentProps<'td'> & { numeric?: boolean }) {
   return (
     <td
-      className={clsx('border-b border-[var(--border)] px-3 py-2 align-middle', className)}
+      className={clsx(
+        'border-b border-[var(--border)] px-3 py-2 align-middle',
+        // tabular-nums travels with it: a column of figures that does not line up
+        // digit-for-digit is as hard to scan as one aligned to the wrong edge.
+        numeric && 'text-end tabular-nums',
+        className,
+      )}
       {...rest}
     />
   );

@@ -63,7 +63,7 @@ export async function ClientReportCard({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           lead
           label={t('ordered')}
@@ -75,6 +75,12 @@ export async function ClientReportCard({
           label={t('repaired')}
           value={num(totals.repaired)}
           hint={t('repairedHint')}
+        />
+        <StatCard
+          tone="danger"
+          label={t('notRepaired')}
+          value={num(totals.notRepaired)}
+          hint={t('notRepairedHint')}
         />
         <StatCard
           tone={totals.remaining > 0 ? 'warning' : 'neutral'}
@@ -98,12 +104,12 @@ export async function ClientReportCard({
             <thead>
               <tr>
                 <Th>{t('city')}</Th>
-                <Th className="text-end">{t('ordered')}</Th>
-                <Th className="text-end">{t('repaired')}</Th>
-                <Th className="text-end">{t('notRepaired')}</Th>
-                <Th className="text-end">{t('reRepairs')}</Th>
-                <Th className="text-end">{t('remaining')}</Th>
-                <Th className="text-end">{t('done')}</Th>
+                <Th numeric>{t('ordered')}</Th>
+                <Th numeric>{t('repaired')}</Th>
+                <Th numeric>{t('notRepaired')}</Th>
+                <Th numeric>{t('reRepairs')}</Th>
+                <Th numeric>{t('remaining')}</Th>
+                <Th numeric>{t('done')}</Th>
               </tr>
             </thead>
             <tbody>
@@ -112,16 +118,16 @@ export async function ClientReportCard({
                 return (
                   <tr key={c.cityName}>
                     <Td className="font-medium">{c.cityName}</Td>
-                    <Td className="text-end tabular-nums">{num(c.totalOrdered)}</Td>
-                    <Td className="text-end tabular-nums text-teal-700">
+                    <Td numeric>{num(c.totalOrdered)}</Td>
+                    <Td numeric className="text-teal-700">
                       {num(c.repaired)}
                     </Td>
-                    <Td className="text-end tabular-nums text-red-700">
+                    <Td numeric className="text-red-700">
                       {num(c.notRepaired)}
                     </Td>
-                    <Td className="text-end tabular-nums">{num(c.reRepairs)}</Td>
-                    <Td className="text-end tabular-nums">{num(c.remaining)}</Td>
-                    <Td className="text-end tabular-nums">
+                    <Td numeric>{num(c.reRepairs)}</Td>
+                    <Td numeric>{num(c.remaining)}</Td>
+                    <Td numeric>
                       {cityPct === null ? '—' : pct(cityPct)}
                     </Td>
                   </tr>
@@ -129,16 +135,16 @@ export async function ClientReportCard({
               })}
               <tr className="border-t-2 border-t-[var(--border)] font-bold">
                 <Td>{t('total')}</Td>
-                <Td className="text-end tabular-nums">{num(totals.totalOrdered)}</Td>
-                <Td className="text-end tabular-nums text-teal-700">
+                <Td numeric>{num(totals.totalOrdered)}</Td>
+                <Td numeric className="text-teal-700">
                   {num(totals.repaired)}
                 </Td>
-                <Td className="text-end tabular-nums text-red-700">
+                <Td numeric className="text-red-700">
                   {num(totals.notRepaired)}
                 </Td>
-                <Td className="text-end tabular-nums">{num(totals.reRepairs)}</Td>
-                <Td className="text-end tabular-nums">{num(totals.remaining)}</Td>
-                <Td className="text-end tabular-nums">
+                <Td numeric>{num(totals.reRepairs)}</Td>
+                <Td numeric>{num(totals.remaining)}</Td>
+                <Td numeric>
                   {coverage === null ? '—' : pct(coverage)}
                 </Td>
               </tr>

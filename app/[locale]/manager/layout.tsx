@@ -15,9 +15,12 @@ export default async function ManagerLayout({
   const t = await getTranslations({ locale, namespace: 'nav' });
 
   // Badge counts for the two things that block the manager's workflow.
-  const [pendingTechnicians, pendingStands] = await Promise.all([
+  const [pendingTechnicians, pendingStands, pendingDownloads] = await Promise.all([
     prisma.user.count({ where: { role: 'TECHNICIAN', status: 'PENDING' } }),
     prisma.store.count({ where: { confirmation: 'PENDING' } }),
+    // Jti waiting on a file is a blocked conversation, so it earns a badge like the
+    // other two things that stop work.
+    prisma.downloadRequest.count({ where: { status: 'PENDING' } }),
   ]);
 
   return (
@@ -44,6 +47,11 @@ export default async function ManagerLayout({
         { href: '/manager/historical', label: t('historical') },
         { href: '/manager/parts', label: t('parts') },
         { href: '/manager/settings', label: t('settings') },
+        // Opens Jti's own panel, which carries its own nav and a way back. Deliberately
+        // the client's surface rather than a manager copy of it: the manager needs to
+        // see what the client sees, redactions included, not a better version.
+        { href: '/manager/download-requests', label: t('downloadRequests'), badge: pendingDownloads },
+        { href: '/client', label: t('clientView') },
       ]}
     >
       {children}

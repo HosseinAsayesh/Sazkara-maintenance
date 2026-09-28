@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { AppShell } from '@/components/AppShell';
+import { Alert } from '@/components/ui';
 import { requireClientViewer } from '@/lib/auth';
 
 /**
@@ -22,12 +23,13 @@ export default async function ClientLayout({
 
   const user = await requireClientViewer(locale);
   const t = await getTranslations({ locale, namespace: 'client' });
+  const isManager = user.role === 'MANAGER';
 
   return (
     <AppShell
       locale={locale}
       userName={user.name}
-      userSubtitle={t('roleLabel')}
+      userSubtitle={isManager ? t('managerViewingLabel') : t('roleLabel')}
       nav={[
         { href: '/client', label: t('navReportCard') },
         { href: '/client/today', label: t('navToday') },
@@ -35,8 +37,20 @@ export default async function ClientLayout({
         { href: '/client/parts', label: t('navParts') },
         { href: '/client/re-repairs', label: t('navReRepairs') },
         { href: '/client/downloads', label: t('navDownloads') },
+        // A manager who followed the Jti View tab must not be stranded on a surface with
+        // no dashboard, no exports and no settings.
+        ...(isManager ? [{ href: '/manager', label: t('backToManager') }] : []),
       ]}
     >
+      {/* Stated plainly, because a manager mistaking this for their own dashboard would
+          read "no wages" as "the wages are missing". */}
+      {isManager ? (
+        <div className="mb-4">
+          <Alert tone="info" title={t('managerBannerTitle')}>
+            {t('managerBannerBody')}
+          </Alert>
+        </div>
+      ) : null}
       {children}
     </AppShell>
   );
