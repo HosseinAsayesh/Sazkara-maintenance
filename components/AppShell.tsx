@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Link } from '@/i18n/navigation';
 
+import { LicenseBanner } from './LicenseBanner';
 import { LocaleSwitcher } from './LocaleSwitcher';
 import { LogoutButton } from './LogoutButton';
 import { NavTabs, type NavItem } from './NavTabs';
@@ -33,6 +34,7 @@ export async function AppShell({
   title,
   subtitle,
   actions,
+  isManager = false,
   children,
 }: {
   locale: string;
@@ -42,6 +44,8 @@ export async function AppShell({
   title?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** Managers also get the "license expires soon" notice and a link to fix it. */
+  isManager?: boolean;
   children: ReactNode;
 }) {
   const t = await getTranslations({ locale, namespace: 'app' });
@@ -86,6 +90,8 @@ export async function AppShell({
           {nav?.length ? <NavTabs items={nav} /> : null}
         </div>
       </header>
+
+      <LicenseBanner locale={locale} isManager={isManager} />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-7">
         {title || actions ? (

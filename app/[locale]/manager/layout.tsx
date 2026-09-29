@@ -33,6 +33,7 @@ export default async function ManagerLayout({
       locale={locale}
       userName={user.name}
       userSubtitle={user.phone}
+      isManager
       nav={[
         { href: '/manager', label: t('dashboard') },
         { href: '/manager/projects', label: t('projects') },

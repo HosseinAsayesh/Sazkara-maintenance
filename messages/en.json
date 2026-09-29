@@ -610,7 +610,8 @@
     "notALead": "The selected user is not a crew lead.",
     "projectNotEmpty": "That project is not empty; deleting it needs a second confirmation.",
     "invalidImage": "Only PNG, JPG or WebP is accepted.",
-    "imageTooLarge": "That image is too large."
+    "imageTooLarge": "That image is too large.",
+    "segment": "This action could not be completed. If a red notice is shown above, the system is currently read-only."
   },
   "projects": {
     "title": "Projects and phases",
@@ -824,6 +825,36 @@
       "notFound": "Report or question not found.",
       "alreadyResolved": "This conversation is closed.",
       "answerBeforeResolving": "Answer the question before closing it."
+    }
+  },
+  "license": {
+    "title": "License",
+    "help": "The system's usage license. Paste a new license from the system provider here to renew it.",
+    "licensee": "Licensed to",
+    "expires": "Valid until",
+    "permanent": "Permanent",
+    "daysLeft": "{count, plural, =0 {expires today} one {# day left} other {# days left}}",
+    "pasteLabel": "New license",
+    "pasteHint": "Paste the whole text, including the BEGIN and END lines.",
+    "install": "Install license",
+    "installed": "License installed.",
+    "status": {
+      "valid": "Active",
+      "expiring": "Expiring soon",
+      "expired": "Expired",
+      "missing": "Not installed",
+      "invalid": "Invalid"
+    },
+    "errors": {
+      "licenseEmpty": "Paste the license text first.",
+      "licenseInvalid": "This is not a valid license. Check that the whole text was copied.",
+      "licenseExpired": "This license has already expired."
+    },
+    "banner": {
+      "expired": "The license expired on {date}. The system is read-only: information can be viewed but not saved.",
+      "missing": "No valid license is installed. The system is read-only: information can be viewed but not saved.",
+      "expiring": "The license expires on {date} ({count, plural, one {# day left} other {# days left}}).",
+      "action": "License settings"
     }
   }
 }

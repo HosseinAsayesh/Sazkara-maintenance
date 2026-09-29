@@ -1,10 +1,13 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { CityManager } from '@/components/CityManager';
+import { LicenseSettings } from '@/components/LicenseSettings';
 import { LogoSettings } from '@/components/LogoSettings';
 import { WageSettingsForm } from '@/components/SettingsForms';
 import { requireManager } from '@/lib/auth';
 import { findDuplicateCityGroups, listCitiesWithUsage } from '@/lib/cities';
+import { formatDateForLocale } from '@/lib/dates';
+import { currentLicense } from '@/lib/license';
 import { getStorage } from '@/lib/storage';
 import { getAppSettings, getWageSettings } from '@/lib/settings';
 
@@ -17,11 +20,12 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
 
   const t = await getTranslations({ locale, namespace: 'settings' });
 
-  const [wages, app, cities, duplicateGroups] = await Promise.all([
+  const [wages, app, cities, duplicateGroups, license] = await Promise.all([
     getWageSettings(),
     getAppSettings(),
     listCitiesWithUsage(),
     findDuplicateCityGroups(),
+    currentLicense(),
   ]);
 
   return (
@@ -43,6 +47,14 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         locale={locale}
         cities={cities}
         duplicateGroups={duplicateGroups.map((group) => group.map((c) => c.id))}
+      />
+
+      <LicenseSettings
+        locale={locale}
+        status={license.status}
+        licensee={license.licensee}
+        expiresLabel={license.expiresAt ? formatDateForLocale(license.expiresAt, locale) : null}
+        daysLeft={license.daysLeft}
       />
     </div>
   );
