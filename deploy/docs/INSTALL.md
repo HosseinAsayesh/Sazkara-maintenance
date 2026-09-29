@@ -98,10 +98,11 @@ sudo /opt/sazkara/tools/migrate.sh
 sudo /opt/sazkara/tools/seed.sh
 ```
 
-The system starts **empty**: no stores, orders, reports or technicians. `seed.sh` adds
-only what the app needs to work — the standard 30-part catalogue, six starting cities,
-placeholder wage rates (edit them in Settings), one default project, and the manager
-account (plus the JTI account if you set its password). Records are then entered in the
+The system starts **empty**: no stores, orders, reports or technicians. The standard
+30-part catalogue is built in and appears with the tables. `seed.sh` adds only six
+starting cities (Tehran, Shiraz, Mashhad, Rasht, Karaj, Kermanshah — more can be added
+in Settings), placeholder wage rates (edit them in Settings), one default project, and
+the manager account (plus the JTI account if you set its password). Records are then entered in the
 app, or imported from Excel under "Jti orders".
 
 ## 7. Start the application

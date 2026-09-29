@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# First-time setup data: the part catalogue, starting cities, wage placeholders, the
-# default project and the first manager (and optional JTI supervisor) account, taken
-# from the SEED_* lines in the settings file. Meant for a new installation. Re-running
-# it leaves wage rates, settings, records and passwords alone, but resets the part
-# catalogue to the standard 30 parts (re-activating any the manager switched off).
+# First-time setup data: the six starting cities, wage placeholders, the default
+# project and the first manager (and optional JTI supervisor) account, taken from the
+# SEED_* lines in the settings file. (The 30-part catalogue is not seeded - it is built
+# into the database by migrate.sh.) Safe to re-run: it leaves wage rates, settings,
+# records and passwords alone.
 #
 #   sudo /opt/sazkara/tools/seed.sh
 

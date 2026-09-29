@@ -1,22 +1,24 @@
 /**
- * Seed: the 30-part catalogue, a starting set of cities, wage/app settings, and the
- * first manager account. Idempotent — safe to re-run.
+ * Seed: a starting set of cities, wage/app settings, the default project and the first
+ * manager account. Idempotent — safe to re-run.
+ *
+ * The 30-part catalogue is not here: it is fixed data the app cannot work without, so
+ * it ships in the migrations (20260929120000_part_catalogue) and exists as soon as the
+ * tables do.
  */
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-import { PART_CATALOG } from '../lib/parts';
-
 const prisma = new PrismaClient();
 
 const CITIES: Array<{ name: string; nameEn: string; isTehran: boolean }> = [
   { name: 'تهران', nameEn: 'Tehran', isTehran: true },
-  { name: 'اصفهان', nameEn: 'Isfahan', isTehran: false },
-  { name: 'مشهد', nameEn: 'Mashhad', isTehran: false },
   { name: 'شیراز', nameEn: 'Shiraz', isTehran: false },
-  { name: 'تبریز', nameEn: 'Tabriz', isTehran: false },
+  { name: 'مشهد', nameEn: 'Mashhad', isTehran: false },
+  { name: 'رشت', nameEn: 'Rasht', isTehran: false },
   { name: 'کرج', nameEn: 'Karaj', isTehran: false },
+  { name: 'کرمانشاه', nameEn: 'Kermanshah', isTehran: false },
 ];
 
 /**
@@ -33,32 +35,6 @@ const WAGE_SEED: Record<string, number> = {
 };
 
 async function main() {
-  // --- Parts (§8): the order here IS the export column order. ------------------
-  for (const part of PART_CATALOG) {
-    await prisma.partCatalogItem.upsert({
-      where: { exportColumnKey: part.exportColumnKey },
-      create: {
-        nameFa: part.nameFa,
-        nameEn: part.nameEn,
-        exportColumnKey: part.exportColumnKey,
-        sortOrder: part.sortOrder,
-        unit: part.unit,
-        quantityStep: part.quantityStep,
-      },
-      update: {
-        nameFa: part.nameFa,
-        nameEn: part.nameEn,
-        sortOrder: part.sortOrder,
-        // Units are a catalogue fact, not a manager preference, so they are kept in
-        // sync on every seed run.
-        unit: part.unit,
-        quantityStep: part.quantityStep,
-        active: true,
-      },
-    });
-  }
-  console.log(`✓ ${PART_CATALOG.length} part catalogue items`);
-
   // --- Cities ------------------------------------------------------------------
   for (const city of CITIES) {
     await prisma.city.upsert({

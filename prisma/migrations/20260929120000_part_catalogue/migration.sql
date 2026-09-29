@@ -1,0 +1,35 @@
+-- The standard 30-part catalogue (export columns 5..34), built into the database so
+-- every installation has it the moment its tables exist. Generated from PART_CATALOG in
+-- lib/parts.ts. Existing databases already hold these rows, so conflicts are skipped.
+INSERT INTO "PartCatalogItem" ("id", "nameFa", "nameEn", "exportColumnKey", "sortOrder", "unit", "quantityStep", "active") VALUES
+  ('part_col05', 'پلکسی شلف', 'Plexiglass shelf', 'col05', 1, 'PIECE', 1, true),
+  ('part_col06', 'لایت باکس', 'Light box', 'col06', 2, 'PIECE', 1, true),
+  ('part_col07', 'شلف روی در', 'Shelf on door', 'col07', 3, 'PIECE', 1, true),
+  ('part_col08', 'کلید برق ۱۲ آمپر', '12A power switch', 'col08', 4, 'PIECE', 1, true),
+  ('part_col09', 'سیم نمره ۱', 'Wire gauge 1', 'col09', 5, 'PIECE', 1, true),
+  ('part_col10', 'سیم نمره ۰.۵', 'Wire gauge 0.5', 'col10', 6, 'PIECE', 1, true),
+  ('part_col11', 'پایه فیوز', 'Fuse base', 'col11', 7, 'PIECE', 1, true),
+  ('part_col12', 'فیوز', 'Fuse', 'col12', 8, 'PIECE', 1, true),
+  ('part_col13', 'ترانس', 'Transformer', 'col13', 9, 'PIECE', 1, true),
+  ('part_col14', 'میکروسوئیچ', 'Micro-switch', 'col14', 10, 'PIECE', 1, true),
+  ('part_col15', 'پایه میکروسوئیچ', 'Micro-switch base', 'col15', 11, 'PIECE', 1, true),
+  ('part_col16', 'سیم آداپتور', 'Adapter wire', 'col16', 12, 'PIECE', 1, true),
+  ('part_col17', 'سیم تلفنی', 'Phone wire', 'col17', 13, 'PIECE', 1, true),
+  ('part_col18', 'سوکت سیم تلفنی', 'Phone wire socket', 'col18', 14, 'PIECE', 1, true),
+  ('part_col19', 'کابل ۳/۶۰', 'Cable 3/60', 'col19', 15, 'PIECE', 1, true),
+  ('part_col20', 'سنت نگهدارنده', 'Holder clip', 'col20', 16, 'PIECE', 1, true),
+  ('part_col21', 'لایت فریم', 'Light frame', 'col21', 17, 'PIECE', 1, true),
+  ('part_col22', 'آرام بند', 'Door closer', 'col22', 18, 'PIECE', 1, true),
+  ('part_col23', 'فنر', 'Spring', 'col23', 19, 'PIECE', 1, true),
+  ('part_col24', 'برد استند', 'Stand board (PCB)', 'col24', 20, 'PIECE', 1, true),
+  ('part_col25', 'نوار SMD سفید', 'White SMD strip', 'col25', 21, 'CENTIMETER', 50, true),
+  ('part_col26', 'نوار SMD آبی', 'Blue SMD strip', 'col26', 22, 'CENTIMETER', 50, true),
+  ('part_col27', 'کلید گرد', 'Round switch', 'col27', 23, 'PIECE', 1, true),
+  ('part_col28', 'کلید مستطیلی', 'Rectangular switch', 'col28', 24, 'PIECE', 1, true),
+  ('part_col29', 'ریل پوشر L', 'Pusher rail L', 'col29', 25, 'PIECE', 1, true),
+  ('part_col30', 'ریل پوشر U', 'Pusher rail U', 'col30', 26, 'PIECE', 1, true),
+  ('part_col31', 'سوکت کولری', 'Cooler socket', 'col31', 27, 'PIECE', 1, true),
+  ('part_col32', 'درب پلاستیکی', 'Plastic door', 'col32', 28, 'PIECE', 1, true),
+  ('part_col33', 'پلکسی سفید', 'White plexiglass', 'col33', 29, 'PIECE', 1, true),
+  ('part_col34', 'پک هواکش', 'Vent pack', 'col34', 30, 'PIECE', 1, true)
+ON CONFLICT DO NOTHING;
