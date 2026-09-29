@@ -1,0 +1,3 @@
+# Files that run on the Linux server must keep LF line endings.
+deploy/tools/*.sh text eol=lf
+deploy/config/* text eol=lf

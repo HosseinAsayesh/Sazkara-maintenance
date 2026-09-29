@@ -1,0 +1,32 @@
+# systemd unit for Sazkara Maintenance.
+# Install:  sudo cp sazkara.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#           sudo systemctl enable --now sazkara
+
+[Unit]
+Description=Sazkara Maintenance
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=sazkara
+Group=sazkara
+WorkingDirectory=/opt/sazkara/app
+EnvironmentFile=/etc/sazkara/sazkara.env
+Environment=NODE_ENV=production
+# Listens on localhost only; Nginx is the public face.
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+# Hardening: the app only needs to write its uploads folder.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/sazkara
+
+[Install]
+WantedBy=multi-user.target
