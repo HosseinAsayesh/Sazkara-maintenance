@@ -168,13 +168,20 @@ copy(path.join(STAGE, '.next', 'standalone'), app);
 copy(path.join(STAGE, '.next', 'static'), path.join(app, '.next', 'static'));
 copy(path.join(STAGE, 'public'), path.join(app, 'public'));
 
-// Source maps embed the original source files verbatim — they must never ship.
+// Source maps embed the original source files verbatim — they must never ship. The file
+// tracer also over-includes some raw .ts files (anything near a `process.cwd()` path);
+// the server never loads them, since the compiled code lives in `.next`.
 let removedMaps = 0;
+let removedSources = 0;
+const isSourceFile = (f: string) =>
+  /\.(ts|tsx)$/.test(f) && !f.endsWith('.d.ts') &&
+  !path.relative(app, f).split(path.sep).includes('node_modules');
 walk(app, (f) => {
   const base = path.basename(f);
-  if (f.endsWith('.map') || base.startsWith('.env')) {
+  if (f.endsWith('.map') || base.startsWith('.env') || isSourceFile(f)) {
     fs.rmSync(f);
     if (f.endsWith('.map')) removedMaps++;
+    else if (isSourceFile(f)) removedSources++;
   }
 });
 
@@ -221,7 +228,9 @@ walk(OUT, (f) => {
 if (leaks.length) {
   fail(`Source code found in the package - NOT safe to hand over:\n    ${leaks.slice(0, 20).join('\n    ')}`);
 }
-console.log(`  clean: ${removedMaps} source maps removed, no source files or source text found.`);
+console.log(
+  `  clean: ${removedMaps} source maps and ${removedSources} stray source files removed; no source left.`,
+);
 
 // --- the one file to upload to the server ---
 step('Creating the server upload archive');
