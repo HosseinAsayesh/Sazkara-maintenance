@@ -71,7 +71,7 @@ node --version
 </div>
 
 ```bash
-sudo useradd --system --home /opt/sazkara --shell /usr/sbin/nologin sazkara
+sudo useradd --system --home /var/lib/sazkara --shell /usr/sbin/nologin sazkara
 sudo mkdir -p /opt/sazkara /etc/sazkara /var/lib/sazkara/uploads /var/backups/sazkara
 sudo tar -xzf ~/{{SERVER_TAR}} -C /opt/sazkara
 sudo chmod +x /opt/sazkara/tools/*.sh
