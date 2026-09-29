@@ -150,8 +150,10 @@ run(
     '--platform=node',
     '--format=cjs',
     '--minify',
+    // Prisma stays external: its engine must come from app/node_modules. bcryptjs is
+    // bundled, because the traced copy in app/ carries only its ESM entry and a CJS
+    // require of it fails.
     '--external:@prisma/client',
-    '--external:bcryptjs',
     '--outfile=seed.cjs',
   ],
   { cwd: STAGE },
@@ -184,6 +186,8 @@ walk(app, (f) => {
     else if (isSourceFile(f)) removedSources++;
   }
 });
+// The stray sources lived in app/lib/...; don't leave their empty folders behind.
+fs.rmSync(path.join(app, 'lib'), { recursive: true, force: true });
 
 const prismaOut = path.join(app, 'node_modules', '.prisma', 'client');
 const linuxEngine = path.join(STAGE, 'node_modules', '.prisma', 'client', LINUX_ENGINE);
