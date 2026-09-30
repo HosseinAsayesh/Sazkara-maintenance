@@ -1,6 +1,10 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
+import clsx from 'clsx';
+
 import { CrewControls } from '@/components/CrewControls';
+import { PasswordResetRequests } from '@/components/PasswordResetRequests';
+import { PayrollSection } from '@/components/PayrollSection';
 import { ReviewTechnicianButtons } from '@/components/ReviewButtons';
 import {
   Badge,
@@ -12,29 +16,72 @@ import {
   Td,
   Th,
 } from '@/components/ui';
+import { Link } from '@/i18n/navigation';
 import { requireManager } from '@/lib/auth';
-import { formatDateForLocale } from '@/lib/dates';
+import { formatDateForLocale, formatDateTimeForLocale } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TechniciansPage({
   params,
+  searchParams,
 }: PageProps<'/[locale]/manager/technicians'>) {
   const { locale } = await params;
   setRequestLocale(locale);
   await requireManager(locale);
+
+  const sp = await searchParams;
+  // Payroll is its own sub-tab rather than a card under the lists: its filters reload the
+  // page, and a manager adjusting dates should not have to scroll back down each time.
+  const view = sp.view === 'payroll' ? 'payroll' : 'list';
 
   const [t, tc] = await Promise.all([
     getTranslations({ locale, namespace: 'technicians' }),
     getTranslations({ locale, namespace: 'common' }),
   ]);
 
+  const subTabs = (
+    <div className="flex gap-1 border-b border-[var(--border)]">
+      {(['list', 'payroll'] as const).map((v) => (
+        <Link
+          key={v}
+          href={v === 'list' ? '/manager/technicians' : '/manager/technicians?view=payroll'}
+          aria-current={view === v ? 'page' : undefined}
+          className={clsx(
+            '-mb-px border-b-2 px-4 py-2 text-sm',
+            view === v
+              ? 'border-teal-600 font-semibold text-brand-900'
+              : 'border-transparent text-[var(--muted)] hover:text-brand-900',
+          )}
+        >
+          {v === 'list' ? t('tabList') : t('tabPayroll')}
+        </Link>
+      ))}
+    </div>
+  );
+
+  if (view === 'payroll') {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
+        {subTabs}
+        <PayrollSection locale={locale} searchParams={sp} />
+      </div>
+    );
+  }
+
   // Leads are technicians with a role flag, so they belong in the same list.
   const technicians = await prisma.user.findMany({
     where: { role: { in: ['TECHNICIAN', 'LEAD_TECHNICIAN'] } },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     include: { _count: { select: { repairForms: true, crew: true } } },
+  });
+
+  const resetRequests = await prisma.passwordResetRequest.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    include: { user: { select: { name: true, phone: true, technicianCode: true } } },
   });
 
   const leads = technicians
@@ -50,6 +97,18 @@ export default async function TechniciansPage({
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
+      {subTabs}
+
+      <PasswordResetRequests
+        locale={locale}
+        rows={resetRequests.map((r) => ({
+          id: r.id,
+          name: r.user.name,
+          phone: r.user.phone,
+          code: r.user.technicianCode,
+          requestedOn: formatDateTimeForLocale(r.createdAt, locale),
+        }))}
+      />
 
       {groups.map((group) => {
         const rows = technicians.filter((u) => u.status === group.status);

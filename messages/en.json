@@ -80,9 +80,9 @@
     "dashboard": "Dashboard",
     "imports": "Jti orders",
     "technicians": "Technicians",
-    "exports": "Exports",
+    "exports": "Excel exports",
     "evidence": "Evidence PDFs",
-    "analytics": "Analytics",
+    "analytics": "Data analysis",
     "uidSearch": "UID search",
     "settings": "Settings",
     "parts": "Part catalogue",
@@ -92,10 +92,10 @@
     "newReport": "New report",
     "myProfile": "My stats",
     "projects": "Projects",
-    "uidArchive": "UID archive",
+    "uidArchive": "UID archive & search",
     "crew": "My crew",
     "clientView": "Jti view",
-    "downloadRequests": "File requests",
+    "downloadRequests": "File requests by JTI",
     "queries": "Jti's questions"
   },
   "auth": {
@@ -123,8 +123,16 @@
       "passwordMismatch": "The passwords do not match",
       "passwordTooShort": "Password must be at least 6 characters",
       "invalidPhone": "That mobile number is not valid",
-      "nameRequired": "Please enter your name"
-    }
+      "nameRequired": "Please enter your name",
+      "readOnly": "The system is read-only right now. Contact the repair manager directly."
+    },
+    "forgotPassword": "Forgot your password?",
+    "forgotTitle": "Forgot password",
+    "forgotSubtitle": "Enter your mobile number. The repair manager will set a new password and tell you.",
+    "forgotSubmit": "Send request to the manager",
+    "forgotSentTitle": "Request sent",
+    "forgotSent": "If this number belongs to an approved technician, the request has reached the repair manager. They will set a new password and tell you by phone or in person.",
+    "backToLogin": "Back to sign-in"
   },
   "technician": {
     "enterUidTitle": "Enter the store UID",
@@ -400,10 +408,22 @@
     "roleTechnician": "Technician",
     "roleLead": "Crew lead",
     "noLead": "No lead",
-    "crewSize": "Crew"
+    "crewSize": "Crew",
+    "tabList": "Technician list",
+    "tabPayroll": "Payments",
+    "resetTitle": "Password reset requests",
+    "resetHelp": "These technicians forgot their password. Type a temporary password, press \"Set password\", then tell it to the technician by phone or in person. Anyone still signed in with the old password is signed out.",
+    "resetRequestedOn": "requested {date}",
+    "resetNewPassword": "New password (6+ characters)",
+    "resetSet": "Set password",
+    "resetDismiss": "Dismiss",
+    "resetErrors": {
+      "passwordTooShort": "The password must be at least 6 characters.",
+      "generic": "This request was already handled."
+    }
   },
   "exports": {
-    "title": "Exports",
+    "title": "Excel exports",
     "jtiTitle": "Jti Excel export",
     "jtiHelp": "The 43-column file with Jti's original headers. Only repaired stands in the selected range are included.",
     "dateRange": "Date range",
@@ -444,7 +464,7 @@
     "generating": "Generating..."
   },
   "analytics": {
-    "title": "Analytics",
+    "title": "Data analysis",
     "successRateTitle": "Successful repair rate",
     "successRateHelp": "Share of visited stands that were repaired.",
     "reasonsTitle": "Reasons not repaired",
@@ -474,7 +494,8 @@
     "viewForm": "View form",
     "standIndexHeader": "Stand number at store",
     "standCountHeader": "Stands at this location",
-    "formDeleted": "Report {code} was deleted. This UID is back on the outstanding list."
+    "formDeleted": "Report {code} was deleted. This UID is back on the outstanding list.",
+    "backToArchive": "Back to the UID archive"
   },
   "formView": {
     "title": "Form {code}",
@@ -643,7 +664,7 @@
     "empty": "empty"
   },
   "uidArchive": {
-    "title": "UID archive",
+    "title": "UID archive & search",
     "listTitle": "UIDs in this period",
     "help": "One row per UID, summarising every report filed against it within the current filter.",
     "totalForms": "Reports",
@@ -781,7 +802,7 @@
     "expiresAt": "Valid until {at}",
     "downloadedAt": "Downloaded {at}",
     "decisionNotePlaceholder": "Note (optional)",
-    "reviewTitle": "Jti file requests",
+    "reviewTitle": "File requests by JTI",
     "reviewHelp": "Each file is built at the moment you approve it, so what they receive is what you agreed to.",
     "reviewPending": "Awaiting your decision",
     "reviewNoPending": "Nothing pending.",
@@ -895,5 +916,25 @@
       "disabled": "JTI access switched off.",
       "enabled": "JTI access switched back on."
     }
+  },
+  "payroll": {
+    "reRepairsFilter": "Re-repairs",
+    "reRepairsInclude": "Pay re-repairs",
+    "reRepairsExclude": "Don't pay re-repairs",
+    "allTimeHint": "No dates chosen, so this covers all work ever submitted. Pick a date range (e.g. last month) to calculate a pay period.",
+    "totalPayable": "Total payable",
+    "repairedStands": "Stands repaired",
+    "unrepairedVisits": "Visits without repair",
+    "reRepairs": "Re-repairs",
+    "reRepairsCounted": "Included: {amount}",
+    "reRepairsNotCounted": "Not paid: {amount}",
+    "tableTitle": "Payment per technician",
+    "tableHelp": "Each report is paid the wage recorded when it was submitted: the city rate for the first stand at a store that day, the reduced rates for a second or later stand there, and the flat call-out rate for a visit with no repair.",
+    "download": "Download Excel",
+    "code": "Code",
+    "firstStands": "First stand at store",
+    "secondStands": "Second stand",
+    "thirdPlusStands": "Third+ stand",
+    "payable": "Payable"
   }
 }

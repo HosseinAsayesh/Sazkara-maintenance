@@ -8,6 +8,8 @@ export interface NavItem {
   href: string;
   label: string;
   badge?: number;
+  /** Other routes that belong to this tab, e.g. a detail page living at its own path. */
+  alsoMatches?: string[];
 }
 
 /**
@@ -24,8 +26,10 @@ export function NavTabs({ items }: { items: NavItem[] }) {
 
   let activeHref: string | null = null;
   for (const item of items) {
-    const matches = pathname === item.href || pathname.startsWith(item.href + '/');
-    if (matches && (activeHref === null || item.href.length > activeHref.length)) {
+    const prefix = [item.href, ...(item.alsoMatches ?? [])].find(
+      (href) => pathname === href || pathname.startsWith(href + '/'),
+    );
+    if (prefix && (activeHref === null || prefix.length > activeHref.length)) {
       activeHref = item.href;
     }
   }

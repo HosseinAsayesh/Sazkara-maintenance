@@ -40,6 +40,11 @@ export function LoginForm({ locale, next }: { locale: string; next: string }) {
       <Field label={t('password')} required>
         <Input name="password" type="password" autoComplete="current-password" required />
       </Field>
+      <div className="-mt-2 text-end">
+        <Link href="/forgot-password" className="text-xs font-medium text-brand-600 hover:underline">
+          {t('forgotPassword')}
+        </Link>
+      </div>
 
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? tc('loading') : t('login')}

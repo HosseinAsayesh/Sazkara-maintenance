@@ -6,7 +6,16 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { Button, Card, Input } from './ui';
 
-export function UidSearchBox({ initial }: { initial: string }) {
+export function UidSearchBox({
+  initial,
+  target,
+  autoFocus = true,
+}: {
+  initial: string;
+  /** Where the search lands. Defaults to the current page. */
+  target?: string;
+  autoFocus?: boolean;
+}) {
   const t = useTranslations('uidSearch');
   const tc = useTranslations('common');
   const router = useRouter();
@@ -19,7 +28,8 @@ export function UidSearchBox({ initial }: { initial: string }) {
         onSubmit={(e) => {
           e.preventDefault();
           const q = value.trim();
-          router.push(q ? `${pathname}?q=${encodeURIComponent(q)}` : pathname);
+          const base = target ?? pathname;
+          router.push(q ? `${base}?q=${encodeURIComponent(q)}` : base);
         }}
         className="flex gap-2"
       >
@@ -29,7 +39,7 @@ export function UidSearchBox({ initial }: { initial: string }) {
           placeholder={t('placeholder')}
           dir="ltr"
           className="dir-ltr"
-          autoFocus
+          autoFocus={autoFocus}
         />
         <Button type="submit">{tc('search')}</Button>
       </form>

@@ -8,6 +8,15 @@ import { useState } from 'react';
 import { JalaliDateInput } from './JalaliDateInput';
 import { Button, Card, Select } from './ui';
 
+/** A page-specific dropdown carried in the URL alongside the standard filters. */
+export interface ExtraSelect {
+  /** Query-string key. */
+  name: string;
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+}
+
 export interface ProjectFilterOption {
   id: string;
   name: string;
@@ -33,6 +42,7 @@ export function DateRangeFilter({
   projects,
   projectId,
   phaseId,
+  selects,
   extra,
 }: {
   from?: string;
@@ -42,6 +52,7 @@ export function DateRangeFilter({
   projects?: ProjectFilterOption[];
   projectId?: string;
   phaseId?: string;
+  selects?: ExtraSelect[];
   extra?: React.ReactNode;
 }) {
   const t = useTranslations('common');
@@ -54,6 +65,9 @@ export function DateRangeFilter({
   const [localCity, setLocalCity] = useState(cityId ?? '');
   const [localProject, setLocalProject] = useState(projectId ?? '');
   const [localPhase, setLocalPhase] = useState(phaseId ?? '');
+  const [localSelects, setLocalSelects] = useState<Record<string, string>>(() =>
+    Object.fromEntries((selects ?? []).map((s) => [s.name, s.value])),
+  );
 
   const phases = projects?.find((p) => p.id === localProject)?.phases ?? [];
 
@@ -67,6 +81,7 @@ export function DateRangeFilter({
       ['projectId', localProject],
       // A phase from a different project would silently filter everything out.
       ['phaseId', phases.some((p) => p.id === localPhase) ? localPhase : ''],
+      ...Object.entries(localSelects),
     ]) {
       if (value) next.set(key, value);
       else next.delete(key);
@@ -143,6 +158,24 @@ export function DateRangeFilter({
             </Select>
           </label>
         ) : null}
+
+        {(selects ?? []).map((select) => (
+          <label key={select.name} className="min-w-[9rem] flex-1">
+            <span className="mb-1 block text-xs font-medium text-ink-500">{select.label}</span>
+            <Select
+              value={localSelects[select.name] ?? ''}
+              onChange={(e) =>
+                setLocalSelects((prev) => ({ ...prev, [select.name]: e.target.value }))
+              }
+            >
+              {select.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ))}
 
         <Button type="submit" variant="secondary">
           {t('applyFilter')}

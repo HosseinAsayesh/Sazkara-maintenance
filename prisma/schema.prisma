@@ -123,6 +123,8 @@ model User {
   queriesOpened      FormQuery[]        @relation("QueryOpener")
   queryMessages      FormQueryMessage[] @relation("QueryAuthor")
 
+  passwordResetRequests PasswordResetRequest[]
+
   @@index([role, status])
   @@index([leadId])
 }
@@ -615,4 +617,26 @@ model FormQueryMessage {
   createdAt DateTime @default(now())
 
   @@index([queryId, createdAt])
+}
+
+enum PasswordResetStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+/// A technician who forgot their password asks the manager for a new one from the login
+/// page. The manager sets a temporary password and tells them in person — the app sends
+/// no email or SMS, so a request only ever reaches someone who can verify who is asking.
+model PasswordResetRequest {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status     PasswordResetStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  resolvedAt DateTime?
+
+  @@index([status])
+  @@index([userId, status])
 }

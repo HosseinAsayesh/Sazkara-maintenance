@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { UidSearchBox } from '@/components/UidSearchBox';
 import {
   Badge,
   Card,
@@ -67,6 +68,10 @@ export default async function UidArchivePage({
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
+
+      {/* Search first: finding one uid is the common errand; browsing is the rarer one.
+          A hit opens that uid's full history. */}
+      <UidSearchBox initial="" target={`/${locale}/manager/uid`} autoFocus={false} />
 
       <DateRangeFilter
         from={from}

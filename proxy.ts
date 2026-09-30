@@ -16,7 +16,7 @@ import { SESSION_COOKIE, verifySession } from './lib/session';
 const handleI18nRouting = createMiddleware(routing);
 
 /** Reachable without a session, matched after the locale prefix is stripped. */
-const PUBLIC_PATHS = ['/login', '/register', '/pending'];
+const PUBLIC_PATHS = ['/login', '/register', '/pending', '/forgot-password'];
 
 const LOCALES = routing.locales as readonly string[];
 

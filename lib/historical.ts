@@ -705,8 +705,11 @@ export async function previewHistorical(
  * The account historical rows are attributed to. Created on demand and kept out of the
  * technician approval queue so it can't be mistaken for a real person.
  */
+/** The placeholder account's phone. Payroll excludes it: nobody is paid for archive rows. */
+export const HISTORICAL_TECHNICIAN_PHONE = '00000000000';
+
 async function historicalTechnicianId(): Promise<string> {
-  const phone = '00000000000';
+  const phone = HISTORICAL_TECHNICIAN_PHONE;
   const existing = await prisma.user.findUnique({ where: { phone } });
   if (existing) return existing.id;
 

@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { StandHistory } from '@/components/StandHistory';
 import { UidSearchBox } from '@/components/UidSearchBox';
+import { Link } from '@/i18n/navigation';
 import {
   Alert,
   Badge,
@@ -67,7 +68,12 @@ export default async function UidSearchPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-bold text-brand-900">{t('title')}</h1>
+        <Link href="/manager/uids" className="text-sm font-medium text-brand-700 hover:underline">
+          {t('backToArchive')}
+        </Link>
+      </div>
 
       <UidSearchBox initial={query} />
 
