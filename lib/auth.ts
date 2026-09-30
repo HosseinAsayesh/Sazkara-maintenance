@@ -5,6 +5,7 @@
 import 'server-only';
 
 import bcrypt from 'bcryptjs';
+import { createHash } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -25,6 +26,16 @@ export function hashPassword(password: string): Promise<string> {
 
 export function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
+}
+
+/**
+ * A short fingerprint of the stored password hash, carried in the session cookie. It
+ * changes whenever the password does, so `getCurrentUser` can turn away sessions opened
+ * with an old password. Hashed again rather than copied so the cookie, which is signed
+ * but readable, never holds any part of the bcrypt hash itself.
+ */
+export function credentialStamp(passwordHash: string): string {
+  return createHash('sha256').update(passwordHash).digest('base64url').slice(0, 16);
 }
 
 /** Iranian mobile numbers arrive as 0912…, +98912…, ۰۹۱۲… — store one canonical form. */
@@ -65,6 +76,8 @@ export async function getCurrentUser() {
   if (!session) return null;
   const user = await prisma.user.findUnique({ where: { id: session.userId } });
   if (!user || user.status !== 'APPROVED') return null;
+  // The password changed since this session began (or the cookie predates stamps).
+  if (session.stamp !== credentialStamp(user.passwordHash)) return null;
   return user;
 }
 

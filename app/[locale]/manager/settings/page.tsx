@@ -1,11 +1,13 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { CityManager } from '@/components/CityManager';
+import { JtiAccountSettings } from '@/components/JtiAccountSettings';
 import { LicenseSettings } from '@/components/LicenseSettings';
 import { LogoSettings } from '@/components/LogoSettings';
 import { WageSettingsForm } from '@/components/SettingsForms';
 import { requireManager } from '@/lib/auth';
 import { findDuplicateCityGroups, listCitiesWithUsage } from '@/lib/cities';
+import { findClientAccount } from '@/lib/client-account';
 import { formatDateForLocale } from '@/lib/dates';
 import { currentLicense } from '@/lib/license';
 import { getStorage } from '@/lib/storage';
@@ -20,12 +22,13 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
 
   const t = await getTranslations({ locale, namespace: 'settings' });
 
-  const [wages, app, cities, duplicateGroups, license] = await Promise.all([
+  const [wages, app, cities, duplicateGroups, license, jti] = await Promise.all([
     getWageSettings(),
     getAppSettings(),
     listCitiesWithUsage(),
     findDuplicateCityGroups(),
     currentLicense(),
+    findClientAccount(),
   ]);
 
   return (
@@ -48,6 +51,8 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         cities={cities}
         duplicateGroups={duplicateGroups.map((group) => group.map((c) => c.id))}
       />
+
+      <JtiAccountSettings locale={locale} account={jti} />
 
       <LicenseSettings
         locale={locale}

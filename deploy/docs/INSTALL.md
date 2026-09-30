@@ -89,7 +89,8 @@ Replace every `CHANGE_ME`:
 - `AUTH_SECRET`: the value from `openssl rand -hex 32`
 - `CHROME_PATH`: the path from step 2
 - `SEED_MANAGER_PHONE` / `SEED_MANAGER_PASSWORD`: the first manager login
-- `SEED_CLIENT_PASSWORD`: optional, creates the JTI supervisor login
+- `SEED_CLIENT_PASSWORD`: leave empty — the JTI login is created later by the manager in
+  the app (Settings → JTI account), where its password can also be reset
 
 ## 6. Tables and first data
 
@@ -203,4 +204,5 @@ restore the backup taken in the first line (a newer version may have changed tab
 | PDF reports fail | `CHROME_PATH` points to an existing file; fonts from step 2 installed |
 | Persian text in PDFs shows boxes | `sudo apt install fonts-vazirmatn fonts-noto-core`, then `sudo systemctl restart sazkara` |
 | Photo uploads fail | `client_max_body_size` in the Nginx site; free disk space (`df -h`) |
-| Everyone was signed out | `AUTH_SECRET` changed — expected, just sign in again |
+| Sign-in returns to the login page with no error | The site was opened over plain `http://`. The login cookie is only sent over HTTPS — finish step 8 and use `https://` |
+| Everyone was signed out | `AUTH_SECRET` changed, or the app was updated to a version that changed sign-in — expected, just sign in again |

@@ -118,6 +118,7 @@
       "invalidCredentials": "Incorrect mobile number or password",
       "pending": "Your account has not been approved yet",
       "rejected": "Your account was rejected",
+      "disabled": "Access to this account is switched off. Contact the repair manager.",
       "phoneTaken": "That mobile number is already registered",
       "passwordMismatch": "The passwords do not match",
       "passwordTooShort": "Password must be at least 6 characters",
@@ -856,6 +857,43 @@
       "missing": "No valid license is installed. The system is read-only: information can be viewed but not saved.",
       "expiring": "The license expires on {date} ({count, plural, one {# day left} other {# days left}}).",
       "action": "License settings"
+    }
+  },
+  "jtiAccount": {
+    "title": "JTI account",
+    "help": "The one shared login for JTI's team. It opens JTI's read-only panel: progress, reports, parts usage, questions and file requests.",
+    "statusNone": "Not created",
+    "statusActive": "Active",
+    "statusDisabled": "Switched off",
+    "defaultName": "JTI supervisor",
+    "name": "Name shown in the app",
+    "phone": "Mobile number (login)",
+    "phoneHint": "JTI signs in with this number.",
+    "password": "Password",
+    "passwordHint": "At least 8 characters. Give it to JTI in person or by phone, not in writing.",
+    "newPassword": "New password",
+    "newPasswordHint": "Leave empty to keep the current password. A new one signs everyone out of the JTI account at once.",
+    "passwordConfirm": "Repeat password",
+    "create": "Create JTI account",
+    "disable": "Switch off access",
+    "enable": "Switch access back on",
+    "disableHelp": "Blocks the JTI login immediately, including anyone already signed in. Nothing they did is deleted.",
+    "enableHelp": "The JTI login is switched off. Switching it back on restores access with the same password.",
+    "errors": {
+      "nameRequired": "Enter a name.",
+      "invalidPhone": "That mobile number is not valid.",
+      "phoneTaken": "That mobile number already belongs to another account.",
+      "passwordRequired": "Choose a password for the new account.",
+      "passwordTooShort": "The password must be at least 8 characters.",
+      "passwordMismatch": "The two passwords do not match.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "ok": {
+      "created": "JTI account created.",
+      "saved": "Saved.",
+      "passwordReset": "Saved. The new password is active and everyone signed in with the old one has been signed out.",
+      "disabled": "JTI access switched off.",
+      "enabled": "JTI access switched back on."
     }
   }
 }

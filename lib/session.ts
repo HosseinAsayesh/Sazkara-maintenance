@@ -36,6 +36,12 @@ export interface SessionPayload {
   phone: string;
   role: SessionRole;
   technicianCode: string | null;
+  /**
+   * Fingerprint of the password this session was opened with (see `credentialStamp` in
+   * lib/auth.ts). Changing the password changes the stamp, which ends every session
+   * opened with the old one — a reset really does lock out whoever had it.
+   */
+  stamp?: string;
 }
 
 function secretKey(): Uint8Array {
@@ -62,11 +68,12 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
-    const { userId, name, phone, role, technicianCode } = payload as unknown as SessionPayload;
+    const { userId, name, phone, role, technicianCode, stamp } =
+      payload as unknown as SessionPayload;
     if (!userId || !SESSION_ROLES.includes(role)) {
       return null;
     }
-    return { userId, name, phone, role, technicianCode: technicianCode ?? null };
+    return { userId, name, phone, role, technicianCode: technicianCode ?? null, stamp };
   } catch {
     return null;
   }

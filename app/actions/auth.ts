@@ -3,7 +3,15 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
-import { clearSessionCookie, hashPassword, homeFor, normalisePhone, setSessionCookie, verifyPassword } from '@/lib/auth';
+import {
+  clearSessionCookie,
+  credentialStamp,
+  hashPassword,
+  homeFor,
+  normalisePhone,
+  setSessionCookie,
+  verifyPassword,
+} from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export interface AuthState {
@@ -45,7 +53,10 @@ export async function loginAction(
   }
 
   if (user.status === 'PENDING') return { error: 'pending' };
-  if (user.status === 'REJECTED') return { error: 'rejected' };
+  if (user.status === 'REJECTED') {
+    // The JTI login is never "rejected" — the manager switched it off in Settings.
+    return { error: user.role === 'CLIENT_SUPERVISOR' ? 'disabled' : 'rejected' };
+  }
 
   await setSessionCookie({
     userId: user.id,
@@ -53,6 +64,7 @@ export async function loginAction(
     phone: user.phone,
     role: user.role,
     technicianCode: user.technicianCode,
+    stamp: credentialStamp(user.passwordHash),
   });
 
   const next = String(formData.get('next') || '');
