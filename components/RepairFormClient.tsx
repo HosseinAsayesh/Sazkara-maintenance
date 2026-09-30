@@ -418,30 +418,26 @@ export function RepairFormClient(props: RepairFormProps) {
 
       <div className={clsx('space-y-4', activeStand !== 0 && 'hidden')}>
 
-      {/* First in the panel, on purpose: the photograph has to happen before the work,
-          and a card at the bottom of a long form is one a technician reaches afterwards. */}
-      <Card className={clsx(!standUnlocked && 'border-amber-300')}>
-        <CardHeader title={t('sectionPhotos')} description={t('beforeFirstHelp')} />
-        <div className="grid gap-4 p-4 sm:grid-cols-2">
-          {/* Hidden, not merely optional, where no "before" can exist — the stand was
-              removed or the shop was shut, so the technician never reached it. Same
-              reasoning as the "after" tile below: an empty optional tile invites a
-              meaningless photograph. */}
-          {beforeRequired ? (
+      {/* The two photos follow the work: "before" opens the panel, because it has to be
+          taken before touching the stand; "after" sits under the parts lists, where the
+          technician is when the repair is done, so they never scroll back up for it. */}
+      {/* Hidden, not merely optional, where no "before" can exist — the stand was
+          removed or the shop was shut, so the technician never reached it. Same
+          reasoning as the "after" tile: an empty optional tile invites a meaningless
+          photograph. */}
+      {beforeRequired ? (
+        <Card className={clsx(!standUnlocked && 'border-amber-300')}>
+          <CardHeader title={t('sectionPhotos')} description={t('beforeFirstHelp')} />
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
             <PhotoInput
               label={t('photoBefore')}
               name="photoBefore"
               required
               onChange={(file) => setHasBeforePhoto(Boolean(file))}
             />
-          ) : null}
-          {/* Hidden entirely when nothing was repaired: there is no "after" state to
-              photograph, and leaving the tile visible invites a meaningless picture. */}
-          {standPhotos.includes('AFTER') ? (
-            <PhotoInput label={t('photoAfter')} name="photoAfter" required />
-          ) : null}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      ) : null}
 
       {!standUnlocked ? (
         <Alert tone="warning" title={t('beforeGateTitle')}>
@@ -477,6 +473,17 @@ export function RepairFormClient(props: RepairFormProps) {
             onChange={setRepaired}
           />
         </>
+      ) : null}
+
+      {/* Hidden entirely when nothing was repaired: there is no "after" state to
+          photograph, and leaving the tile visible invites a meaningless picture. */}
+      {standPhotos.includes('AFTER') ? (
+        <Card>
+          <CardHeader title={t('sectionPhotos')} description={t('afterPhotoHelp')} />
+          <div className="grid gap-4 p-4 sm:grid-cols-2">
+            <PhotoInput label={t('photoAfter')} name="photoAfter" required />
+          </div>
+        </Card>
       ) : null}
 
       {!hasParts ? (

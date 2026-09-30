@@ -234,6 +234,7 @@
     "removeStandConfirm": "Discard what you entered for stand {n, number}?",
     "notes": "Notes",
     "beforeFirstHelp": "Before anything else, photograph the stand as you found it.",
+    "afterPhotoHelp": "Repair done? Photograph the stand as you leave it.",
     "beforeGateTitle": "The “before” photo comes first",
     "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page."
   },

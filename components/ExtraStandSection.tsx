@@ -105,26 +105,18 @@ export function ExtraStandSection({
           {t('sharedUidNote', { uid, n: index + 2 })}
         </p>
 
-        {/* Photograph it before working on it, same as the primary stand. */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Hidden where no "before" can exist — see RepairFormClient. */}
-          {beforeRequired ? (
+        {/* Photograph it before working on it, same as the primary stand. Hidden where
+            no "before" can exist — see RepairFormClient. */}
+        {beforeRequired ? (
+          <div className="grid gap-4 sm:grid-cols-2">
             <PhotoInput
               label={t('photoBefore')}
               name={`extra_${index}_photoBefore`}
               required
               onChange={(file) => setHasBeforePhoto(Boolean(file))}
             />
-          ) : null}
-          {/* No "after" when this stand was not repaired — see lib/photo-rules.ts. */}
-          {standPhotos.includes('AFTER') ? (
-            <PhotoInput
-              label={t('photoAfter')}
-              name={`extra_${index}_photoAfter`}
-              required
-            />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {!standUnlocked ? (
           <Alert tone="warning" title={t('beforeGateTitle')}>
@@ -153,6 +145,18 @@ export function ExtraStandSection({
               onChange={(next) => set('repaired', next)}
             />
           </>
+        ) : null}
+
+        {/* Under the parts, where the technician is once the repair is done — same as the
+            primary stand. No "after" when this stand was not repaired (lib/photo-rules.ts). */}
+        {standPhotos.includes('AFTER') ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <PhotoInput
+              label={t('photoAfter')}
+              name={`extra_${index}_photoAfter`}
+              required
+            />
+          </div>
         ) : null}
 
         {hasParts ? (
