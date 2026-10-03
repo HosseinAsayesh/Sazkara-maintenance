@@ -4,51 +4,49 @@ import ExcelJS from 'exceljs';
 
 import { formatJalali } from '../dates';
 import {
-  JTI_EXPORT_COLUMN_COUNT,
-  JTI_EXPORT_HEADERS,
-  PART_CATALOG,
+  CATALOG_TO_JTI_PART,
+  JTI_COL,
+  JTI_FIRST_PART_COLUMN,
+  JTI_PART_COUNT,
+  JTI_PART_HEADERS_FA,
+  JTI_SHEET_COLUMN_COUNT,
+  JTI_SHEET_HEADER_ROW,
   REPAIR_LABEL_BY_CANONICAL_FA,
 } from '../parts';
 import { prisma } from '../prisma';
 import { projectScopeWhere } from '../projects';
+import {
+  NOT_REPAIRED_REASONS,
+  REASON_INFO,
+  isNotRepairedReason,
+  type NotRepairedReasonKey,
+} from '../reasons';
 
 /**
- * The Jti export (§8) — 43 columns, in this exact order, with the Persian headers
- * verbatim regardless of UI locale.
+ * The Jti export — the client's own sheet, column for column (2026-10). It is the one
+ * Excel format of the system: this writes it, lib/historical.ts reads it back.
  *
- * Layout:
- *   1  رقم              row number
- *   2  تاریخ             repair date (Jalali — confirmed with the client)
- *   3  شهر               city
- *   4  شناسه             stand uid
- *   5..34                the 30 parts, each holding the QUANTITY REPLACED (0 if none)
- *   35..43               digital address, address, maintenance detail, tel, store name,
- *                        manager's name, technician code, form code, stand quality
- *   44                   repair status in words, with the reason when it failed
+ *   1            row number
+ *   2  Date      Jalali date
+ *   3  City
+ *   4  UID No.
+ *   5..32        the 28 parts («Problem Type»), quantity REPLACED; blank when none
+ *   33..42       location address, address, Store Details, Tel, store name, store
+ *                manager, technician code, form code, stand quality, feedback
+ *   43 Dubble    how many MORE stands of this store the row covers
+ *   44..53       the ten not-repaired reasons, 1 in the one that applies
  *
- * Stated assumptions (see README §"Export assumptions"):
- *  - Only REPAIRED visits produce rows — the spec says "one row per repaired stand", and
- *    an unsuccessful visit has no parts and no quality score to report.
- *  - Columns 5–34 count REPLACED parts only. Parts repaired in place are not consumed
- *    inventory (§6.8); they are described in column 37 instead so the information is not
- *    lost.
- *  - Rows are per STAND, not per uid. A store with three stands produces three rows all
- *    carrying the same شناسه, because the parts and quality are per-stand facts. Those
- *    rows are tinted BLUE so Jti can see at a glance they are one location's double
- *    stands rather than duplicated records.
- *  - Unsuccessful visits DO appear, tinted RED (client ruling). They carry zeroes in the
- *    part columns, no quality score, and the reason in column 37, so Jti sees the whole
- *    visit list rather than only completed work.
- *  - Tint precedence, most severe first: red (not repaired) > blue (double stand) >
- *    cream (repaired in an earlier project). A row can qualify for several.
- *  - Scope (client ruling, revised §6.3). Every stand repaired during the project goes
- *    into the MAIN workbook, including stands that were already repaired in earlier
- *    projects — a uid recurring across campaigns is normal work, not a duplicate. Only
- *    a stand repaired twice INSIDE the same project is a re-repair, and those rows are
- *    split out into their own workbook so Jti's main sheet stays one-row-per-stand.
- *    `scope` selects which of the two you get.
- *  - Quantities in columns 5-34 are in the part's own unit: pieces for everything except
- *    the two SMD strips, which are recorded in centimetres (50, 100, 150, ...).
+ * Rows, as in the client's files:
+ *  - One row per store VISIT for repaired stands: every stand repaired at a uid on one
+ *    day by one technician shares a row, its parts summed, «Dubble» = stands − 1, and
+ *    Store Details spelling each stand out («استند1: … - استند2: …»).
+ *  - One row per unrepaired stand, its reason ticked. So repaired stands = repaired rows
+ *    + their Dubble, and unrepaired stands = rows with a tick — the same two numbers the
+ *    importer and the dashboard count.
+ *  - The technician picks the precise part; the sheet's older columns merge two pairs:
+ *    both wire gauges are «سیم نمره1», both switches «کلید» (CATALOG_TO_JTI_PART).
+ *  - Within-project re-repairs go to their own workbook (`scope`), so the main sheet
+ *    stays one row per stand visit.
  */
 
 /** Which half of the split a workbook covers. */
@@ -61,7 +59,7 @@ export interface JtiExportFilters {
   projectId?: string | null;
   phaseId?: string | null;
   /**
-   * MAIN      — everything repaired in the range except within-project re-repairs.
+   * MAIN      — everything in the range except within-project re-repairs.
    * RE_REPAIR — only the within-project re-repairs.
    * ALL       — both, for a manager who wants one combined sheet.
    */
@@ -69,82 +67,37 @@ export interface JtiExportFilters {
 }
 
 export interface JtiExportRow {
+  date: Date;
   cityName: string;
   cityId: string | null;
-  date: Date;
   uid: string;
-  /** exportColumnKey -> quantity replaced */
-  replaced: Record<string, number>;
+  /** Quantity replaced per Jti part column, index 0 = column 5. */
+  parts: number[];
   digitalAddress: string;
   address: string;
-  maintenanceDetail: string;
+  storeDetails: string;
   tel: string;
   storeName: string;
   managerName: string;
   technicianCode: string;
   formCode: string;
-  standQuality: number | null;
-  /** Column 44 — "تعمیر شد", or "تعمیر نشد — <reason>". */
-  repairStatus: string;
-  /** Repaired in an earlier campaign. Marked in the sheet, but still a main-export row. */
-  hasPreviousProjectHistory: boolean;
+  quality: number | null;
+  feedback: string;
+  /** «Dubble»: further stands this row covers. */
+  extraStands: number;
+  /** Set on an unrepaired stand's row. */
+  reason: NotRepairedReasonKey | null;
   isReRepair: boolean;
-  /** The visit produced no repair — row is tinted red. */
-  notRepaired: boolean;
-  /** This location had more than one stand serviced — rows tinted blue. */
-  isDoubleStand: boolean;
-  /** 1-based position of this stand at its location. */
-  standIndex: number;
+  hasPreviousProjectHistory: boolean;
 }
 
-/**
- * Column 37. Free text, so it is built to stay readable in the Persian sheet while
- * keeping the replaced/repaired distinction that columns 5–34 cannot express.
- */
-const NOT_REPAIRED_LABELS_FA: Record<string, string> = {
-  MANAGER_NOT_AUTHORIZED: 'مدیر فروشگاه اجازه‌ی تعمیر نداد',
-  STORE_OR_STAND_REMOVED: 'فروشگاه یا استند جمع‌آوری شده بود',
-  ALREADY_HEALTHY: 'استند سالم بود و نیاز به تعمیر نداشت',
-  STORE_TEMPORARILY_CLOSED: 'فروشگاه موقتاً تعطیل بود',
-  CONDITION_TOO_POOR: 'وضعیت استند برای تعمیر بسیار نامناسب بود',
-};
+const REPAIRED_FEEDBACK = 'تعمیرات موفقیت آمیز بود';
 
-function buildMaintenanceDetail(
-  parts: Array<{ action: string; quantity: number; part: { nameFa: string } }>,
-  notes: string | null,
-): string {
-  const replaced = parts.filter((p) => p.action === 'REPLACED');
-  const repaired = parts.filter((p) => p.action === 'REPAIRED');
+type FormWithParts = Awaited<ReturnType<typeof loadForms>>[number];
 
-  const segments: string[] = [];
-  if (replaced.length) {
-    segments.push(
-      `تعویض: ${replaced.map((p) => `${p.part.nameFa} (${p.quantity})`).join('، ')}`,
-    );
-  }
-  if (repaired.length) {
-    // A repaired part is recorded against a canonical catalogue row, but several rows
-    // share one button in the technician's shortened picker — so print the button's
-    // label. Writing "کلید گرد" would assert a shape nobody actually recorded.
-    segments.push(
-      `تعمیر: ${repaired
-        .map(
-          (p) =>
-            `${REPAIR_LABEL_BY_CANONICAL_FA.get(p.part.nameFa) ?? p.part.nameFa} (${p.quantity})`,
-        )
-        .join('، ')}`,
-    );
-  }
-  if (notes?.trim()) segments.push(`توضیحات: ${notes.trim()}`);
-
-  return segments.join(' | ');
-}
-
-export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExportRow[]> {
-  const forms = await prisma.repairForm.findMany({
+async function loadForms(filters: JtiExportFilters) {
+  return prisma.repairForm.findMany({
     where: {
-      // Unsuccessful visits are included so Jti sees the full visit list; they are
-      // tinted red in the sheet. Re-repair scoping only applies to actual repairs.
       ...(filters.scope === 'RE_REPAIR' ? { outcome: 'REPAIRED' as const } : {}),
       ...(filters.scope === 'RE_REPAIR'
         ? { isReRepair: true }
@@ -165,202 +118,228 @@ export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExpo
     orderBy: [{ date: 'asc' }, { formCode: 'asc' }],
     include: {
       city: { select: { id: true, name: true } },
-      technician: { select: { technicianCode: true, name: true } },
-      parts: { include: { part: { select: { nameFa: true, exportColumnKey: true } } } },
+      technician: { select: { technicianCode: true } },
+      parts: { include: { part: { select: { nameFa: true, sortOrder: true, unit: true } } } },
     },
   });
+}
 
-  // A location whose visit covered more than one stand: those rows get the blue tint.
-  // Counted per (uid, day) so a genuine return trip months later is not mislabelled.
-  const standsPerVisit = new Map<string, Set<number>>();
+/** What was done to one stand, in the wording of the client's Store Details column. */
+function describeStand(form: FormWithParts): string {
+  const qty = (q: number, unit: string) => (unit === 'CENTIMETER' ? `${q} سانتیمتر` : `${q} عدد`);
+  const replaced = form.parts
+    .filter((p) => p.action === 'REPLACED')
+    .map((p) => `تعویض ${qty(p.quantity, p.part.unit)} ${p.part.nameFa}`);
+  // A repaired part is stored against a canonical catalogue row, but several rows share
+  // one button in the technician's picker — print the button's label, which is what was
+  // actually chosen.
+  const repaired = form.parts
+    .filter((p) => p.action === 'REPAIRED')
+    .map(
+      (p) =>
+        `اصلاح ${qty(p.quantity, p.part.unit)} ${REPAIR_LABEL_BY_CANONICAL_FA.get(p.part.nameFa) ?? p.part.nameFa}`,
+    );
+  const work = [...replaced, ...repaired].join(' + ');
+  const notes = form.notes?.trim();
+  return [work, notes].filter(Boolean).join(' | ');
+}
+
+function dayKey(date: Date): string {
+  return formatJalali(date);
+}
+
+export async function collectJtiRows(filters: JtiExportFilters): Promise<JtiExportRow[]> {
+  const forms = await loadForms(filters);
+
+  // Repaired stands of one visit share a row; each unrepaired stand stands alone.
+  const groups: FormWithParts[][] = [];
+  const visitIndex = new Map<string, number>();
   for (const form of forms) {
-    const key = `${form.uid}|${form.date.toISOString().slice(0, 10)}`;
-    const set = standsPerVisit.get(key) ?? new Set<number>();
-    set.add(form.standIndex);
-    standsPerVisit.set(key, set);
+    if (form.outcome !== 'REPAIRED') {
+      groups.push([form]);
+      continue;
+    }
+    const key = `${form.uid}|${dayKey(form.date)}|${form.technicianId}|${form.isReRepair}`;
+    const at = visitIndex.get(key);
+    if (at === undefined) {
+      visitIndex.set(key, groups.length);
+      groups.push([form]);
+    } else {
+      groups[at].push(form);
+    }
   }
 
-  return forms.map((form) => {
-    const replaced: Record<string, number> = {};
-    for (const part of PART_CATALOG) replaced[part.exportColumnKey] = 0;
-    for (const usage of form.parts) {
-      if (usage.action !== 'REPLACED') continue;
-      replaced[usage.part.exportColumnKey] =
-        (replaced[usage.part.exportColumnKey] ?? 0) + usage.quantity;
+  return groups.map((stands) => {
+    stands.sort((a, b) => a.standIndex - b.standIndex);
+    const first = stands[0];
+
+    const parts = Array.from({ length: JTI_PART_COUNT }, () => 0);
+    for (const stand of stands) {
+      for (const usage of stand.parts) {
+        if (usage.action !== 'REPLACED') continue;
+        const column = CATALOG_TO_JTI_PART[usage.part.sortOrder];
+        if (column) parts[column - 1] += usage.quantity;
+      }
     }
 
+    const reason =
+      first.outcome === 'NOT_REPAIRED' && isNotRepairedReason(first.notRepairedReason)
+        ? first.notRepairedReason
+        : null;
+
+    const storeDetails =
+      first.outcome === 'NOT_REPAIRED'
+        ? [reason ? REASON_INFO[reason].labelFa : '', first.notes?.trim()]
+            .filter(Boolean)
+            .join(' | ')
+        : stands.length === 1
+          ? describeStand(first)
+          : stands.map((s, i) => `استند${i + 1}: ${describeStand(s)}`).join(' - ');
+
+    const qualities = stands
+      .map((s) => s.qualityScore)
+      .filter((q): q is number => q !== null);
+
     return {
-      cityName: form.city?.name ?? '',
-      cityId: form.cityId,
-      date: form.date,
-      uid: form.uid,
-      replaced,
-      digitalAddress: form.digitalAddress ?? '',
-      address: form.storeAddress ?? '',
-      // An unsuccessful visit has no parts to describe, so column 37 carries the fixed
-      // reason instead — otherwise the red row would arrive at Jti with no explanation.
-      maintenanceDetail:
-        form.outcome === 'NOT_REPAIRED'
-          ? [
-              form.notRepairedReason
-                ? NOT_REPAIRED_LABELS_FA[form.notRepairedReason] ?? form.notRepairedReason
-                : 'تعمیر انجام نشد',
-              form.notes?.trim() ? `توضیحات: ${form.notes.trim()}` : '',
-            ]
-              .filter(Boolean)
-              .join(' | ')
-          : buildMaintenanceDetail(form.parts, form.notes),
-      tel: form.storePhone ?? '',
-      storeName: form.storeName ?? '',
-      managerName: form.storeManagerName ?? '',
-      technicianCode: form.technician.technicianCode ?? '',
-      formCode: form.formCode,
-      standQuality: form.qualityScore,
-      // Stated in words as well as colour: a fill does not survive a copy-paste into
-      // another sheet, and this is the column Jti will filter on.
-      repairStatus:
-        form.outcome === 'REPAIRED'
-          ? form.isReRepair
-            ? 'تعمیر شد (تعمیر مجدد)'
-            : 'تعمیر شد'
-          : `تعمیر نشد — ${
-              form.notRepairedReason
-                ? (NOT_REPAIRED_LABELS_FA[form.notRepairedReason] ??
-                  form.notRepairedReason)
-                : 'دلیل ثبت نشده'
-            }`,
-      hasPreviousProjectHistory: form.hasPreviousProjectHistory,
-      isReRepair: form.isReRepair,
-      notRepaired: form.outcome === 'NOT_REPAIRED',
-      isDoubleStand:
-        (standsPerVisit.get(
-          `${form.uid}|${form.date.toISOString().slice(0, 10)}`,
-        )?.size ?? 1) > 1,
-      standIndex: form.standIndex,
+      date: first.date,
+      cityName: first.city?.name ?? '',
+      cityId: first.cityId,
+      uid: first.uid,
+      parts,
+      digitalAddress: first.digitalAddress ?? '',
+      address: first.storeAddress ?? '',
+      storeDetails,
+      tel: first.storePhone ?? '',
+      storeName: first.storeName ?? '',
+      managerName: first.storeManagerName ?? '',
+      technicianCode: first.technician.technicianCode ?? '',
+      formCode: first.formCode,
+      // One score per row on the sheet; a visit is as good as its weakest stand.
+      quality: qualities.length ? Math.min(...qualities) : null,
+      feedback:
+        first.outcome === 'REPAIRED'
+          ? REPAIRED_FEEDBACK
+          : reason
+            ? REASON_INFO[reason].feedbackFa
+            : 'تعمیر انجام نشد',
+      extraStands: stands.length - 1,
+      reason,
+      isReRepair: first.isReRepair,
+      hasPreviousProjectHistory: stands.some((s) => s.hasPreviousProjectHistory),
     };
   });
 }
 
+const THIN = { style: 'thin' } as const;
+const BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+
+const TINT = {
+  notRepaired: 'FFFCE4E4',
+  double: 'FFDDEBF7',
+  history: 'FFFFF6E0',
+} as const;
+
 export async function buildJtiWorkbook(
   rows: JtiExportRow[],
   scope: JtiExportScope = 'MAIN',
+  sheetName?: string,
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Sazkara Maintenance';
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet(scope === 'RE_REPAIR' ? 'تعمیرات مجدد' : 'گزارش', {
-    // Persian sheet: read right-to-left, matching the paper form it replaces.
-    views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }],
-  });
+  const sheet = workbook.addWorksheet(
+    (sheetName || (scope === 'RE_REPAIR' ? 'تعمیرات مجدد' : 'گزارش')).slice(0, 31),
+    // As the client's sheet: the four identifying columns and two header rows frozen.
+    { views: [{ state: 'frozen', xSplit: 4, ySplit: 2 }] },
+  );
 
-  sheet.addRow(JTI_EXPORT_HEADERS);
-
-  const header = sheet.getRow(1);
-  header.font = { bold: true, size: 11 };
-  header.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-  header.height = 42;
-  header.eachCell((cell) => {
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE8EEF7' },
-    };
-    cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' },
-    };
-  });
+  // Row 1: section headers; row 2: the part names under «Problem Type».
+  const header = sheet.addRow(JTI_SHEET_HEADER_ROW);
+  const partNames = sheet.addRow([
+    '', '', '', '',
+    ...JTI_PART_HEADERS_FA,
+    ...Array.from({ length: JTI_SHEET_COLUMN_COUNT - JTI_FIRST_PART_COLUMN + 1 - JTI_PART_COUNT }, () => ''),
+  ]);
+  for (const [row, argb] of [[header, 'FFA5A5A5'], [partNames, 'FFC6EFCE']] as const) {
+    row.font = { bold: true, size: 10 };
+    row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    for (let c = 1; c <= JTI_SHEET_COLUMN_COUNT; c++) {
+      const cell = row.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+      cell.border = BORDER;
+    }
+  }
+  header.height = 30;
+  partNames.height = 42;
 
   rows.forEach((row, i) => {
+    const reasonCells = NOT_REPAIRED_REASONS.map((r) => (r === row.reason ? 1 : ''));
     const added = sheet.addRow([
-      i + 1, // 1  رقم
-      formatJalali(row.date), // 2  تاریخ
-      row.cityName, // 3  شهر
-      row.uid, // 4  شناسه
-      ...PART_CATALOG.map((p) => row.replaced[p.exportColumnKey] ?? 0), // 5..34
-      row.digitalAddress, // 35
-      row.address, // 36
-      row.maintenanceDetail, // 37
-      row.tel, // 38
-      row.storeName, // 39
-      row.managerName, // 40
-      row.technicianCode, // 41
-      row.formCode, // 42
-      row.standQuality ?? '', // 43
-      row.repairStatus, // 44
+      i + 1,
+      formatJalali(row.date),
+      row.cityName,
+      row.uid,
+      ...row.parts.map((q) => (q > 0 ? q : '')),
+      row.digitalAddress,
+      row.address,
+      row.storeDetails,
+      row.tel,
+      row.storeName,
+      row.managerName,
+      row.technicianCode,
+      row.formCode,
+      row.quality ?? '',
+      row.feedback,
+      row.extraStands > 0 ? row.extraStands : '',
+      ...reasonCells,
     ]);
 
-    // The sheet must stay exactly 43 columns wide for Jti, so every marker is a row
-    // tint rather than an extra column. A row can qualify for more than one, so the
-    // most consequential wins:
-    //   red   — the visit produced no repair
-    //   blue  — one of several stands at the same uid (a "double stand")
-    //   cream — this uid was already repaired in an earlier campaign
-    const tint = row.notRepaired
-      ? 'FFFCE4E4'
-      : row.isDoubleStand
-        ? 'FFDDEBF7'
+    // A marker is a row tint, never an extra column, so the sheet keeps its shape. Most
+    // consequential first: not repaired, then several stands, then earlier history.
+    const tint = row.reason
+      ? TINT.notRepaired
+      : row.extraStands > 0
+        ? TINT.double
         : row.hasPreviousProjectHistory
-          ? 'FFFFF6E0'
+          ? TINT.history
           : null;
-
-    if (tint) {
-      added.eachCell({ includeEmpty: true }, (cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tint } };
-      });
+    for (let c = 1; c <= JTI_SHEET_COLUMN_COUNT; c++) {
+      const cell = added.getCell(c);
+      cell.border = BORDER;
+      if (tint) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tint } };
     }
   });
 
-  // Widths: identifiers and free text need room; the 30 part columns stay narrow.
-  const widths = [
-    6, 12, 14, 16,
-    ...PART_CATALOG.map(() => 9),
-    28, 34, 46, 14, 24, 18, 14, 14, 12, 34,
-  ];
-  widths.forEach((w, i) => {
-    sheet.getColumn(i + 1).width = w;
-  });
-
-  const firstPartCol = 5;
-  const lastPartCol = 4 + PART_CATALOG.length;
-  for (let c = firstPartCol; c <= lastPartCol; c++) {
+  const widths: Record<number, number> = {
+    1: 7, 2: 12, 3: 10, 4: 16,
+    [JTI_COL.digitalAddress]: 34, [JTI_COL.address]: 40, [JTI_COL.storeDetails]: 50,
+    [JTI_COL.tel]: 14, [JTI_COL.store]: 24, [JTI_COL.manager]: 20, [JTI_COL.techCode]: 12,
+    [JTI_COL.formCode]: 13, [JTI_COL.quality]: 9, [JTI_COL.feedback]: 34, [JTI_COL.dubble]: 8,
+  };
+  for (let c = 1; c <= JTI_SHEET_COLUMN_COUNT; c++) {
+    const isPart = c >= JTI_FIRST_PART_COLUMN && c < JTI_FIRST_PART_COLUMN + JTI_PART_COUNT;
+    sheet.getColumn(c).width = widths[c] ?? (isPart ? 9 : 11);
+  }
+  for (const c of [1, 2, JTI_COL.quality, JTI_COL.dubble]) {
     sheet.getColumn(c).alignment = { horizontal: 'center' };
   }
-  sheet.getColumn(1).alignment = { horizontal: 'center' };
-  sheet.getColumn(2).alignment = { horizontal: 'center' };
-  sheet.getColumn(43).alignment = { horizontal: 'center' };
-  sheet.getColumn(37).alignment = { wrapText: true, vertical: 'top' };
+  sheet.getColumn(JTI_COL.storeDetails).alignment = { wrapText: true, vertical: 'top' };
+  sheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: JTI_SHEET_COLUMN_COUNT } };
 
-  sheet.getColumn(JTI_EXPORT_COLUMN_COUNT).alignment = { wrapText: true, vertical: 'top' };
-  sheet.autoFilter = {
-    from: { row: 1, column: 1 },
-    to: { row: 1, column: JTI_EXPORT_COLUMN_COUNT },
-  };
-
-  // Colour alone is not self-describing once the file leaves this app, so the workbook
-  // carries a short legend on its own sheet.
+  // Colour does not explain itself once the file leaves the app, so a short legend.
   const legend = workbook.addWorksheet('راهنما', { views: [{ rightToLeft: true }] });
   legend.getColumn(1).width = 12;
   legend.getColumn(2).width = 70;
-  legend.addRow(['رنگ', 'معنی']);
-  legend.getRow(1).font = { bold: true };
-
+  legend.addRow(['رنگ', 'معنی']).font = { bold: true };
   for (const [argb, meaning] of [
-    ['FFFCE4E4', 'تعمیر انجام نشد — دلیل در ستون Maintenance detail آمده است'],
-    ['FFDDEBF7', 'استند دوم یا سوم همان شناسه (چند استند در یک فروشگاه)'],
-    ['FFFFF6E0', 'این شناسه در پروژه‌های قبلی هم تعمیر شده است'],
+    [TINT.notRepaired, 'تعمیر انجام نشد — دلیل با عدد ۱ در یکی از ستون‌های پایانی مشخص است'],
+    [TINT.double, 'چند استند در یک فروشگاه — تعداد استندهای اضافه در ستون Dubble'],
+    [TINT.history, 'این شناسه در پروژه‌های قبلی هم تعمیر شده است'],
   ] as Array<[string, string]>) {
     const row = legend.addRow(['', meaning]);
     row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
-    row.getCell(1).border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' },
-    };
+    row.getCell(1).border = BORDER;
   }
 
   const out = await workbook.xlsx.writeBuffer();
@@ -397,7 +376,7 @@ export function safeFilename(input: string): string {
   );
 }
 
-/** One workbook per city — the shape Jti receives (§8). */
+/** One workbook per city — the shape Jti receives (§8), each sheet named after its city. */
 export async function buildJtiWorkbooksPerCity(
   rows: JtiExportRow[],
   labelForRange: string,
@@ -417,7 +396,7 @@ export async function buildJtiWorkbooksPerCity(
     bundles.push({
       cityName,
       filename: `${safeFilename(cityName)} - ${labelForRange}${suffix}.xlsx`,
-      buffer: await buildJtiWorkbook(cityRows, scope),
+      buffer: await buildJtiWorkbook(cityRows, scope, cityName),
       rowCount: cityRows.length,
     });
   }

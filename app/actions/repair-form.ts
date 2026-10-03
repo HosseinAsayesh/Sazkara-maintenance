@@ -1,6 +1,16 @@
 'use server';
 
 import type { NotRepairedReason, PartAction, PhotoType } from '@prisma/client';
+
+/**
+ * Only the ten known reasons get through. A form cached before the list changed posts an
+ * old value; treated as "no reason", it meets the usual "pick a reason" message instead
+ * of a database error.
+ */
+function toReason(value: FormDataEntryValue | null): NotRepairedReason | null {
+  const s = value ? String(value) : '';
+  return isNotRepairedReason(s) ? s : null;
+}
 import { revalidatePath } from 'next/cache';
 
 import { getCurrentUser } from '@/lib/auth';
@@ -12,6 +22,7 @@ import {
   type PhotoInput,
 } from '@/lib/repair-forms';
 import { getStorage } from '@/lib/storage';
+import { isNotRepairedReason } from '@/lib/reasons';
 
 export interface RepairFormState {
   /** Translation key under `form.errors`, or `common.error`. */
@@ -117,7 +128,7 @@ export async function submitRepairFormAction(
       technicianId: user.id,
       ...sharedStore,
       parts,
-      notRepairedReason: reason ? (String(reason) as NotRepairedReason) : null,
+      notRepairedReason: toReason(reason),
       qualityScore: qualityRaw !== null && qualityRaw !== '' ? Number(qualityRaw) : null,
       timeSpentMinutes: timeRaw ? Number(timeRaw) : null,
       notes: String(formData.get('notes') ?? ''),
@@ -167,9 +178,7 @@ export async function submitRepairFormAction(
         technicianId: user.id,
         ...sharedStore,
         parts: parsePartEntries(formData.getAll(`extra_${i}_parts`)),
-        notRepairedReason: extraReason
-          ? (String(extraReason) as NotRepairedReason)
-          : null,
+        notRepairedReason: toReason(extraReason),
         qualityScore:
           extraQuality !== null && extraQuality !== ''
             ? Number(extraQuality)

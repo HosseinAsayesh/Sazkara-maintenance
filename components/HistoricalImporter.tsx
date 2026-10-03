@@ -51,7 +51,6 @@ export function HistoricalImporter({
     commitHistoricalAction,
     {},
   );
-  const [format, setFormat] = useState<'AUTO' | 'LEGACY' | 'CURRENT'>('AUTO');
   const [name, setName] = useState('');
   // An archive filed under no project is invisible to every project filter, so the
   // manager picks the campaign it belonged to at import time.
@@ -95,44 +94,6 @@ export function HistoricalImporter({
             />
           </Field>
 
-          {/* Both formats stay available for good: a paper report filed mid-project is
-              transcribed into whichever spreadsheet the office has to hand. Detection is
-              only a default — real archives carry hand-edited headers, so stating the
-              format outright has to be possible. */}
-          <div className="sm:col-span-2">
-            <Field label={t('formatLabel')} hint={t('formatHelp')}>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {(['AUTO', 'LEGACY', 'CURRENT'] as const).map((option) => (
-                  <label
-                    key={option}
-                    className={
-                      'flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ' +
-                      (format === option
-                        ? 'border-brand-400 bg-brand-50'
-                        : 'border-[var(--border)] bg-white')
-                    }
-                  >
-                    <input
-                      type="radio"
-                      name="format"
-                      value={option}
-                      checked={format === option}
-                      onChange={() => setFormat(option)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      <span className="block font-medium">
-                        {t(`format.${option}.title`)}
-                      </span>
-                      <span className="block text-xs text-[var(--muted)]">
-                        {t(`format.${option}.help`)}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </Field>
-          </div>
           <div className="sm:col-span-2">
             <Button type="submit" disabled={previewing}>
               {previewing ? tc('loading') : t('dryRun')}
@@ -141,9 +102,11 @@ export function HistoricalImporter({
           {previewState.error ? (
             <div className="sm:col-span-2">
               <Alert tone="danger">
-                {ti.has(`errors.${previewState.error}`)
-                  ? ti(`errors.${previewState.error}`)
-                  : tc('error')}
+                {t.has(`errors.${previewState.error}`)
+                  ? t(`errors.${previewState.error}`)
+                  : ti.has(`errors.${previewState.error}`)
+                    ? ti(`errors.${previewState.error}`)
+                    : tc('error')}
               </Alert>
             </div>
           ) : null}
@@ -159,8 +122,6 @@ export function HistoricalImporter({
               fd.set('name', name || 'Historical import');
               fd.set('locale', locale);
               fd.set('projectId', projectId);
-              // Commit must read the file exactly as the preview did.
-              fd.set('format', preview.format);
               fd.set('phaseId', phases.some((p) => p.id === phaseId) ? phaseId : '');
               commitAction(fd);
             }}
@@ -168,7 +129,7 @@ export function HistoricalImporter({
           >
             <Alert tone="info">
               {t('willCreate', {
-                forms: preview.rows,
+                forms: preview.forms,
                 uids: preview.distinctUids,
                 newUids: preview.newUids,
               })}
@@ -198,12 +159,37 @@ export function HistoricalImporter({
               </Alert>
             ) : null}
 
-            {/* Which sheet generation was read. The legacy layout has 28 part columns
-                and two of today's parts simply did not exist in it. */}
+            {/* The counts the dashboard will show, checked BEFORE anything is written —
+                in stands, so a «Dubble» row counts as two. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <div className="text-xs text-[var(--muted)]">{t('previewRows')}</div>
+                <div className="text-xl font-bold tabular-nums">{preview.rows}</div>
+              </div>
+              <div className="rounded-lg border border-teal-200 bg-teal-50 p-3">
+                <div className="text-xs text-teal-900">{t('previewRepaired')}</div>
+                <div className="text-xl font-bold tabular-nums text-teal-700">{preview.repaired}</div>
+              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <div className="text-xs text-red-900">{t('previewNotRepaired')}</div>
+                <div className="text-xl font-bold tabular-nums text-red-700">{preview.notRepaired}</div>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <div className="text-xs text-[var(--muted)]">{t('previewExtraStands')}</div>
+                <div className="text-xl font-bold tabular-nums">{preview.extraStands}</div>
+              </div>
+            </div>
+            {preview.reasonBreakdown.length ? (
+              <ul className="space-y-0.5 text-xs text-[var(--muted)]">
+                {preview.reasonBreakdown.map((r) => (
+                  <li key={r.label}>
+                    {r.label}: <span className="font-medium tabular-nums">{r.count}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
             <div className="flex flex-wrap gap-2">
-              <Badge tone={preview.layout === 'LEGACY' ? 'warning' : 'info'}>
-                {preview.layout === 'LEGACY' ? t('layoutLegacy') : t('layoutCurrent')}
-              </Badge>
               {preview.skipped > 0 ? (
                 <Badge tone="warning">
                   {ti('invalidRows', { count: preview.skipped })}

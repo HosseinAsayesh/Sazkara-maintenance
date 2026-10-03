@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import { formatJalali } from '../dates';
 import { prisma } from '../prisma';
 import { projectScopeWhere } from '../projects';
+import { reasonLabelFa } from '../reasons';
 
 /**
  * A technician's own work, or a lead's whole crew, as a spreadsheet.
@@ -115,14 +116,6 @@ const OUTCOME_FA: Record<string, string> = {
   NOT_REPAIRED: 'تعمیر نشد',
 };
 
-const REASON_FA: Record<string, string> = {
-  MANAGER_NOT_AUTHORIZED: 'مدیر فروشگاه اجازه نداد',
-  STORE_OR_STAND_REMOVED: 'فروشگاه یا استند جمع‌آوری شده بود',
-  ALREADY_HEALTHY: 'استند سالم بود',
-  STORE_TEMPORARILY_CLOSED: 'فروشگاه موقتاً تعطیل بود',
-  CONDITION_TOO_POOR: 'وضعیت استند برای تعمیر نامناسب بود',
-};
-
 export async function buildWorkWorkbook(
   rows: WorkExportRow[],
   title: string,
@@ -168,7 +161,7 @@ export async function buildWorkWorkbook(
       row.projectName,
       row.phaseName,
       OUTCOME_FA[row.outcome] ?? row.outcome,
-      row.notRepairedReason ? (REASON_FA[row.notRepairedReason] ?? row.notRepairedReason) : '',
+      reasonLabelFa(row.notRepairedReason),
       row.quality ?? '',
       row.timeSpentMinutes ?? '',
       row.isReRepair ? 'بله' : '',

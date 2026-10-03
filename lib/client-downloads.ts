@@ -88,6 +88,8 @@ export async function fulfilDownloadRequest(
       projectId: request.projectId,
       from: range.from,
       to: range.to,
+      // Jti asks for parts in its own sheet's layout.
+      model: 'JTI',
     });
     const buffer = await buildPartsUsageWorkbook(report, label);
     const fileRef = await storage.put(buffer, {

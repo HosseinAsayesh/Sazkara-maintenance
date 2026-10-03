@@ -1,13 +1,12 @@
+import { NOT_REPAIRED_REASONS, REASON_INFO } from './reasons';
+
 /**
- * The 30-item part catalogue (spec §8).
+ * The 30-item part catalogue (spec §8) — what a technician picks from, and what the
+ * accounting parts report lists one by one.
  *
- * The order of this array IS the export layout: index 0 is Jti export column 5
- * (پلکسی شلف) and index 29 is column 34 (درب). `exportColumnKey` freezes that
- * relationship so the catalogue can never be silently reordered out from under a
- * previously-generated export.
- *
- * The Persian names are verbatim from the Jti spreadsheet and are used as the literal
- * column headers of the export regardless of UI locale.
+ * `exportColumnKey` (col05..col34) is the part's permanent identity in the database; it
+ * no longer names a column of the Jti sheet. That sheet has 28 part columns, and two
+ * pairs of catalogue parts share one of them there (see CATALOG_TO_JTI_PART below).
  */
 
 export const PART_EXPORT_FIRST_COLUMN = 5;
@@ -68,11 +67,9 @@ const NAMES: Array<[fa: string, en: string]> = [
   ['سوکت کولری', 'Cooler socket'],
   ['درب پلاستیکی', 'Plastic door'],
   ['پلکسی سفید', 'White plexiglass'],
-  // Column 34 / legacy column 32. Recorded as «درب» from a misread archive header; the
-  // client confirmed against the source order files that the part is «پک هواکش». The
-  // position is unchanged, so no export column moves — only the label was wrong, and it
-  // was wrong in a way that silently filed vent packs against a door.
-  ['پک هواکش', 'Vent pack'],
+  // The Jti sheet's last part column. Briefly relabelled «پک هواکش»; the client has
+  // since settled it as «درب», which is what their sheet has always said (2026-10).
+  ['درب', 'Door'],
 ];
 
 export const PART_CATALOG: PartCatalogSeed[] = NAMES.map(([nameFa, nameEn], i) => {
@@ -100,46 +97,80 @@ if (PART_CATALOG.length !== PART_EXPORT_LAST_COLUMN - PART_EXPORT_FIRST_COLUMN +
   throw new Error(
     `Part catalogue must contain exactly ${
       PART_EXPORT_LAST_COLUMN - PART_EXPORT_FIRST_COLUMN + 1
-    } items to fill export columns ${PART_EXPORT_FIRST_COLUMN}..${PART_EXPORT_LAST_COLUMN}`,
+    } items (keys col${PART_EXPORT_FIRST_COLUMN}..col${PART_EXPORT_LAST_COLUMN})`,
   );
 }
 
-/** The non-part columns of the Jti export, verbatim (spec §8). */
-export const JTI_LEADING_HEADERS = ['رقم', 'تاریخ', 'شهر', 'شناسه'] as const;
+/* ------------------------------------------------------------------ *
+ * The Jti sheet — the ONE Excel format, both imported and exported
+ * ------------------------------------------------------------------ */
 
-export const JTI_TRAILING_HEADERS = [
-  'Digital Address',
-  'Address',
-  'Maintenance detail',
-  'Tel',
-  'Store name',
-  "Manager's name",
-  'Technician code',
-  'Form code',
-  'Stand quality',
-  /**
-   * Column 44, added at the client's request. The original spec fixed the sheet at 43
-   * columns; this one states in words whether the visit ended in a repair and, when it
-   * did not, which of the five fixed reasons applied — so a red row is readable without
-   * relying on the fill colour surviving a copy-paste.
-   */
-  'Repair status',
+/**
+ * The 28 part columns of the client's Jti sheet (row 2, columns 5..32), verbatim from
+ * their files. Exports write these exact words; imports read quantities by position.
+ */
+export const JTI_PART_HEADERS_FA = [
+  'شلف پلکسی', 'لایت باکس', 'شلف روی در', 'کلیدبرق12Amp', 'سیم نمره1',
+  'پایه فیوز', 'فیوز', 'ترانس', 'میکروسوئیچ', 'پایه میکروسیچ',
+  'سیم آداپتوری', 'سیم تلفنی', 'سوکت سیم تلفنی', 'کابل3/60', 'سنت نگهدارنده در',
+  'لایت فریم', 'آرام بند', 'فنر', 'برد استند', '(smd)LEDسفید',
+  '(smd)LEDآبی', 'کلید', 'ریل وپوشرL', 'ریل وپوشرU', 'سوکت کولری',
+  'درب پلاستیکی شلف', 'پلکسی سفید', 'درب',
 ] as const;
 
-/** All 44 headers in order. */
-export const JTI_EXPORT_HEADERS: string[] = [
-  ...JTI_LEADING_HEADERS,
-  ...PART_CATALOG.map((p) => p.nameFa),
-  ...JTI_TRAILING_HEADERS,
+export const JTI_FIRST_PART_COLUMN = 5;
+export const JTI_PART_COUNT = JTI_PART_HEADERS_FA.length;
+
+/**
+ * Catalogue sortOrder -> Jti part column (1..28).
+ *
+ * The technician still picks the precise part, but the Jti sheet predates two splits:
+ * both wire gauges are reported as «سیم نمره1», and the round and rectangular switches
+ * as «کلید». The accounting report keeps them apart.
+ */
+export const CATALOG_TO_JTI_PART: Record<number, number> = {
+  1: 1, 2: 2, 3: 3, 4: 4,
+  5: 5, 6: 5, // سیم نمره ۱ + سیم نمره ۰.۵ -> سیم نمره1
+  7: 6, 8: 7, 9: 8, 10: 9, 11: 10, 12: 11, 13: 12, 14: 13, 15: 14,
+  16: 15, 17: 16, 18: 17, 19: 18, 20: 19, 21: 20, 22: 21,
+  23: 22, 24: 22, // کلید گرد + کلید مستطیلی -> کلید
+  25: 23, 26: 24, 27: 25, 28: 26, 29: 27, 30: 28,
+};
+
+/** The sheet's first header row, columns 1..53, verbatim. Parts sit under «Problem Type». */
+export const JTI_SHEET_HEADER_ROW: string[] = [
+  '', 'Date', 'City', 'UID No.',
+  'Problem Type', ...Array.from({ length: JTI_PART_COUNT - 1 }, () => ''),
+  'location AddresS', 'Address', 'Store Details', 'Tel', "Store's Name",
+  "Store Manager's Name", "Technician's Code+", 'Form code', 'Stand Quality',
+  'Maintenance Services And Feedback',
+  'Dubble',
+  ...NOT_REPAIRED_REASONS.map((r) => REASON_INFO[r].labelFa),
 ];
 
-/** 43 from the original spec plus the client-requested repair-status column. */
-export const JTI_EXPORT_COLUMN_COUNT = 44;
+/** Column numbers of the trailing block (1-based). */
+export const JTI_COL = {
+  digitalAddress: 33,
+  address: 34,
+  storeDetails: 35,
+  tel: 36,
+  store: 37,
+  manager: 38,
+  techCode: 39,
+  formCode: 40,
+  quality: 41,
+  feedback: 42,
+  dubble: 43,
+  firstReason: 44,
+} as const;
 
-if (JTI_EXPORT_HEADERS.length !== JTI_EXPORT_COLUMN_COUNT) {
-  throw new Error(
-    `Jti export must have exactly ${JTI_EXPORT_COLUMN_COUNT} columns, got ${JTI_EXPORT_HEADERS.length}`,
-  );
+export const JTI_SHEET_COLUMN_COUNT = JTI_SHEET_HEADER_ROW.length;
+
+if (JTI_SHEET_COLUMN_COUNT !== 53 || JTI_COL.firstReason + NOT_REPAIRED_REASONS.length - 1 !== 53) {
+  throw new Error(`The Jti sheet must be 53 columns wide, got ${JTI_SHEET_COLUMN_COUNT}`);
+}
+if (new Set(Object.values(CATALOG_TO_JTI_PART)).size !== JTI_PART_COUNT) {
+  throw new Error('Every Jti part column must be fed by at least one catalogue part');
 }
 
 /* ------------------------------------------------------------------ *

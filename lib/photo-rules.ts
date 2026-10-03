@@ -16,15 +16,20 @@
  * the only way to file a truthful report was to photograph something irrelevant.
  */
 
+import { NOT_REPAIRED_REASONS, REASON_INFO } from './reasons';
+
 export type StandPhoto = 'BEFORE' | 'AFTER';
 
 /**
- * Reasons where the stand itself cannot be photographed: it is gone, or it is behind a
- * closed shutter. The other three (permission refused, stand healthy, condition too poor)
- * all leave a stand standing in front of the technician — and for "condition too poor"
- * the photograph is the whole evidence for the claim, so it stays required.
+ * Reasons where the stand itself cannot be photographed: it is gone, the shop is shut or
+ * no longer a shop, or the address led nowhere. The rest (healthy, poor condition,
+ * replacement requested, cannot repair on site, permission refused) all leave a stand in
+ * front of the technician — and for most of them the photograph is the whole evidence
+ * for the claim, so it stays required. Defined per reason in lib/reasons.ts.
  */
-const STAND_UNREACHABLE = new Set(['STORE_OR_STAND_REMOVED', 'STORE_TEMPORARILY_CLOSED']);
+const STAND_UNREACHABLE = new Set<string>(
+  NOT_REPAIRED_REASONS.filter((r) => REASON_INFO[r].standUnreachable),
+);
 
 export function requiredStandPhotos(
   outcome: 'REPAIRED' | 'NOT_REPAIRED',

@@ -22,6 +22,7 @@ import {
   Select,
   Textarea,
 } from './ui';
+import { NOT_REPAIRED_REASONS } from '@/lib/reasons';
 
 export interface EditableForm {
   id: string;
@@ -46,14 +47,6 @@ export interface EditableForm {
   repaired: PartSelection;
   photoUrls: Array<{ type: string; url: string }>;
 }
-
-const NOT_REPAIRED_REASONS = [
-  'MANAGER_NOT_AUTHORIZED',
-  'STORE_OR_STAND_REMOVED',
-  'ALREADY_HEALTHY',
-  'STORE_TEMPORARILY_CLOSED',
-  'CONDITION_TOO_POOR',
-] as const;
 
 /**
  * Manager view of one submitted report, with correction and deletion.

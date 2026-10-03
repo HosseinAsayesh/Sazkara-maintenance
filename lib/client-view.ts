@@ -247,7 +247,8 @@ export async function getClientForms(
  * parts count as consumed inventory (§6.8), which is the figure that matters here.
  */
 export async function getClientPartsUsage(projectId: string): Promise<PartsUsageReport> {
-  return buildPartsUsageReport({ projectId });
+  // Jti sees parts in its own sheet's 28 columns.
+  return buildPartsUsageReport({ projectId, model: 'JTI' });
 }
 
 /**

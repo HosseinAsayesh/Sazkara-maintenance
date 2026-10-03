@@ -248,11 +248,16 @@
     "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page."
   },
   "reasons": {
-    "MANAGER_NOT_AUTHORIZED": "Store manager did not authorize the repair",
-    "STORE_OR_STAND_REMOVED": "Store or stand was removed / collected",
-    "ALREADY_HEALTHY": "Stand was already healthy, no repair needed",
-    "STORE_TEMPORARILY_CLOSED": "Store was temporarily closed",
-    "CONDITION_TOO_POOR": "Stand's condition was too poor to repair"
+    "STAND_HEALTHY": "Stand is healthy",
+    "STORE_CHANGED_USE": "Store changed its business",
+    "STORE_CLOSED": "Store closed",
+    "REPLACEMENT_REQUESTED": "Replacement requested",
+    "CANNOT_REPAIR_ON_SITE": "Cannot be repaired on site",
+    "PERMISSION_DENIED": "Repair not permitted",
+    "POOR_CONDITION": "Stand in poor condition",
+    "WRONG_ADDRESS": "Wrong address",
+    "STAND_REMOVED": "Stand has been removed",
+    "STORE_REMOVED": "Store has been removed"
   },
   "outcome": {
     "REPAIRED": "Repaired",
@@ -445,7 +450,9 @@
     "scopeMain": "Main repairs (re-repairs excluded)",
     "scopeReRepair": "Re-repairs only",
     "scopeAll": "Both in one file",
-    "contentScopeHelp": "A re-repair is the same UID twice within one project. UIDs repaired in earlier projects stay in the main file and are only tinted."
+    "contentScopeHelp": "A re-repair is the same UID twice within one project. UIDs repaired in earlier projects stay in the main file and are only tinted.",
+    "downloadPartsJti": "Parts — JTI format (28)",
+    "downloadPartsAccounting": "Parts — accounting (30, separate)"
   },
   "evidence": {
     "title": "Evidence PDFs",
@@ -579,30 +586,12 @@
   "historical": {
     "title": "Historical data import",
     "help": "Import completed reports from an Excel file",
-    "expectedFormat": "For pre-system archives and for paper reports typed up mid-project alike. Both the legacy and current spreadsheet formats are supported.",
+    "expectedFormat": "The client's Jti sheet: 28 part columns, Dubble, and the ten reason columns — the same layout the app exports.",
     "dryRun": "Check without importing",
     "importNow": "Import now",
     "willCreate": "{forms} reports across {uids} distinct UIDs ({newUids} new to the system).",
     "imported": "{count, number} historical forms imported",
     "technicianForHistorical": "Technician attributed to historical data",
-    "layoutCurrent": "Current layout (30 parts)",
-    "layoutLegacy": "Legacy layout (28 parts)",
-    "formatLabel": "Excel format",
-    "formatHelp": "Both formats stay available. If auto-detection gets it wrong, state the format yourself.",
-    "format": {
-      "AUTO": {
-        "title": "Detect automatically",
-        "help": "Work the format out from the headers."
-      },
-      "LEGACY": {
-        "title": "Legacy format (pre-system)",
-        "help": "28 part columns, two-row header, feedback in column AP."
-      },
-      "CURRENT": {
-        "title": "Current format (app export)",
-        "help": "30 part columns, exactly what this app produces."
-      }
-    },
     "repeatedUids": "{count} UID(s) appear on more than one row. Each row still becomes its own report; only one order line is created per UID.",
     "columnMismatch": "Part columns do not match",
     "columnMismatchHelp": "Quantities are read by column position. If these columns are a different part, the parts usage will be recorded against the wrong entries. Check before committing.",
@@ -611,7 +600,14 @@
     "deleteImport": "Delete this import",
     "deleteImportConfirm": "Delete every report from this import? This is for undoing a partial or wrong upload and cannot be reversed.",
     "importDeleted": "Import deleted",
-    "partial": "This import is incomplete."
+    "partial": "This import is incomplete.",
+    "previewRows": "Rows in the file",
+    "previewRepaired": "Stands repaired",
+    "previewNotRepaired": "Stands not repaired",
+    "previewExtraStands": "Extra stands (Dubble)",
+    "errors": {
+      "unsupportedLayout": "This file is not in the Jti sheet layout (28 part columns). Files exported by the app's earlier 30-part version cannot be imported."
+    }
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

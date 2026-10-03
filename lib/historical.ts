@@ -7,12 +7,13 @@ import { resolveCityId as resolveCityByName } from './cities';
 import { nextFormCode } from './codes';
 import { DAY_MS } from './dates';
 import {
-  JTI_EXPORT_HEADERS,
+  JTI_COL,
   LEGACY_PART_COLUMN_COUNT,
   LEGACY_TO_CURRENT_SORT_ORDER,
   PART_CATALOG,
 } from './parts';
 import { prisma } from './prisma';
+import { NOT_REPAIRED_REASONS, REASON_INFO, type NotRepairedReasonKey } from './reasons';
 import { getStorage } from './storage';
 import { cleanOptional, makeStoreMatchKey, normaliseUid, toLatinDigits } from './text';
 
@@ -42,28 +43,11 @@ const COL_UID = 4;
 const COL_FIRST_PART = 5;
 
 /**
- * Two sheet layouts exist in the wild and they are NOT interchangeable:
- *
- *   CURRENT — 4 leading + 30 part columns + 10 trailing.
- *   LEGACY  — 4 leading + 28 part columns +  9 trailing, produced before this system
- *             existed. It has no `سیم نمره ۰.۵`, a single merged `Switch`, and no
- *             repair-status column.
- *
- * Reading a legacy sheet at the current column positions does not fail loudly — it
- * silently shifts everything after the parts by two, so the store name is read out of the
- * technician-code column and part quantities land on the wrong catalogue entries. The
- * layout is therefore detected before a single row is read.
+ * The client's Jti sheet is the one Excel format (2026-10): 4 leading columns, 28 part
+ * columns, then the trailing block, «Dubble» and the ten reason columns. The app's own
+ * export writes the same layout, so anything it exports imports back unchanged.
  */
-export type ArchiveLayout = 'CURRENT' | 'LEGACY';
-
-/**
- * Which reader to use. Auto-detection is a convenience, not a guarantee: real archives
- * carry hand-edited headers ("location AddresS" instead of "Digital Address") and split
- * their header across two rows, so the manager can always state the format outright.
- * Both remain available permanently — a paper report filed mid-project is transcribed
- * into whichever spreadsheet the office has to hand.
- */
-export type ArchiveFormat = 'AUTO' | 'CURRENT' | 'LEGACY';
+export type ArchiveLayout = 'LEGACY';
 
 /**
  * The legacy part headers, column 5 to column 32, each with the spellings actually seen
@@ -103,9 +87,8 @@ const LEGACY_PART_HEADER_ALIASES: string[][] = [
   ['سوکت کولری'],
   ['درب پلاستیکی شلف', 'درب پلاستیکی'],
   ['پلکسی سفید'],
-  // «درب» is accepted because older sheets carry it in this column, but it is the wrong
-  // name for the part — see the catalogue note in lib/parts.ts.
-  ['پک هواکش', 'درب'],
+  // The client's sheet says «درب»; «پک هواکش» was a brief relabelling, still accepted.
+  ['درب', 'پک هواکش'],
 ];
 
 interface ResolvedLayout {
@@ -150,36 +133,7 @@ const LEGACY_COLUMNS = {
   maintenance: 42,
 } as const;
 
-type NotRepairedReasonValue =
-  | 'MANAGER_NOT_AUTHORIZED'
-  | 'STORE_OR_STAND_REMOVED'
-  | 'ALREADY_HEALTHY'
-  | 'STORE_TEMPORARILY_CLOSED'
-  | 'CONDITION_TOO_POOR';
-
-/**
- * The reason block that follows column AP on real order files (AQ..AX, 43..50).
- *
- * These columns are the only reliable record of an unsuccessful visit. Column AP does
- * carry the reason in prose — "اجازه تعمیر داده نشد."، "استند سالم است." — but it is
- * free text with no fixed wording, so reading the outcome from it means guessing at
- * phrasing. A tick in one of these columns does not.
- *
- * Eight archive reasons collapse onto the five the form offers (§6.5), which is a real
- * loss of nuance, so the archive's own wording is kept verbatim in the notes rather than
- * being thrown away. Extending the enum instead would put reasons in the technician's
- * picker that the spec fixes at five.
- */
-const LEGACY_REASON_LABELS: Array<[label: string, reason: NotRepairedReasonValue]> = [
-  ['استند سالم', 'ALREADY_HEALTHY'],
-  ['تغییر کاربری', 'STORE_OR_STAND_REMOVED'],
-  ['تعطیل', 'STORE_TEMPORARILY_CLOSED'],
-  ['تقاضای تعویض', 'CONDITION_TOO_POOR'],
-  ['عدم امکان تعمیر', 'CONDITION_TOO_POOR'],
-  ['عدم صدور اجازه', 'MANAGER_NOT_AUTHORIZED'],
-  ['وضعیت نامساعد', 'CONDITION_TOO_POOR'],
-  ['آدرس اشتباه', 'STORE_OR_STAND_REMOVED'],
-];
+type NotRepairedReasonValue = NotRepairedReasonKey;
 
 export interface ReasonColumn {
   column: number;
@@ -188,27 +142,45 @@ export interface ReasonColumn {
 }
 
 /**
- * Finds the reason block by reading the header row rather than trusting fixed positions.
+ * Finds the ten reason columns (44..53 on the client's sheet) by their headers.
  *
- * Positions have been stable at 43..50 in every file seen, but these columns were added
- * to the sheet by hand over the years and a shifted block would otherwise be read as
- * "no unsuccessful visits at all" — silently, and in the direction that overstates the
- * work done. Matching on the header means a shift is harmless and an absent block is
- * detected rather than assumed.
+ * The match is on a STEM the header contains, not on the whole header. The previous rule
+ * demanded an exact match against short labels like «تعطیل», so «تعطیلی فروشگاه»,
+ * «وضعیت نامساعد استند» and both «… جمع آوری شده است» columns were never found: a Mashhad
+ * file with 27 unsuccessful visits imported as 15, and the other 12 became repairs.
  */
 function detectReasonColumns(sheet: ExcelJS.Worksheet, headerRow: number): ReasonColumn[] {
   const found: ReasonColumn[] = [];
   const header = sheet.getRow(headerRow);
+  const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
 
-  for (let column = 1; column <= sheet.columnCount; column++) {
+  for (let column = 1; column <= width; column++) {
     const text = cellText(header.getCell(column)).trim();
     if (!text) continue;
     const key = makeStoreMatchKey(text);
-    const match = LEGACY_REASON_LABELS.find(([label]) => makeStoreMatchKey(label) === key);
-    if (match) found.push({ column, label: match[0], reason: match[1] });
+    const reason = NOT_REPAIRED_REASONS.find((r) =>
+      REASON_INFO[r].stems.some((stem) => key.includes(makeStoreMatchKey(stem))),
+    );
+    if (reason) found.push({ column, label: REASON_INFO[reason].labelFa, reason });
   }
 
   return found;
+}
+
+/**
+ * The «Dubble» column: how many MORE stands the row's store had, all serviced on that
+ * visit — 1 means two stands, 3 means four. The row's part quantities already cover all
+ * of them together («استند1: … - استند2: …» in Store Details). Found by header, falling
+ * back to its fixed position on the client's sheet.
+ */
+function detectDubbleColumn(sheet: ExcelJS.Worksheet, headerRow: number): number | null {
+  const header = sheet.getRow(headerRow);
+  const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
+  for (let column = 1; column <= width; column++) {
+    const text = cellText(header.getCell(column)).trim().toLowerCase();
+    if (text === 'dubble' || text === 'double' || text === 'دابل') return column;
+  }
+  return null;
 }
 
 function legacyLayout(): ResolvedLayout {
@@ -229,29 +201,6 @@ function legacyLayout(): ResolvedLayout {
   };
 }
 
-function buildLayout(partCount: number): ResolvedLayout {
-  // Legacy has its own hand-written column map; only the current layout is regular
-  // enough to derive positions arithmetically.
-  if (partCount === LEGACY_PART_COLUMN_COUNT) return legacyLayout();
-
-  const afterParts = COL_FIRST_PART + partCount;
-
-  return {
-    layout: 'CURRENT',
-    partCount,
-    sortOrderFor: (offset) => PART_CATALOG[offset]?.sortOrder ?? null,
-    colDigitalAddress: afterParts,
-    colAddress: afterParts + 1,
-    colMaintenance: afterParts + 2,
-    colTel: afterParts + 3,
-    colStore: afterParts + 4,
-    colManager: afterParts + 5,
-    colTechCode: afterParts + 6,
-    colFormCode: afterParts + 7,
-    colQuality: afterParts + 8,
-  };
-}
-
 /**
  * `Digital Address` is the first trailing column and its English header survived every
  * revision of the sheet, so its position tells us exactly how many part columns precede
@@ -268,60 +217,24 @@ function isTrailingAddressHeader(text: string): boolean {
   return /(digital|location)\s*address/.test(t);
 }
 
-function detectLayout(
-  sheet: ExcelJS.Worksheet,
-  headerRow: number,
-  format: ArchiveFormat = 'AUTO',
-): ResolvedLayout {
-  // An explicit choice always wins: auto-detection guesses, the manager knows.
-  if (format === 'LEGACY') return legacyLayout();
-  if (format === 'CURRENT') return buildLayout(PART_CATALOG.length);
-
+/**
+ * The client's Jti sheet is the only Excel format (2026-10): 28 part columns, then the
+ * trailing block. A file whose address column sits after 30 part columns is an export
+ * from this app's earlier layout and is refused outright — read at these positions its
+ * columns would be shifted by two, silently.
+ */
+function detectLayout(sheet: ExcelJS.Worksheet, headerRow: number): ResolvedLayout {
   const width = Math.max(sheet.columnCount, sheet.actualColumnCount ?? 0);
-
-  // The header may be split over two rows (section labels above, part names below), so
-  // look for the trailing address column on the header row AND the one after it.
   for (const r of [headerRow, headerRow + 1]) {
     const header = sheet.getRow(r);
     for (let c = COL_FIRST_PART; c <= width; c++) {
       if (!isTrailingAddressHeader(cellText(header.getCell(c)))) continue;
       const partCount = c - COL_FIRST_PART;
-      if (partCount === PART_CATALOG.length || partCount === LEGACY_PART_COLUMN_COUNT) {
-        return buildLayout(partCount);
-      }
-      throw new Error(`UNKNOWN_LAYOUT:${partCount}`);
+      if (partCount === LEGACY_PART_COLUMN_COUNT) return legacyLayout();
+      throw new Error(`UNSUPPORTED_LAYOUT:${partCount}`);
     }
   }
-
-  // No address header. Real sheets leave that cell blank, so fall back to the part-name
-  // row: on a two-row header the row under the section labels lists the parts, and the
-  // run of non-empty names ends exactly where the trailing block starts. That run length
-  // IS the part count, which is far more reliable than the sheet's total width — legacy
-  // files carry a varying number of status columns after the feedback column, so they can
-  // be wider than a current export and no width test can separate them.
-  const namesRow = sheet.getRow(headerRow + 1);
-  const looksLikeNames =
-    cellText(namesRow.getCell(COL_FIRST_PART)).trim().length > 0 &&
-    !Number.isFinite(Number(cellText(namesRow.getCell(COL_FIRST_PART)).trim()));
-
-  if (looksLikeNames) {
-    let run = 0;
-    for (let c = COL_FIRST_PART; c <= width; c++) {
-      if (!cellText(namesRow.getCell(c)).trim()) break;
-      run++;
-    }
-    if (run === PART_CATALOG.length || run === LEGACY_PART_COLUMN_COUNT) {
-      return buildLayout(run);
-    }
-  }
-
-  // Last resort: exact widths for single-header sheets.
-  const currentWidth = COL_FIRST_PART + PART_CATALOG.length + 9;
-  const legacyWidth = COL_FIRST_PART + LEGACY_PART_COLUMN_COUNT + 9;
-  if (width === currentWidth) return buildLayout(PART_CATALOG.length);
-  if (width === legacyWidth) return buildLayout(LEGACY_PART_COLUMN_COUNT);
-
-  throw new Error(`AMBIGUOUS_LAYOUT:${width}`);
+  return legacyLayout();
 }
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -419,9 +332,12 @@ export interface HistoricalPreview {
   /** Part columns whose header disagrees with the catalogue entry behind them. */
   columnWarnings: ColumnWarning[];
   rows: number;
+  /** Reports that will be created — one per STAND, so more than `rows` when «Dubble» is set. */
   forms: number;
-  /** Successful visits in the file. */
+  /** Stands repaired. */
   repaired: number;
+  /** Stands added by the «Dubble» column, beyond one per row. */
+  extraStands: number;
   /** Unsuccessful visits, read from the archive's reason columns. */
   notRepaired: number;
   /**
@@ -460,8 +376,10 @@ interface HistoricalRow {
   outcome: 'REPAIRED' | 'NOT_REPAIRED';
   /** Mapped from the archive's own reason column; null on a successful visit. */
   notRepairedReason: NotRepairedReasonValue | null;
-  /** The archive's own wording, before it was collapsed onto the five. */
+  /** The ticked reason column's header. */
   archiveReasonLabel: string | null;
+  /** «Dubble»: further stands at this store on this visit (0 = the row is one stand). */
+  extraStands: number;
   parts: Array<{ sortOrder: number; quantity: number }>;
 }
 
@@ -472,10 +390,7 @@ export interface ColumnWarning {
   found: string;
 }
 
-function readRows(
-  buffer: Buffer,
-  format: ArchiveFormat = 'AUTO',
-): Promise<{
+function readRows(buffer: Buffer): Promise<{
   rows: HistoricalRow[];
   skipped: number;
   layout: ArchiveLayout;
@@ -507,8 +422,8 @@ function readRows(
       })();
 
       if (
-        first === JTI_EXPORT_HEADERS[0] ||
-        second === JTI_EXPORT_HEADERS[1] ||
+        first === 'رقم' ||
+        /^(date|تاریخ)$/i.test(second) ||
         uidHeader ||
         hasEnglishTrailer
       ) {
@@ -517,8 +432,16 @@ function readRows(
       }
     }
 
-    const cols = detectLayout(sheet, headerRow, format);
+    const cols = detectLayout(sheet, headerRow);
     const reasonColumns = detectReasonColumns(sheet, headerRow);
+    // Fall back to the sheet's fixed position only when that column is unlabelled: older
+    // files without a «Dubble» column put a reason there, and reading a ticked reason as
+    // "one more stand" would invent work.
+    const dubbleColumn =
+      detectDubbleColumn(sheet, headerRow) ??
+      (cellText(sheet.getRow(headerRow).getCell(JTI_COL.dubble)).trim() === ''
+        ? JTI_COL.dubble
+        : null);
 
     // A legacy sheet spreads its header over two rows: section labels on the first, part
     // names on the second. Data therefore starts one row later than the marker row.
@@ -537,10 +460,7 @@ function readRows(
     // parts bill. Real evidence this matters: one city's sheet ends column 32 with `درب`
     // while another ends it with `پک هواکش`, which is not in the catalogue at all.
     const partHeaderRow = secondRowIsHeader ? partNameRow : sheet.getRow(headerRow);
-    const acceptedNames: string[][] =
-      cols.layout === 'LEGACY'
-        ? LEGACY_PART_HEADER_ALIASES
-        : PART_CATALOG.map((p) => [p.nameFa]);
+    const acceptedNames: string[][] = LEGACY_PART_HEADER_ALIASES;
 
     const columnWarnings: ColumnWarning[] = [];
     for (let offset = 0; offset < cols.partCount; offset++) {
@@ -609,6 +529,13 @@ function readRows(
         ticked.length > 0 ? 'NOT_REPAIRED' : 'REPAIRED';
       const notRepairedReason = ticked[0]?.reason ?? null;
 
+      // Extra stands at the same store on this visit; capped well above anything seen
+      // (the files hold 1, and a single 3) so a stray number cannot invent a hundred.
+      const extraStands =
+        dubbleColumn === null
+          ? 0
+          : Math.max(0, Math.min(9, Math.round(cellNumber(row.getCell(dubbleColumn).value))));
+
       rows.push({
         uid,
         date,
@@ -621,18 +548,13 @@ function readRows(
         technicianCode: cleanOptional(cellText(row.getCell(cols.colTechCode))),
         formCode: cleanOptional(cellText(row.getCell(cols.colFormCode))),
         quality,
-        // Store Details exists only on legacy sheets; keeping it means no column between
-        // A and AP is silently dropped. The archive's own reason wording leads, because
-        // eight archive reasons collapse onto five and this is where the distinction
-        // between «تقاضای تعویض» and «وضعیت نامساعد» survives.
-        notes: cleanOptional(
-          [ticked.map((rc) => rc.label).join('، '), feedback, storeDetails]
-            .filter(Boolean)
-            .join(' | '),
-        ),
+        // Store Details carries the per-stand breakdown («استند1: … - استند2: …») on a
+        // double-stand row, so it is kept beside the feedback rather than dropped.
+        notes: cleanOptional([feedback, storeDetails].filter(Boolean).join(' | ')),
         outcome,
         notRepairedReason,
         archiveReasonLabel: ticked.map((rc) => rc.label).join('، ') || null,
+        extraStands,
         parts,
       });
     }
@@ -641,11 +563,8 @@ function readRows(
   })();
 }
 
-export async function previewHistorical(
-  buffer: Buffer,
-  format: ArchiveFormat = 'AUTO',
-): Promise<HistoricalPreview> {
-  const { rows, skipped, layout, columnWarnings } = await readRows(buffer, format);
+export async function previewHistorical(buffer: Buffer): Promise<HistoricalPreview> {
+  const { rows, skipped, layout, columnWarnings } = await readRows(buffer);
 
   const uids = [...new Set(rows.map((r) => r.uid))];
   // Locations, not stands, are what a uid identifies now.
@@ -670,15 +589,21 @@ export async function previewHistorical(
   for (const row of rows) {
     if (row.outcome !== 'NOT_REPAIRED') continue;
     const label = row.archiveReasonLabel ?? 'نامشخص';
-    reasonCounts.set(label, (reasonCounts.get(label) ?? 0) + 1);
+    reasonCounts.set(label, (reasonCounts.get(label) ?? 0) + 1 + row.extraStands);
   }
-  const notRepaired = rows.filter((r) => r.outcome === 'NOT_REPAIRED').length;
+  // Counted in STANDS, the unit every figure in the app uses: a «Dubble» row is 1 + n.
+  const standsOf = (r: HistoricalRow) => 1 + r.extraStands;
+  const repaired = rows.filter((r) => r.outcome === 'REPAIRED').reduce((n, r) => n + standsOf(r), 0);
+  const notRepaired = rows
+    .filter((r) => r.outcome === 'NOT_REPAIRED')
+    .reduce((n, r) => n + standsOf(r), 0);
 
   return {
     rows: rows.length,
-    forms: rows.length,
-    repaired: rows.length - notRepaired,
+    forms: repaired + notRepaired,
+    repaired,
     notRepaired,
+    extraStands: rows.reduce((n, r) => n + r.extraStands, 0),
     reasonBreakdown: [...reasonCounts.entries()]
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count),
@@ -764,11 +689,9 @@ export async function commitHistorical(
     phaseId?: string | null;
     /** Storage ref of the uploaded original, so the manager can download it again. */
     fileRef?: string | null;
-    /** Which reader to use; the manager's explicit choice overrides detection. */
-    format?: ArchiveFormat;
   },
 ) {
-  const { rows } = await readRows(buffer, opts.format ?? 'AUTO');
+  const { rows } = await readRows(buffer);
   if (rows.length === 0) return { imported: 0, skipped: 0 };
 
   const technicianId = await historicalTechnicianId();
@@ -961,6 +884,48 @@ export async function commitHistorical(
           });
 
           imported++;
+
+          // «Dubble»: the store's further stands, serviced on the same visit. The row's
+          // part quantities already cover every stand together and cannot be split, so
+          // they stay on stand 1; these reports carry the outcome and the reason, which
+          // is what the repaired / not-repaired counts are made of.
+          for (let extra = 1; extra <= row.extraStands; extra++) {
+            const standIndex = 1 + extra;
+            const extraStand = await tx.stand.upsert({
+              where: { storeId_standIndexAtStore: { storeId, standIndexAtStore: standIndex } },
+              create: { storeId, standIndexAtStore: standIndex },
+              update: {},
+            });
+            await tx.repairForm.create({
+              data: {
+                formCode: row.formCode
+                  ? await uniqueFormCode(tx, `${row.formCode}-${standIndex}`)
+                  : await nextFormCode(tx),
+                standId: extraStand.id,
+                technicianId,
+                cityId: city.id,
+                storeId,
+                uid: row.uid,
+                standIndex,
+                projectId: opts.projectId ?? null,
+                phaseId: opts.phaseId ?? null,
+                storeName: row.storeName ?? null,
+                storeAddress: row.address ?? null,
+                storeManagerName: row.managerName ?? null,
+                storePhone: row.phone ?? null,
+                digitalAddress: row.digitalAddress ?? null,
+                date: row.date,
+                qualityScore: row.outcome === 'REPAIRED' ? row.quality : null,
+                notes: `استند ${standIndex} همان ردیف (Dubble) — قطعات در گزارش استند ۱ ثبت شده‌اند`,
+                outcome: row.outcome,
+                notRepairedReason: row.notRepairedReason,
+                wageAmount: 0,
+                wageTier: 1,
+                wageRateApplied: 0,
+              },
+            });
+            imported++;
+          }
         }
       },
       { timeout: 120_000, maxWait: 20_000 },

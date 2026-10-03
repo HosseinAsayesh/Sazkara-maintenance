@@ -3,25 +3,23 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireActionManager } from '@/lib/auth';
-import {
-  commitHistorical,
-  deleteHistoricalImport,
-  previewHistorical,
-  type ArchiveFormat,
-} from '@/lib/historical';
+import { commitHistorical, deleteHistoricalImport, previewHistorical } from '@/lib/historical';
 import { getStorage } from '@/lib/storage';
 
 export interface HistoricalState {
   error?: string;
   preview?: {
     fileRef: string;
-    /** The format the file was read with, carried into the commit step. */
-    format: ArchiveFormat;
-    /** Which sheet generation was detected: the current 30-part or the legacy 28-part. */
-    layout: 'CURRENT' | 'LEGACY';
     /** Part columns whose header disagrees with the catalogue entry behind them. */
     columnWarnings: Array<{ column: number; expected: string; found: string }>;
     rows: number;
+    /** Reports to be created: one per stand. */
+    forms: number;
+    repaired: number;
+    notRepaired: number;
+    /** Stands added by the «Dubble» column. */
+    extraStands: number;
+    reasonBreakdown: Array<{ label: string; count: number }>;
     distinctUids: number;
     newUids: number;
     repeatedUids: number;
@@ -36,15 +34,6 @@ export interface HistoricalState {
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-/**
- * The manager's explicit format choice. Auto-detection is only a default: real archives
- * carry hand-edited headers, so stating the format outright has to be possible.
- */
-function readFormat(formData: FormData): ArchiveFormat {
-  const raw = String(formData.get('format') ?? 'AUTO').toUpperCase();
-  return raw === 'CURRENT' || raw === 'LEGACY' ? raw : 'AUTO';
-}
-
 /** §7 — dry-run a historical Jti export before writing anything. */
 export async function previewHistoricalAction(
   _prev: HistoricalState,
@@ -57,25 +46,25 @@ export async function previewHistoricalAction(
     if (!(file instanceof File) || file.size === 0) return { error: 'parseFailed' };
     if (file.size > MAX_UPLOAD_BYTES) return { error: 'parseFailed' };
 
-    const format = readFormat(formData);
-
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileRef = await getStorage().put(buffer, {
       prefix: 'historical',
       filename: file.name || 'history.xlsx',
     });
 
-    const preview = await previewHistorical(buffer, format);
+    const preview = await previewHistorical(buffer);
     if (preview.rows === 0) return { error: 'noRows' };
 
     return {
       preview: {
         fileRef,
-        // Echoed back so the commit step reads the file exactly as the preview did.
-        format,
-        layout: preview.layout,
         columnWarnings: preview.columnWarnings,
         rows: preview.rows,
+        forms: preview.forms,
+        repaired: preview.repaired,
+        notRepaired: preview.notRepaired,
+        extraStands: preview.extraStands,
+        reasonBreakdown: preview.reasonBreakdown,
         distinctUids: preview.distinctUids,
         newUids: preview.newUids,
         repeatedUids: preview.repeatedUids,
@@ -86,6 +75,10 @@ export async function previewHistoricalAction(
       },
     };
   } catch (err) {
+    // A file in this app's earlier 30-part layout, or anything that is not the Jti sheet.
+    if (err instanceof Error && err.message.startsWith('UNSUPPORTED_LAYOUT')) {
+      return { error: 'unsupportedLayout' };
+    }
     console.error('previewHistoricalAction failed', err);
     return { error: 'parseFailed' };
   }
@@ -118,7 +111,6 @@ export async function commitHistoricalAction(
       importedById: manager.id,
       projectId,
       phaseId,
-      format: readFormat(formData),
       // Keep the original on the batch so the manager can download what was uploaded.
       fileRef,
     });

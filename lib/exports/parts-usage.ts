@@ -2,11 +2,17 @@ import 'server-only';
 
 import ExcelJS from 'exceljs';
 
+import { CATALOG_TO_JTI_PART, JTI_PART_COUNT, JTI_PART_HEADERS_FA, LEGACY_PART_HEADERS } from '../parts';
 import { prisma } from '../prisma';
 import { projectScopeWhere } from '../projects';
 
 /**
- * Parts-usage totals for accounting (§6.8).
+ * Parts-usage totals (§6.8), in two models:
+ *
+ *  - ACCOUNTING — the 30 catalogue parts, each on its own row: round and rectangular
+ *    switches apart, wire gauge 1 and 0.5 apart. What the accounting unit buys.
+ *  - JTI — the 28 part columns of the Jti sheet, those two pairs merged into «کلید»
+ *    and «سیم نمره1», exactly as the Jti export reports them.
  *
  * Two rules drive this report:
  *  - REPLACED parts only. A part repaired in place was never consumed from inventory
@@ -17,12 +23,16 @@ import { projectScopeWhere } from '../projects';
  * Re-repairs ARE included: §6.3 excludes them from the *stand* count, not from parts.
  */
 
+export type PartsReportModel = 'ACCOUNTING' | 'JTI';
+
 export interface PartsUsageFilters {
   from?: Date;
   to?: Date;
   cityId?: string;
   projectId?: string | null;
   phaseId?: string | null;
+  /** Defaults to ACCOUNTING. */
+  model?: PartsReportModel;
 }
 
 export interface PartUsageRow {
@@ -38,6 +48,7 @@ export interface PartUsageRow {
 }
 
 export interface PartsUsageReport {
+  model: PartsReportModel;
   rows: PartUsageRow[];
   cities: string[];
   grandTotal: number;
@@ -83,17 +94,27 @@ export async function buildPartsUsageReport(
     }),
   ]);
 
+  const model = filters.model ?? 'ACCOUNTING';
+
+  // The row each catalogue part is totalled on: its own, or its Jti sheet column.
+  const sortOrderById = new Map(catalog.map((p) => [p.id, p.sortOrder]));
+  const rowKeyOf = (partId: string) =>
+    model === 'JTI'
+      ? `jti:${CATALOG_TO_JTI_PART[sortOrderById.get(partId) ?? 0] ?? 0}`
+      : partId;
+
   const cities = new Set<string>();
-  const byPart = new Map<string, { perCity: Map<string, number>; stands: Set<string> }>();
+  const byRow = new Map<string, { perCity: Map<string, number>; stands: Set<string> }>();
 
   for (const usage of usages) {
     const cityName = usage.repairForm.city?.name ?? 'نامشخص';
     cities.add(cityName);
 
-    let entry = byPart.get(usage.partCatalogItemId);
+    const key = rowKeyOf(usage.partCatalogItemId);
+    let entry = byRow.get(key);
     if (!entry) {
       entry = { perCity: new Map(), stands: new Set() };
-      byPart.set(usage.partCatalogItemId, entry);
+      byRow.set(key, entry);
     }
     entry.perCity.set(cityName, (entry.perCity.get(cityName) ?? 0) + usage.quantity);
     entry.stands.add(usage.repairForm.standId);
@@ -101,8 +122,25 @@ export async function buildPartsUsageReport(
 
   const cityList = [...cities].sort((a, b) => a.localeCompare(b, 'fa'));
 
-  const rows: PartUsageRow[] = catalog.map((part) => {
-    const entry = byPart.get(part.id);
+  const rowShapes =
+    model === 'JTI'
+      ? Array.from({ length: JTI_PART_COUNT }, (_, i) => ({
+          key: `jti:${i + 1}`,
+          partId: `jti:${i + 1}`,
+          nameFa: JTI_PART_HEADERS_FA[i],
+          nameEn: LEGACY_PART_HEADERS[i],
+          sortOrder: i + 1,
+        }))
+      : catalog.map((part) => ({
+          key: part.id,
+          partId: part.id,
+          nameFa: part.nameFa,
+          nameEn: part.nameEn,
+          sortOrder: part.sortOrder,
+        }));
+
+  const rows: PartUsageRow[] = rowShapes.map((shape) => {
+    const entry = byRow.get(shape.key);
     const perCity: Record<string, number> = {};
     let total = 0;
     for (const city of cityList) {
@@ -111,10 +149,10 @@ export async function buildPartsUsageReport(
       total += qty;
     }
     return {
-      partId: part.id,
-      nameFa: part.nameFa,
-      nameEn: part.nameEn,
-      sortOrder: part.sortOrder,
+      partId: shape.partId,
+      nameFa: shape.nameFa,
+      nameEn: shape.nameEn,
+      sortOrder: shape.sortOrder,
       perCity,
       total,
       standCount: entry?.stands.size ?? 0,
@@ -122,6 +160,7 @@ export async function buildPartsUsageReport(
   });
 
   return {
+    model,
     rows,
     cities: cityList,
     grandTotal: rows.reduce((sum, r) => sum + r.total, 0),
@@ -140,7 +179,11 @@ export async function buildPartsUsageWorkbook(
     views: [{ rightToLeft: true, state: 'frozen', ySplit: 3 }],
   });
 
-  sheet.addRow(['گزارش مصرف قطعات (فقط قطعات تعویض‌شده)']);
+  sheet.addRow([
+    report.model === 'JTI'
+      ? 'گزارش مصرف قطعات — قالب جی‌تی‌آی، ۲۸ قطعه (فقط قطعات تعویض‌شده)'
+      : 'گزارش مصرف قطعات — واحد حسابداری، ۳۰ قطعه (فقط قطعات تعویض‌شده)',
+  ]);
   sheet.addRow([`بازه: ${rangeLabel}`]);
   sheet.getRow(1).font = { bold: true, size: 13 };
   sheet.getRow(2).font = { size: 10, color: { argb: 'FF666666' } };

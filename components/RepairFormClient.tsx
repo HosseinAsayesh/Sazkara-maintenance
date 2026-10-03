@@ -19,18 +19,10 @@ import { StandTabs } from './StandTabs';
 import { repairShortlist } from '@/lib/parts';
 import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
+import { NOT_REPAIRED_REASONS } from '@/lib/reasons';
 
 /** A store may carry up to three stands (§6.6). */
 const MAX_STANDS = 3;
-
-/** §6.5 — fixed list; a developer extends it, never a user. */
-export const NOT_REPAIRED_REASONS = [
-  'MANAGER_NOT_AUTHORIZED',
-  'STORE_OR_STAND_REMOVED',
-  'ALREADY_HEALTHY',
-  'STORE_TEMPORARILY_CLOSED',
-  'CONDITION_TOO_POOR',
-] as const;
 
 export interface RepairFormProps {
   locale: string;

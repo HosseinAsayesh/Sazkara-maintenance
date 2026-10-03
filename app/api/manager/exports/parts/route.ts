@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const cityId = url.searchParams.get('cityId') || undefined;
   const projectId = url.searchParams.get('projectId') || undefined;
   const phaseId = url.searchParams.get('phaseId') || undefined;
+  const model = url.searchParams.get('model') === 'JTI' ? 'JTI' : 'ACCOUNTING';
 
   const range = localDayRange(from, to);
   const report = await buildPartsUsageReport({
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
     cityId,
     projectId,
     phaseId,
+    model,
   });
 
   const label = rangeLabel(from, to);
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
       'Content-Type':
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${encodeURIComponent(
-        safeFilename(`Parts ${label}`),
+        safeFilename(`${model === 'JTI' ? 'Parts JTI' : 'Parts Accounting'} ${label}`),
       )}.xlsx"`,
     },
   });

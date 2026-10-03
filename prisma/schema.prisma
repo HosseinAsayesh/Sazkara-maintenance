@@ -67,12 +67,19 @@ enum RepairOutcome {
 }
 
 /// §6.5 — fixed list, extensible only by a developer (never free text).
+/// The ten reasons of the client's Jti sheet, in its column order (export columns 44..53).
+/// Labels and rules live in lib/reasons.ts.
 enum NotRepairedReason {
-  MANAGER_NOT_AUTHORIZED
-  STORE_OR_STAND_REMOVED
-  ALREADY_HEALTHY
-  STORE_TEMPORARILY_CLOSED
-  CONDITION_TOO_POOR
+  STAND_HEALTHY
+  STORE_CHANGED_USE
+  STORE_CLOSED
+  REPLACEMENT_REQUESTED
+  CANNOT_REPAIR_ON_SITE
+  PERMISSION_DENIED
+  POOR_CONDITION
+  WRONG_ADDRESS
+  STAND_REMOVED
+  STORE_REMOVED
 }
 
 enum PhotoType {

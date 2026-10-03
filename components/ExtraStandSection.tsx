@@ -9,15 +9,7 @@ import { PhotoInput } from './PhotoInput';
 import { repairShortlist } from '@/lib/parts';
 import { requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Textarea } from './ui';
-
-/** §6.5 — the same fixed list the primary stand uses. */
-const NOT_REPAIRED_REASONS = [
-  'MANAGER_NOT_AUTHORIZED',
-  'STORE_OR_STAND_REMOVED',
-  'ALREADY_HEALTHY',
-  'STORE_TEMPORARILY_CLOSED',
-  'CONDITION_TOO_POOR',
-] as const;
+import { NOT_REPAIRED_REASONS } from '@/lib/reasons';
 
 export interface ExtraStandValue {
   replaced: PartSelection;

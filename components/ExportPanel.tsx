@@ -196,18 +196,32 @@ export function ExportPanel({
       {showPartsReport ? (
         <Card>
           <CardHeader title={t('partsTitle')} description={t('partsHelp')} />
-          <div className="p-4">
+          {/* Same parts, two layouts: Jti's sheet merges the two switches and the two wire
+              gauges; the accounting unit buys them separately. */}
+          <div className="flex flex-wrap gap-2 p-4">
             <Button
               type="button"
               variant="secondary"
               disabled={busy}
               onClick={() =>
                 download(
-                  `/api/manager/exports/parts?${query({ projectId, phaseId })}`,
+                  `/api/manager/exports/parts?${query({ projectId, phaseId, model: 'JTI' })}`,
                 )
               }
             >
-              {busy ? t('generating') : t('downloadParts')}
+              {busy ? t('generating') : t('downloadPartsJti')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                download(
+                  `/api/manager/exports/parts?${query({ projectId, phaseId, model: 'ACCOUNTING' })}`,
+                )
+              }
+            >
+              {busy ? t('generating') : t('downloadPartsAccounting')}
             </Button>
           </div>
         </Card>

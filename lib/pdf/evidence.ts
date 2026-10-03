@@ -7,6 +7,7 @@ import { prisma } from '../prisma';
 import { getAppSettings } from '../settings';
 import { getStorage } from '../storage';
 import { findChromeExecutable } from './chrome';
+import { reasonLabelFa } from '../reasons';
 
 /**
  * Evidence PDF (§9) — one file per day, per city.
@@ -24,13 +25,6 @@ function esc(value: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
-const REASON_LABELS: Record<string, string> = {
-  MANAGER_NOT_AUTHORIZED: 'مدیر فروشگاه اجازهٔ تعمیر نداد',
-  STORE_OR_STAND_REMOVED: 'فروشگاه یا استند جمع‌آوری شده بود',
-  ALREADY_HEALTHY: 'استند سالم بود و نیاز به تعمیر نداشت',
-  STORE_TEMPORARILY_CLOSED: 'فروشگاه موقتاً تعطیل بود',
-  CONDITION_TOO_POOR: 'وضعیت استند برای تعمیر بسیار نامناسب بود',
-};
 
 /** Images must be inlined — the renderer has no authenticated session to fetch refs. */
 async function dataUri(ref: string | null | undefined): Promise<string | null> {
@@ -184,7 +178,7 @@ async function renderFormPage(
       ${
         form.outcome === 'NOT_REPAIRED'
           ? `<div class="reason"><strong>علت عدم تعمیر:</strong> ${esc(
-              REASON_LABELS[form.notRepairedReason ?? ''] ?? '—',
+              reasonLabelFa(form.notRepairedReason) || '—',
             )}</div>`
           : `<div class="parts-grid">
                <div><h4>قطعات تعویض‌شده</h4>${partList(replaced, 'قطعه‌ای تعویض نشد')}</div>

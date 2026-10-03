@@ -7,6 +7,7 @@ import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getStorage } from '@/lib/storage';
 import { computeWage } from '@/lib/wages';
+import { isNotRepairedReason } from '@/lib/reasons';
 
 export interface ActionState {
   error?: string;
@@ -191,7 +192,8 @@ export async function updateRepairFormAction(
       : await tx.partUsage.count({ where: { repairFormId: formId } });
     const outcome = partCount > 0 ? 'REPAIRED' : 'NOT_REPAIRED';
 
-    const reason = text('notRepairedReason');
+    const rawReason = text('notRepairedReason');
+    const reason = rawReason && isNotRepairedReason(rawReason) ? rawReason : null;
     if (outcome === 'NOT_REPAIRED' && !reason && !existing.notRepairedReason) {
       throw new Error('REASON_REQUIRED');
     }

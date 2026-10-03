@@ -32,7 +32,14 @@ import { buildPartsUsageReport } from '../lib/exports/parts-usage';
 import { collectWorkRows } from '../lib/exports/technician-work';
 import { commitHistorical, parseHistoricalDate, previewHistorical } from '../lib/historical';
 import { buildReview, commitImport, extractRows, parseWorkbook } from '../lib/imports';
-import { JTI_EXPORT_HEADERS, LEGACY_PART_HEADERS, PART_CATALOG } from '../lib/parts';
+import {
+  CATALOG_TO_JTI_PART,
+  JTI_COL,
+  JTI_FIRST_PART_COLUMN,
+  JTI_PART_HEADERS_FA,
+  JTI_SHEET_HEADER_ROW,
+  LEGACY_PART_HEADERS,
+} from '../lib/parts';
 import { generateEvidencePdf } from '../lib/pdf/evidence';
 import { prisma } from '../lib/prisma';
 import { createRepairForm, lookupUid } from '../lib/repair-forms';
@@ -176,7 +183,12 @@ async function main() {
   // By name, not by the isTehran flag: a duplicate city carrying the same flag would
   // otherwise make this fixture pick a different row on every run.
   const tehran = await prisma.city.findFirstOrThrow({ where: { name: 'تهران' } });
-  const isfahan = await prisma.city.findFirstOrThrow({ where: { name: 'اصفهان' } });
+  // Isfahan is no longer a starting city (the seed's six), so the suite brings its own.
+  const isfahan = await prisma.city.upsert({
+    where: { name: 'اصفهان' },
+    create: { name: 'اصفهان', nameEn: 'Isfahan', isTehran: false },
+    update: {},
+  });
   ok('Tehran flagged separately from other cities', tehran.name);
 
   /* ---------------------------------------------------------------- */
@@ -351,7 +363,7 @@ async function main() {
     cityId: isfahan.id,
     storeName: 'هایپر ستاره',
     parts: [],
-    notRepairedReason: 'STORE_TEMPORARILY_CLOSED',
+    notRepairedReason: 'STORE_CLOSED',
     photos,
     ...sigs,
   });
@@ -546,43 +558,54 @@ async function main() {
   // Default scope is MAIN: everything in the range EXCEPT within-project re-repairs.
   // Unsuccessful visits are included (client ruling) and tinted red in the sheet.
   const exportRows = await collectJtiRows({});
-  assert.equal(exportRows.length, 4); // 3 repairs + 1 unsuccessful visit
-  assert.equal(exportRows.filter((r) => r.notRepaired).length, 1);
-  ok('main export excludes within-project re-repairs', `${exportRows.length} rows`);
-  ok('unsuccessful visits appear in the sheet', '1 red row');
+  const mainForms = await prisma.repairForm.findMany({
+    where: { isReRepair: false },
+    select: { outcome: true },
+  });
+  const standsInRows = (rows: typeof exportRows, repaired: boolean) =>
+    rows
+      .filter((r) => (r.reason === null) === repaired)
+      .reduce((n, r) => n + 1 + r.extraStands, 0);
+  // The sheet counts stands as rows + «Dubble», which must equal the reports behind it.
+  assert.equal(
+    standsInRows(exportRows, true),
+    mainForms.filter((f) => f.outcome === 'REPAIRED').length,
+  );
+  assert.equal(
+    standsInRows(exportRows, false),
+    mainForms.filter((f) => f.outcome === 'NOT_REPAIRED').length,
+  );
+  assert.equal(exportRows.filter((r) => r.reason !== null).length, 1);
+  ok('repaired / unrepaired stands in the sheet match the reports', `${exportRows.length} rows`);
 
-  // Stands sharing a uid must repeat that uid, one row each, flagged as double stands.
+  // Stands repaired together at one store share a row, «Dubble» counting the extras.
   const allRows = await collectJtiRows({ scope: 'ALL' });
   const sz1001Rows = allRows.filter((r) => r.uid === 'SZ1001');
-  assert.ok(sz1001Rows.length >= 2);
-  assert.deepEqual(
-    [...new Set(sz1001Rows.map((r) => r.uid))],
-    ['SZ1001'],
-    'every stand at a location carries the same uid',
+  assert.ok(sz1001Rows.length >= 1);
+  assert.ok(
+    sz1001Rows.some((r) => r.extraStands >= 1),
+    'stands repaired on one visit share a row with Dubble set',
   );
-  assert.ok(sz1001Rows.some((r) => r.standIndex === 2));
-  const sameVisit = sz1001Rows.filter((r) => r.isDoubleStand);
-  assert.ok(sameVisit.length >= 2, 'stands serviced on one visit are flagged as doubles');
-  ok('one uid produces one row per stand, marked as double stands', `${sz1001Rows.length} SZ1001 rows`);
+  ok('a multi-stand visit is one row with Dubble', `${sz1001Rows.length} SZ1001 rows`);
 
-  const failedRow = exportRows.find((r) => r.notRepaired)!;
-  assert.match(failedRow.repairStatus, /^تعمیر نشد — /);
-  assert.match(failedRow.repairStatus, /تعطیل/);
-  assert.equal(failedRow.standQuality, null);
-  ok('column 44 states the outcome and the reason', failedRow.repairStatus);
+  const failedRow = exportRows.find((r) => r.reason !== null)!;
+  assert.equal(failedRow.reason, 'STORE_CLOSED');
+  assert.match(failedRow.feedback, /تعطیل/);
+  assert.equal(failedRow.quality, null);
+  ok('an unrepaired stand ticks its reason column', failedRow.feedback);
 
   const reRepairRows = await collectJtiRows({ scope: 'RE_REPAIR' });
-  assert.equal(reRepairRows.length, 2);
-  assert.ok(reRepairRows.every((r) => r.isReRepair && !r.notRepaired));
+  assert.ok(reRepairRows.length >= 1);
+  assert.ok(reRepairRows.every((r) => r.isReRepair && r.reason === null));
   ok('re-repair export carries only the repeats', `${reRepairRows.length} rows`);
 
-  assert.equal(allRows.length, 6); // 4 main + 2 re-repairs
+  assert.equal(allRows.length, exportRows.length + reRepairRows.length);
   ok('combined scope returns both halves', `${allRows.length} rows`);
 
   // A uid repaired in an earlier project stays in the MAIN sheet and is only marked.
   const carriedOver = exportRows.filter((r) => r.hasPreviousProjectHistory);
-  assert.equal(carriedOver.length, 1);
-  assert.equal(carriedOver[0].uid, 'SZ1001');
+  assert.ok(carriedOver.length >= 1);
+  assert.ok(carriedOver.every((r) => r.uid === 'SZ1001'));
   ok('previous-project stand kept in the main export, flagged not excluded');
   const workbook = await buildJtiWorkbook(exportRows);
 
@@ -590,48 +613,47 @@ async function main() {
   await check.xlsx.load(workbook as unknown as ArrayBuffer);
   const sheet = check.worksheets[0];
 
-  const headerValues: string[] = [];
-  sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-    headerValues[col - 1] = String(cell.value ?? '');
-  });
-  assert.equal(headerValues.length, 44);
-  assert.deepEqual(headerValues, JTI_EXPORT_HEADERS);
-  ok(
-    '44 columns with the exact Persian headers',
-    `1="${headerValues[0]}" 4="${headerValues[3]}" 43="${headerValues[42]}" 44="${headerValues[43]}"`,
+  const rowValues = (r: number) => {
+    const out: string[] = [];
+    for (let c = 1; c <= JTI_SHEET_HEADER_ROW.length; c++) {
+      out.push(String(sheet.getRow(r).getCell(c).value ?? ''));
+    }
+    return out;
+  };
+  assert.deepEqual(rowValues(1), JTI_SHEET_HEADER_ROW);
+  assert.equal(JTI_SHEET_HEADER_ROW.length, 53);
+  assert.deepEqual(
+    rowValues(2).slice(JTI_FIRST_PART_COLUMN - 1, JTI_FIRST_PART_COLUMN - 1 + 28),
+    [...JTI_PART_HEADERS_FA],
   );
-  assert.equal(headerValues[43], 'Repair status');
-  assert.equal(headerValues[4], 'پلکسی شلف');
-  assert.equal(headerValues[33], 'درب');
-  ok('columns 5–34 are the 30 parts in catalogue order');
+  ok('the client\'s 53-column sheet, two header rows, 28 parts', `32="${rowValues(2)[31]}"`);
 
-  const firstRow = sheet.getRow(2);
+  const firstRow = sheet.getRow(3);
   assert.equal(firstRow.getCell(1).value, 1);
   assert.match(String(firstRow.getCell(2).value), /^\d{4}\/\d{2}\/\d{2}$/);
-  ok('column 2 carries a Jalali date', String(firstRow.getCell(2).value));
+  ok('data starts on row 3 with a Jalali date', String(firstRow.getCell(2).value));
 
-  // Find the SZ1001 row and check the transformer/fuse quantities land in the right columns.
-  let checkedQuantities = false;
-  for (let r = 2; r <= sheet.rowCount; r++) {
-    const row = sheet.getRow(r);
-    if (String(row.getCell(4).value) !== 'SZ1001') continue;
-    const transformerCol = 4 + PART_CATALOG.findIndex((p) => p.nameFa === 'ترانس') + 1;
-    const fuseCol = 4 + PART_CATALOG.findIndex((p) => p.nameFa === 'فیوز') + 1;
-    const springCol = 4 + PART_CATALOG.findIndex((p) => p.nameFa === 'فنر') + 1;
-    if (row.getCell(fuseCol).value === 2) {
-      assert.equal(row.getCell(transformerCol).value, 1);
-      assert.equal(row.getCell(springCol).value, 0, 'repaired-only part must export as 0');
-      assert.equal(row.getCell(43).value, 4); // quality
-      assert.equal(row.getCell(44).value, 'تعمیر شد'); // repair status, column 44
-      assert.match(String(row.getCell(37).value), /تعویض:/);
-      assert.match(String(row.getCell(37).value), /تعمیر:/);
-      checkedQuantities = true;
-      break;
+  // Every replaced part lands in its Jti column, the two switches and wire gauges merged.
+  const mainUsage = await prisma.partUsage.findMany({
+    where: { action: 'REPLACED', repairForm: { isReRepair: false } },
+    select: { quantity: true, part: { select: { sortOrder: true } } },
+  });
+  const expectedCols = Array.from({ length: 28 }, () => 0);
+  for (const u of mainUsage) expectedCols[CATALOG_TO_JTI_PART[u.part.sortOrder] - 1] += u.quantity;
+  const sheetCols = Array.from({ length: 28 }, () => 0);
+  for (let r = 3; r <= sheet.rowCount; r++) {
+    for (let c = 0; c < 28; c++) {
+      sheetCols[c] += Number(sheet.getRow(r).getCell(JTI_FIRST_PART_COLUMN + c).value || 0);
     }
   }
-  assert.ok(checkedQuantities, 'expected to find the SZ1001 export row');
-  ok('replaced quantities land in the right part columns; repaired-only exports 0');
-  ok('column 37 describes both replaced and repaired work');
+  assert.deepEqual(sheetCols, expectedCols);
+  ok('replaced quantities land in the right Jti columns; repaired-only parts stay out');
+
+  const reasonCol = JTI_COL.firstReason + 2; // STORE_CLOSED is the third reason
+  let ticked = 0;
+  for (let r = 3; r <= sheet.rowCount; r++) if (sheet.getRow(r).getCell(reasonCol).value === 1) ticked++;
+  assert.equal(ticked, 1);
+  ok('the reason is a 1 in its own column', `column ${reasonCol}`);
 
   const perCityRows = await collectJtiRows({ cityId: tehran.id });
   assert.ok(perCityRows.every((r) => r.cityName === tehran.name));
@@ -681,7 +703,10 @@ async function main() {
     'location AddresS', 'Address', 'Store Details', 'Tel',
     "Store's Name", "Store Manager's Name", "Technician's Code+", 'Form code',
     'Stand Quality', 'Maintenance Services And Feedback',
-    'Dubble', 'استند سالم', 'تعطیلی فروشگاه',
+    'Dubble', 'استند سالم', 'تغییر کاربری فروشگاه', ' تعطیلی فروشگاه',
+    'تقاضای تعویض', 'عدم امکان تعمیر در محل فروشگاه', 'عدم صدور اجازه تعمیر',
+    'وضعیت نامساعد استند', 'آدرس اشتباه', 'استند جمع آوری شده است',
+    'فروشگاه جمع آوری شده است',
   ]);
   legacySheet.addRow(['', '', '', '', ...LEGACY_PART_HEADERS]);
 
@@ -697,6 +722,8 @@ async function main() {
       'https://maps.example/x', 'خیابان آزادی', `جزئیات ${i}`, '02100000000',
       `فروشگاه بایگانی ${i}`, 'آقای تست', 'TC-900', `OLD-${i}`, 4,
       'تعمیرات موفقیت آمیز بود',
+      // Row 10 is a two-stand store: «Dubble» 1.
+      i === 10 ? 1 : '',
     ]);
   }
 
@@ -707,29 +734,59 @@ async function main() {
     ...LEGACY_PART_HEADERS.map(() => 0),
     '', 'خیابان آزادی', 'جزئیات', '02100000000',
     'فروشگاه بسته', 'آقای تست', 'TC-900', 'OLD-11', '',
-    'تعمیرات موفقیت آمیز نبود',
+    'فروشگاه تعطیل بود',
+    '', '', '', 1, // Dubble empty; «تعطیلی فروشگاه» ticked
   ]);
+  // The two reason columns the old exact-match rule never found.
+  for (const [n, tickAt] of [[12, 9], [13, 10]] as const) {
+    legacySheet.addRow([
+      n, '1403/05/22', 'تهران', `LEG20${n}`,
+      ...LEGACY_PART_HEADERS.map(() => 0),
+      '', 'خیابان آزادی', '', '02100000000',
+      'فروشگاه', 'آقای تست', 'TC-900', `OLD-${n}`, '',
+      'استند جمع آوری شده است',
+      '', ...Array.from({ length: 10 }, (_, k) => (k === tickAt - 1 ? 1 : '')),
+    ]);
+  }
 
   const legacyBuffer = Buffer.from(await legacyBook.xlsx.writeBuffer());
 
   // Auto-detection must cope with the real header, and an explicit choice must too.
   const legacyPreview = await previewHistorical(legacyBuffer);
   assert.equal(legacyPreview.layout, 'LEGACY');
-  assert.equal(legacyPreview.rows, 11, 'every legacy row must be read, not just the ends');
+  assert.equal(legacyPreview.rows, 13, 'every legacy row must be read, not just the ends');
   assert.equal(legacyPreview.skipped, 0);
   ok('real two-row legacy header detected and fully read', `${legacyPreview.rows} rows`);
 
-  const forcedLegacy = await previewHistorical(legacyBuffer, 'LEGACY');
-  assert.equal(forcedLegacy.rows, 11);
-  ok('explicit LEGACY format reads the same rows as auto-detection');
+  // In stands: 10 repaired rows + one «Dubble» = 11 repaired; 3 rows with a reason.
+  assert.equal(legacyPreview.repaired, 11);
+  assert.equal(legacyPreview.notRepaired, 3);
+  assert.equal(legacyPreview.extraStands, 1);
+  ok('every reason column counts, and Dubble adds a stand', '11 repaired, 3 not repaired');
 
   const legacyCommit = await commitHistorical(legacyBuffer, {
     name: 'Legacy archive',
     importedById: manager.id,
-    format: 'LEGACY',
   });
-  assert.equal(legacyCommit.imported, 11);
-  ok('all legacy rows commit, none lost to a repeated form code', `${legacyCommit.imported}`);
+  assert.equal(legacyCommit.imported, 14);
+  ok('all legacy rows commit, one report per stand', `${legacyCommit.imported}`);
+
+  const secondStand = await prisma.repairForm.findFirstOrThrow({
+    where: { uid: 'LEG2010', standIndex: 2 },
+  });
+  assert.equal(secondStand.outcome, 'REPAIRED');
+  ok('the Dubble stand is its own report at stand 2');
+
+  const removedReasons = await prisma.repairForm.findMany({
+    where: { uid: { in: ['LEG2012', 'LEG2013'] } },
+    select: { notRepairedReason: true },
+    orderBy: { uid: 'asc' },
+  });
+  assert.deepEqual(
+    removedReasons.map((f) => f.notRepairedReason),
+    ['STAND_REMOVED', 'STORE_REMOVED'],
+  );
+  ok('«استند/فروشگاه جمع آوری شده است» import as their own reasons');
 
   const legacyForm = await prisma.repairForm.findFirstOrThrow({
     where: { uid: 'LEG2001' },
@@ -762,6 +819,7 @@ async function main() {
     include: { parts: true },
   });
   assert.equal(legacyFailed.outcome, 'NOT_REPAIRED');
+  assert.equal(legacyFailed.notRepairedReason, 'STORE_CLOSED');
   assert.equal(legacyFailed.parts.length, 0);
   assert.equal(legacyFailed.qualityScore, null);
   ok('an unsuccessful archived visit imports as NOT_REPAIRED');
@@ -856,19 +914,14 @@ async function main() {
   assert.match(legacyForm.notes ?? '', /جزئیات/);
   ok('the final review and store details both survive the import');
 
-  // Reading a legacy sheet as CURRENT must fail loudly rather than shift every column.
-  await assert.rejects(
-    () => previewHistorical(legacyBuffer, 'CURRENT').then((p) => {
-      const first = p.sample[0];
-      if (first && first.uid.startsWith('LEG')) {
-        throw new Error(`MISREAD_AS_CURRENT:${first.parts}`);
-      }
-      return p;
-    }),
-    /MISREAD_AS_CURRENT/,
-    'forcing the wrong format must be detectable, not silent',
-  );
-  ok('forcing CURRENT on a legacy sheet does not silently succeed');
+  // The app's earlier 30-part export is refused, not read two columns off.
+  const oldBook = new ExcelJS.Workbook();
+  const oldSheet = oldBook.addWorksheet('x');
+  oldSheet.addRow(['رقم', 'تاریخ', 'شهر', 'شناسه', ...Array.from({ length: 30 }, (_, i) => `p${i}`), 'Digital Address']);
+  oldSheet.addRow([1, '1403/05/01', 'تهران', 'OLD0001']);
+  const oldBuffer = Buffer.from(await oldBook.xlsx.writeBuffer());
+  await assert.rejects(() => previewHistorical(oldBuffer), /UNSUPPORTED_LAYOUT:30/);
+  ok('a file in the old 30-part layout is refused outright');
 
   // Nothing feeds the two parts that did not exist back then.
   assert.equal(legacyQty('سیم نمره ۰.۵'), 0);
@@ -888,8 +941,10 @@ async function main() {
 
   const archive = await buildJtiWorkbook(exportRows);
   const preview = await previewHistorical(archive);
-  assert.equal(preview.rows, 4);
-  ok('a previous Jti export is readable as historical data', `${preview.rows} rows`);
+  assert.equal(preview.rows, exportRows.length);
+  assert.equal(preview.repaired, standsInRows(exportRows, true));
+  assert.equal(preview.notRepaired, standsInRows(exportRows, false));
+  ok('the app\'s own export imports back with the same counts', `${preview.rows} rows`);
 
   const beforeForms = await prisma.repairForm.count();
   const historical = await commitHistorical(archive, {
@@ -898,7 +953,7 @@ async function main() {
   });
   // Every row carries a form code that already exists, so all are skipped as duplicates.
   assert.equal(historical.imported, 0);
-  assert.equal(historical.skipped, 4);
+  assert.equal(historical.skipped, exportRows.length);
   assert.equal(await prisma.repairForm.count(), beforeForms);
   ok('re-importing the same archive is idempotent', `${historical.skipped} rows skipped`);
 
@@ -987,12 +1042,13 @@ async function main() {
   // The centimetre value must reach the Jti sheet as-is, in the strip's own column.
   const smdRows = await collectJtiRows({ scope: 'ALL' });
   const smdRow = smdRows.find((r) => r.uid === 'SZ7777')!;
-  assert.equal(smdRow.replaced[smdWhite.exportColumnKey], 150);
+  const smdJtiCol = CATALOG_TO_JTI_PART[smdWhite.sortOrder];
+  assert.equal(smdRow.parts[smdJtiCol - 1], 150);
   const smdBook = await buildJtiWorkbook([smdRow]);
   const smdCheck = new ExcelJS.Workbook();
   await smdCheck.xlsx.load(smdBook as unknown as ArrayBuffer);
-  const smdCol = 4 + PART_CATALOG.findIndex((p) => p.nameFa === 'نوار SMD سفید') + 1;
-  assert.equal(smdCheck.worksheets[0].getRow(2).getCell(smdCol).value, 150);
+  const smdCol = JTI_FIRST_PART_COLUMN + smdJtiCol - 1;
+  assert.equal(smdCheck.worksheets[0].getRow(3).getCell(smdCol).value, 150);
   ok('centimetres export in the strip column, not converted to pieces', `col ${smdCol} = 150`);
 
   /* ---------------------------------------------------------------- */
