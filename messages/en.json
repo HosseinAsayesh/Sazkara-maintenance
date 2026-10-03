@@ -96,7 +96,8 @@
     "crew": "My crew",
     "clientView": "Jti view",
     "downloadRequests": "File requests by JTI",
-    "queries": "Jti's questions"
+    "queries": "Jti's questions",
+    "weeklyReports": "Weekly reports"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -811,7 +812,9 @@
       "evidenceNeedsCityAndDate": "Evidence needs a city and a day.",
       "notFound": "Request not found.",
       "alreadyDecided": "This request has already been decided.",
-      "buildFailed": "Building the file failed; the request is still pending."
+      "buildFailed": "Building the file failed; the request is still pending.",
+      "evidenceNeedsCityAndRange": "Choose the city and both dates.",
+      "rangeTooLong": "A range PDF covers at most 31 days."
     },
     "visitTitle": "Visit details",
     "standIndexLabel": "Stand number",
@@ -844,7 +847,11 @@
       "notFound": "Report or question not found.",
       "alreadyResolved": "This conversation is closed.",
       "answerBeforeResolving": "Answer the question before closing it."
-    }
+    },
+    "navWeekly": "Weekly reports",
+    "kindReRepairEvidence": "Re-repair evidence PDF (one day, one city)",
+    "kindEvidenceRange": "Evidence PDF for a date range (one city, up to 31 days)",
+    "requestRangeMax": "Up to 31 days in one PDF."
   },
   "license": {
     "title": "License",
@@ -932,5 +939,74 @@
     "secondStands": "Second stand",
     "thirdPlusStands": "Third+ stand",
     "payable": "Payable"
+  },
+  "weekly": {
+    "title": "Weekly reports for JTI",
+    "sendTitle": "Send a weekly report",
+    "sendHelp": "JTI receives it in their panel and must approve it with their name and signature after opening it.",
+    "fileSource": "File",
+    "modeGenerate": "Built by the app",
+    "modeUpload": "Uploaded file",
+    "uploadFile": "Excel file",
+    "uploadHint": ".xlsx, up to 20 MB",
+    "note": "Note to JTI",
+    "noteHint": "Optional — shown to JTI with the report.",
+    "send": "Send to JTI",
+    "sending": "Sending…",
+    "sent": "Sent. It now waits in the JTI panel for approval.",
+    "listTitle": "Sent reports",
+    "none": "No weekly reports yet.",
+    "report": "Report",
+    "sentOn": "Sent",
+    "status": "Status",
+    "approval": "Approval",
+    "files": "Files",
+    "approved": "Approved",
+    "awaiting": "Not opened yet",
+    "seenAwaiting": "Opened, not approved",
+    "awaitingYou": "Awaiting your approval",
+    "withdraw": "Withdraw",
+    "withdrawConfirm": "Withdraw this report? JTI will no longer see it.",
+    "clientTitle": "Weekly reports",
+    "clientHelp": "Open each report, then approve it with your name and signature.",
+    "downloadExcel": "Download Excel",
+    "downloadPdf": "Download PDF",
+    "openFirst": "Open the report (Excel or PDF) first — approval unlocks after you have seen it.",
+    "approveHelp": "By approving you confirm you have seen this report.",
+    "approverName": "Your name (JTI supervisor)",
+    "signature": "Signature",
+    "approve": "Approve report",
+    "approving": "Approving…",
+    "approvedBy": "Approved by {name} on {date}.",
+    "errors": {
+      "periodRequired": "Choose the start and end dates.",
+      "periodOrder": "The end date is before the start date.",
+      "fileRequired": "Choose the Excel file to upload.",
+      "fileTooLarge": "The file is larger than 20 MB.",
+      "xlsxOnly": "Only .xlsx files.",
+      "emptyPeriod": "There are no reports in this period to put in the file.",
+      "notFound": "This report no longer exists.",
+      "alreadyApproved": "This report is already approved.",
+      "forbidden": "Only the JTI account can approve.",
+      "viewFirst": "Open the report first.",
+      "nameRequired": "Enter your name.",
+      "signatureRequired": "Sign in the box."
+    }
+  },
+  "account": {
+    "title": "My password",
+    "help": "Change the manager's password. Anyone signed in with the old one elsewhere is signed out; this browser stays signed in.",
+    "current": "Current password",
+    "new": "New password",
+    "newHint": "At least 8 characters.",
+    "repeat": "Repeat new password",
+    "submit": "Change password",
+    "changed": "Password changed.",
+    "errors": {
+      "wrongCurrent": "The current password is not right.",
+      "tooShort": "The new password must be at least 8 characters.",
+      "mismatch": "The two new passwords do not match.",
+      "sameAsOld": "The new password is the same as the old one."
+    }
   }
 }

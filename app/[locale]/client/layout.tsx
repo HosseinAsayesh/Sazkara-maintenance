@@ -3,6 +3,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { AppShell } from '@/components/AppShell';
 import { Alert } from '@/components/ui';
 import { requireClientViewer } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 /**
  * Jti's panel.
@@ -24,6 +25,10 @@ export default async function ClientLayout({
   const user = await requireClientViewer(locale);
   const t = await getTranslations({ locale, namespace: 'client' });
   const isManager = user.role === 'MANAGER';
+  // Reports waiting for Jti's signature — the one thing on this panel that asks for action.
+  const awaitingApproval = await prisma.weeklyReport.count({
+    where: { status: 'AWAITING_APPROVAL' },
+  });
 
   return (
     <AppShell
@@ -37,6 +42,7 @@ export default async function ClientLayout({
         { href: '/client/parts', label: t('navParts') },
         { href: '/client/re-repairs', label: t('navReRepairs') },
         { href: '/client/queries', label: t('queriesTitle') },
+        { href: '/client/weekly-reports', label: t('navWeekly'), badge: awaitingApproval },
         { href: '/client/downloads', label: t('navDownloads') },
         // A manager who followed the Jti View tab must not be stranded on a surface with
         // no dashboard, no exports and no settings.

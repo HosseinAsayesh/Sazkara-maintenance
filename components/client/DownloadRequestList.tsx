@@ -55,7 +55,11 @@ export async function DownloadRequestList({
         ? t('kindReRepairs')
         : kind === 'PARTS_USAGE_REPORT'
           ? t('kindParts')
-          : t('kindEvidence');
+          : kind === 'REREPAIR_EVIDENCE_PDF'
+            ? t('kindReRepairEvidence')
+            : kind === 'EVIDENCE_PDF_RANGE'
+              ? t('kindEvidenceRange')
+              : t('kindEvidence');
 
   return (
     <TableWrap>

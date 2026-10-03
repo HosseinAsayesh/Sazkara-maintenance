@@ -47,6 +47,7 @@ export default async function ManagerLayout({
           badge: pendingTechnicians + pendingResets,
         },
         { href: '/manager/exports', label: t('exports') },
+        { href: '/manager/weekly-reports', label: t('weeklyReports') },
         { href: '/manager/evidence', label: t('evidence') },
         { href: '/manager/analytics', label: t('analytics') },
         { href: '/manager/re-repairs', label: t('reRepairs') },

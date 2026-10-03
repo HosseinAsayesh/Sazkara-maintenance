@@ -10,7 +10,11 @@ import {
   safeFilename,
 } from './exports/jti';
 import { buildPartsUsageReport, buildPartsUsageWorkbook } from './exports/parts-usage';
-import { generateAndStoreEvidencePdf } from './pdf/evidence';
+import {
+  generateAndStoreEvidencePdf,
+  generateEvidencePdf,
+  generateEvidenceRangePdf,
+} from './pdf/evidence';
 import { prisma } from './prisma';
 import { getStorage } from './storage';
 
@@ -39,12 +43,14 @@ export interface DownloadParams {
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+const PDF_KINDS = new Set<DownloadKind>(['EVIDENCE_PDF', 'REREPAIR_EVIDENCE_PDF', 'EVIDENCE_PDF_RANGE']);
+
 export function contentTypeForKind(kind: DownloadKind): string {
-  return kind === 'EVIDENCE_PDF' ? 'application/pdf' : XLSX;
+  return PDF_KINDS.has(kind) ? 'application/pdf' : XLSX;
 }
 
 export function extensionForKind(kind: DownloadKind): string {
-  return kind === 'EVIDENCE_PDF' ? 'pdf' : 'xlsx';
+  return PDF_KINDS.has(kind) ? 'pdf' : 'xlsx';
 }
 
 /**
@@ -82,6 +88,43 @@ export async function fulfilDownloadRequest(
   }
 
   const storage = getStorage();
+
+  if (request.kind === 'REREPAIR_EVIDENCE_PDF') {
+    if (!params.cityId || !params.date) throw new Error('EVIDENCE_NEEDS_CITY_AND_DATE');
+    const { buffer, standCount } = await generateEvidencePdf({
+      cityId: params.cityId,
+      date: new Date(params.date),
+      onlyReRepairs: true,
+    });
+    if (standCount === 0) throw new Error('NO_VISITS');
+    const fileRef = await storage.put(buffer, {
+      contentType: 'application/pdf',
+      prefix: 'client-downloads',
+      filename: `rerepair-evidence-${params.date}.pdf`,
+    });
+    return {
+      fileRef,
+      filename: `${safeFilename(`Re-repair evidence ${projectName} ${params.date}`)}.pdf`,
+    };
+  }
+
+  if (request.kind === 'EVIDENCE_PDF_RANGE') {
+    if (!params.cityId || !params.from || !params.to) throw new Error('EVIDENCE_NEEDS_CITY_AND_RANGE');
+    const { buffer } = await generateEvidenceRangePdf({
+      cityId: params.cityId,
+      fromIso: params.from,
+      toIso: params.to,
+    });
+    const fileRef = await storage.put(buffer, {
+      contentType: 'application/pdf',
+      prefix: 'client-downloads',
+      filename: `evidence-${params.from}-${params.to}.pdf`,
+    });
+    return {
+      fileRef,
+      filename: `${safeFilename(`Evidence ${projectName} ${label}`)}.pdf`,
+    };
+  }
 
   if (request.kind === 'PARTS_USAGE_REPORT') {
     const report = await buildPartsUsageReport({

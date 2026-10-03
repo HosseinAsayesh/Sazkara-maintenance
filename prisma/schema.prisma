@@ -132,6 +132,9 @@ model User {
 
   passwordResetRequests PasswordResetRequest[]
 
+  weeklyReportsSubmitted WeeklyReport[] @relation("WeeklyReportSubmitter")
+  weeklyReportsApproved  WeeklyReport[] @relation("WeeklyReportApprover")
+
   @@index([role, status])
   @@index([leadId])
 }
@@ -240,6 +243,7 @@ model Project {
 
   phases      Phase[]
   downloadRequests DownloadRequest[]
+  weeklyReports    WeeklyReport[]
   batches     ImportBatch[]
   repairForms RepairForm[]
 
@@ -526,6 +530,10 @@ enum DownloadKind {
   JTI_EXPORT_REREPAIRS
   PARTS_USAGE_REPORT
   EVIDENCE_PDF
+  /// The re-repairs-only evidence PDF for one city and day.
+  REREPAIR_EVIDENCE_PDF
+  /// Evidence for one city over a span of days, in a single PDF.
+  EVIDENCE_PDF_RANGE
 }
 
 enum DownloadStatus {
@@ -646,4 +654,52 @@ model PasswordResetRequest {
 
   @@index([status])
   @@index([userId, status])
+}
+
+enum WeeklyReportSource {
+  /// Built by the app from the period's reports, in the Jti sheet's layout.
+  GENERATED
+  /// A file the manager prepared and uploaded.
+  UPLOADED
+}
+
+enum WeeklyReportStatus {
+  AWAITING_APPROVAL
+  APPROVED
+}
+
+/// The weekly report the manager sends Jti for sign-off. Approval only, no rejection:
+/// once Jti has opened the file, they approve it with their name and signature.
+model WeeklyReport {
+  id         String   @id @default(cuid())
+  title      String
+  periodFrom DateTime @db.Date
+  periodTo   DateTime @db.Date
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  source   WeeklyReportSource
+  fileRef  String
+  fileName String
+  /// The manager's covering note, shown to Jti.
+  note     String?
+
+  submittedById String
+  submittedBy   User     @relation("WeeklyReportSubmitter", fields: [submittedById], references: [id])
+  submittedAt   DateTime @default(now())
+
+  status WeeklyReportStatus @default(AWAITING_APPROVAL)
+  /// First time Jti opened the file, as Excel or PDF. Approval is refused before it:
+  /// "if they saw it, they must approve it" needs proof that they saw it.
+  firstViewedAt DateTime?
+
+  approvedAt           DateTime?
+  approverName         String?
+  approverSignatureRef String?
+  approvedById         String?
+  approvedBy           User?     @relation("WeeklyReportApprover", fields: [approvedById], references: [id])
+
+  @@index([status, submittedAt])
+  @@index([periodFrom])
 }

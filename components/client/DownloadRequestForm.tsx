@@ -32,7 +32,9 @@ export function DownloadRequestForm({
     {},
   );
   const [kind, setKind] = useState('JTI_EXPORT_MAIN');
-  const needsDay = kind === 'EVIDENCE_PDF';
+  // Evidence is built per city: for one day, or for a span of days in one PDF.
+  const needsDay = kind === 'EVIDENCE_PDF' || kind === 'REREPAIR_EVIDENCE_PDF';
+  const needsCityRange = kind === 'EVIDENCE_PDF_RANGE';
 
   return (
     <Card>
@@ -46,24 +48,35 @@ export function DownloadRequestForm({
             <option value="JTI_EXPORT_REREPAIRS">{t('kindReRepairs')}</option>
             <option value="PARTS_USAGE_REPORT">{t('kindParts')}</option>
             <option value="EVIDENCE_PDF">{t('kindEvidence')}</option>
+            <option value="REREPAIR_EVIDENCE_PDF">{t('kindReRepairEvidence')}</option>
+            <option value="EVIDENCE_PDF_RANGE">{t('kindEvidenceRange')}</option>
           </Select>
         </Field>
 
-        {/* Evidence is generated per city per day, so those two are not optional there. */}
+        {needsDay || needsCityRange ? (
+          <Field label={t('requestCity')} required>
+            <Select name="cityId">
+              <option value="">—</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
+
         {needsDay ? (
+          <Field label={t('requestDay')} required>
+            <Input type="date" name="date" />
+          </Field>
+        ) : needsCityRange ? (
           <>
-            <Field label={t('requestCity')} required>
-              <Select name="cityId">
-                <option value="">—</option>
-                {cities.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
+            <Field label={t('requestFrom')} required hint={t('requestRangeMax')}>
+              <Input type="date" name="from" />
             </Field>
-            <Field label={t('requestDay')} required>
-              <Input type="date" name="date" />
+            <Field label={t('requestTo')} required>
+              <Input type="date" name="to" />
             </Field>
           </>
         ) : (

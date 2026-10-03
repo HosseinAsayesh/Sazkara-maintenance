@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
+import { ChangePasswordCard } from '@/components/ChangePasswordCard';
 import { CityManager } from '@/components/CityManager';
 import { JtiAccountSettings } from '@/components/JtiAccountSettings';
 import { LicenseSettings } from '@/components/LicenseSettings';
@@ -51,6 +52,8 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         cities={cities}
         duplicateGroups={duplicateGroups.map((group) => group.map((c) => c.id))}
       />
+
+      <ChangePasswordCard />
 
       <JtiAccountSettings locale={locale} account={jti} />
 

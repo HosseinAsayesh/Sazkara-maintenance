@@ -2,7 +2,7 @@ import 'server-only';
 
 import puppeteer from 'puppeteer-core';
 
-import { formatJalali, localDayKey, startOfLocalDay, endOfLocalDayExclusive } from '../dates';
+import { DAY_MS, endOfLocalDayExclusive, formatJalali, localDayKey, startOfLocalDay } from '../dates';
 import { prisma } from '../prisma';
 import { getAppSettings } from '../settings';
 import { getStorage } from '../storage';
@@ -326,13 +326,7 @@ export async function buildEvidenceHtml(params: EvidenceParams): Promise<{
   return { html, standCount: forms.length, cityName: city.name };
 }
 
-export async function generateEvidencePdf(params: EvidenceParams): Promise<{
-  buffer: Buffer;
-  standCount: number;
-  cityName: string;
-}> {
-  const { html, standCount, cityName } = await buildEvidenceHtml(params);
-
+async function htmlToPdf(html: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
     executablePath: findChromeExecutable(),
     headless: true,
@@ -349,10 +343,62 @@ export async function generateEvidencePdf(params: EvidenceParams): Promise<{
       preferCSSPageSize: false,
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     });
-    return { buffer: Buffer.from(pdf), standCount, cityName };
+    return Buffer.from(pdf);
   } finally {
     await browser.close();
   }
+}
+
+export async function generateEvidencePdf(params: EvidenceParams): Promise<{
+  buffer: Buffer;
+  standCount: number;
+  cityName: string;
+}> {
+  const { html, standCount, cityName } = await buildEvidenceHtml(params);
+  return { buffer: await htmlToPdf(html), standCount, cityName };
+}
+
+/** Longest span one range PDF may cover; a month of photo pages is already large. */
+export const EVIDENCE_RANGE_MAX_DAYS = 31;
+
+/**
+ * Evidence for one city over a span of days, in ONE PDF: each day's pack (its cover and
+ * its stand pages) one after another, days without visits left out.
+ */
+export async function generateEvidenceRangePdf(params: {
+  cityId: string;
+  fromIso: string;
+  toIso: string;
+  onlyReRepairs?: boolean;
+}): Promise<{ buffer: Buffer; standCount: number; cityName: string; days: number }> {
+  const start = Date.parse(`${params.fromIso}T12:00:00Z`);
+  const end = Date.parse(`${params.toIso}T12:00:00Z`);
+  const span = Math.round((end - start) / DAY_MS) + 1;
+  if (!Number.isFinite(span) || span < 1) throw new Error('BAD_RANGE');
+  if (span > EVIDENCE_RANGE_MAX_DAYS) throw new Error('RANGE_TOO_LONG');
+
+  let head = '';
+  const bodies: string[] = [];
+  let standCount = 0;
+  let cityName = '';
+
+  for (let i = 0; i < span; i++) {
+    const day = await buildEvidenceHtml({
+      cityId: params.cityId,
+      date: new Date(start + i * DAY_MS),
+      onlyReRepairs: params.onlyReRepairs,
+    });
+    cityName = day.cityName;
+    if (day.standCount === 0) continue;
+    standCount += day.standCount;
+    if (!head) head = day.html.slice(0, day.html.indexOf('<body>'));
+    bodies.push(day.html.slice(day.html.indexOf('<body>') + 6, day.html.lastIndexOf('</body>')));
+  }
+
+  if (standCount === 0) throw new Error('NO_VISITS');
+
+  const html = `${head}<body>${bodies.join('')}</body></html>`;
+  return { buffer: await htmlToPdf(html), standCount, cityName, days: bodies.length };
 }
 
 /**

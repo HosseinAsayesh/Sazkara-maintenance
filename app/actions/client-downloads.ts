@@ -22,7 +22,12 @@ const KINDS: DownloadKind[] = [
   'JTI_EXPORT_REREPAIRS',
   'PARTS_USAGE_REPORT',
   'EVIDENCE_PDF',
+  'REREPAIR_EVIDENCE_PDF',
+  'EVIDENCE_PDF_RANGE',
 ];
+
+/** Same cap as the range PDF itself, checked here so Jti hears it at request time. */
+const RANGE_MAX_DAYS = 31;
 
 /**
  * Jti asks for a file.
@@ -56,8 +61,18 @@ export async function requestDownloadAction(
     date: String(formData.get('date') ?? '') || null,
   };
 
-  if (kind === 'EVIDENCE_PDF' && (!params.cityId || !params.date)) {
+  if (
+    (kind === 'EVIDENCE_PDF' || kind === 'REREPAIR_EVIDENCE_PDF') &&
+    (!params.cityId || !params.date)
+  ) {
     return { error: 'evidenceNeedsCityAndDate' };
+  }
+  if (kind === 'EVIDENCE_PDF_RANGE') {
+    if (!params.cityId || !params.from || !params.to) return { error: 'evidenceNeedsCityAndRange' };
+    const days =
+      Math.round((Date.parse(params.to) - Date.parse(params.from)) / 86_400_000) + 1;
+    if (!(days >= 1)) return { error: 'evidenceNeedsCityAndRange' };
+    if (days > RANGE_MAX_DAYS) return { error: 'rangeTooLong' };
   }
 
   await prisma.downloadRequest.create({

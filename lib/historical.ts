@@ -10,7 +10,6 @@ import {
   JTI_COL,
   LEGACY_PART_COLUMN_COUNT,
   LEGACY_TO_CURRENT_SORT_ORDER,
-  PART_CATALOG,
 } from './parts';
 import { prisma } from './prisma';
 import { NOT_REPAIRED_REASONS, REASON_INFO, type NotRepairedReasonKey } from './reasons';
