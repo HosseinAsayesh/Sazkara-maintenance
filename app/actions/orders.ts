@@ -5,12 +5,15 @@ import { redirect } from 'next/navigation';
 
 import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { moveOrderToProject } from '@/lib/projects';
 import { getStorage } from '@/lib/storage';
 import { normaliseUid } from '@/lib/text';
 
 export interface ActionState {
   error?: string;
   ok?: string;
+  /** Reports that moved with the order, for the confirmation message. */
+  forms?: number;
 }
 
 /**
@@ -293,11 +296,10 @@ export async function assignOrderProjectAction(
     if (!phase || phase.projectId !== projectId) return { error: 'phaseMismatch' };
   }
 
-  await prisma.importBatch.update({
-    where: { id: batchId },
-    data: { projectId, phaseId },
-  });
+  // The order's reports move with it: every filter reads the project/phase stored on
+  // each report, so moving the order alone changed nothing the dashboard could see.
+  const { forms } = await moveOrderToProject(batchId, projectId, phaseId);
 
   revalidateOrders(locale, batchId);
-  return { ok: 'success' };
+  return { ok: 'assigned', forms };
 }

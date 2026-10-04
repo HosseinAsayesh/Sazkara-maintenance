@@ -8,31 +8,54 @@ import {
   approveWeeklyReportAction,
   submitWeeklyReportAction,
   withdrawWeeklyReportAction,
+  type WeeklySubmitState,
 } from '@/app/actions/weekly-reports';
 
 import { JalaliDateInput } from './JalaliDateInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
 
-/** Manager: send a period's report to Jti — built by the app, or a file they upload. */
+/**
+ * Manager: send weekly reports to Jti — one per city, each with its Excel and its
+ * evidence PDF. Built by the app for every ticked city, or the manager's own files for
+ * one city.
+ */
 export function WeeklyReportForm({
   locale,
   projects,
+  cities,
   defaultProjectId,
 }: {
   locale: string;
-  projects: Array<{ id: string; name: string }>;
+  projects: Array<{ id: string; name: string; phases: Array<{ id: string; name: string }> }>;
+  cities: Array<{ id: string; name: string }>;
   defaultProjectId: string;
 }) {
   const t = useTranslations('weekly');
   const tc = useTranslations('common');
-  const [state, action, pending] = useActionState<ActionState, FormData>(
+  const [state, action, pending] = useActionState<WeeklySubmitState, FormData>(
     submitWeeklyReportAction,
     {},
   );
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [mode, setMode] = useState<'GENERATE' | 'UPLOAD'>('GENERATE');
+  const [projectId, setProjectId] = useState(defaultProjectId);
+  const [phaseId, setPhaseId] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [uploadCity, setUploadCity] = useState('');
+  const phases = projects.find((p) => p.id === projectId)?.phases ?? [];
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const ready =
+    !!from && !!to && (mode === 'UPLOAD' ? !!uploadCity : picked.size > 0);
 
   return (
     <Card>
@@ -41,6 +64,18 @@ export function WeeklyReportForm({
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="from" value={from} />
         <input type="hidden" name="to" value={to} />
+        {/* The picks travel as hidden fields: React resets a form's own controls after
+            each submit, which left boxes looking unticked while still remembered. */}
+        <input type="hidden" name="mode" value={mode} />
+        <input type="hidden" name="projectId" value={projectId} />
+        <input
+          type="hidden"
+          name="phaseId"
+          value={phases.some((p) => p.id === phaseId) ? phaseId : ''}
+        />
+        {(mode === 'UPLOAD' ? (uploadCity ? [uploadCity] : []) : [...picked]).map((id) => (
+          <input key={id} type="hidden" name="cityId" value={id} />
+        ))}
         <Field label={tc('from')} required>
           <JalaliDateInput value={from} onChange={setFrom} ariaLabel={tc('from')} />
         </Field>
@@ -48,7 +83,13 @@ export function WeeklyReportForm({
           <JalaliDateInput value={to} onChange={setTo} ariaLabel={tc('to')} />
         </Field>
         <Field label={tc('project')}>
-          <Select name="projectId" defaultValue={defaultProjectId}>
+          <Select
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setPhaseId('');
+            }}
+          >
             <option value="">{tc('allProjects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -57,30 +98,97 @@ export function WeeklyReportForm({
             ))}
           </Select>
         </Field>
-        <Field label={t('fileSource')}>
-          <div className="flex flex-wrap gap-2">
-            {(['GENERATE', 'UPLOAD'] as const).map((m) => (
-              <label
-                key={m}
-                className={
-                  'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ' +
-                  (mode === m ? 'border-brand-400 bg-brand-50' : 'border-[var(--border)] bg-white')
-                }
-              >
-                <input
-                  type="radio"
-                  name="mode"
-                  value={m}
-                  checked={mode === m}
-                  onChange={() => setMode(m)}
-                />
-                {m === 'GENERATE' ? t('modeGenerate') : t('modeUpload')}
-              </label>
+        <Field label={tc('phase')}>
+          <Select
+            value={phases.some((p) => p.id === phaseId) ? phaseId : ''}
+            onChange={(e) => setPhaseId(e.target.value)}
+            disabled={!phases.length}
+          >
+            <option value="">{t('allPhases')}</option>
+            {phases.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
             ))}
-          </div>
+          </Select>
         </Field>
-        {mode === 'UPLOAD' ? (
+        <div className="sm:col-span-2">
+          <Field label={t('fileSource')}>
+            <div className="flex flex-wrap gap-2">
+              {(['GENERATE', 'UPLOAD'] as const).map((m) => (
+                <label
+                  key={m}
+                  className={
+                    'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ' +
+                    (mode === m ? 'border-brand-400 bg-brand-50' : 'border-[var(--border)] bg-white')
+                  }
+                >
+                  <input
+                    type="radio"
+                    value={m}
+                    checked={mode === m}
+                    onChange={() => setMode(m)}
+                  />
+                  {m === 'GENERATE' ? t('modeGenerate') : t('modeUpload')}
+                </label>
+              ))}
+            </div>
+          </Field>
+        </div>
+        {mode === 'GENERATE' ? (
           <div className="sm:col-span-2">
+            <Field label={t('cities')} hint={t('citiesHint')} required>
+              <div className="flex flex-wrap gap-2">
+                {cities.map((c) => (
+                  <label
+                    key={c.id}
+                    className={
+                      'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ' +
+                      (picked.has(c.id)
+                        ? 'border-brand-400 bg-brand-50'
+                        : 'border-[var(--border)] bg-white')
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      value={c.id}
+                      checked={picked.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                    />
+                    {c.name}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  className="text-xs text-brand-700 hover:underline"
+                  onClick={() =>
+                    setPicked(
+                      picked.size === cities.length ? new Set() : new Set(cities.map((c) => c.id)),
+                    )
+                  }
+                >
+                  {picked.size === cities.length ? t('noneCities') : t('allCities')}
+                </button>
+              </div>
+            </Field>
+          </div>
+        ) : (
+          <>
+            <Field label={tc('city')} required>
+              <Select
+                value={uploadCity}
+                onChange={(e) => setUploadCity(e.target.value)}
+                required
+              >
+                <option value="">—</option>
+                {cities.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div />
             <Field label={t('uploadFile')} hint={t('uploadHint')} required>
               <input
                 type="file"
@@ -90,26 +198,43 @@ export function WeeklyReportForm({
                 className="block w-full text-sm file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
               />
             </Field>
-          </div>
-        ) : null}
+            <Field label={t('uploadEvidence')} hint={t('uploadEvidenceHint')}>
+              <input
+                type="file"
+                name="evidenceFile"
+                accept=".pdf,application/pdf"
+                className="block w-full text-sm file:me-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
+              />
+            </Field>
+          </>
+        )}
         <div className="sm:col-span-2">
           <Field label={t('note')} hint={t('noteHint')}>
             <Textarea name="note" rows={2} />
           </Field>
         </div>
-        <div className="flex items-center gap-3 sm:col-span-2">
-          <Button type="submit" disabled={pending || !from || !to}>
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+          <Button type="submit" disabled={pending || !ready}>
             {pending ? t('sending') : t('send')}
           </Button>
+          {pending ? <span className="text-xs text-[var(--muted)]">{t('sendingHelp')}</span> : null}
         </div>
         {state.error ? (
           <div className="sm:col-span-2">
-            <Alert tone="danger">{t(`errors.${state.error}`)}</Alert>
+            <Alert tone="danger">
+              {t(`errors.${state.error}`)}
+              {state.skipped?.length ? ` (${state.skipped.join('، ')})` : ''}
+            </Alert>
           </div>
         ) : null}
         {state.ok ? (
-          <div className="sm:col-span-2">
-            <Alert tone="success">{t('sent')}</Alert>
+          <div className="space-y-2 sm:col-span-2">
+            <Alert tone="success">{t('sentCount', { count: state.created ?? 1 })}</Alert>
+            {state.skipped?.length ? (
+              <Alert tone="warning">
+                {t('skippedCities', { cities: state.skipped.join('، ') })}
+              </Alert>
+            ) : null}
           </div>
         ) : null}
       </form>
@@ -149,10 +274,13 @@ export function ApproveWeeklyReport({
   id,
   viewed: viewedBefore,
   canSign,
+  hasPdf = true,
 }: {
   locale: string;
   id: string;
   viewed: boolean;
+  /** False on reports sent before the evidence PDF was attached. */
+  hasPdf?: boolean;
   /** False for a manager looking through the Jti view: they may look, not sign. */
   canSign: boolean;
 }) {
@@ -188,13 +316,15 @@ export function ApproveWeeklyReport({
         >
           {t('downloadExcel')}
         </a>
-        <a
-          href={`/api/weekly-reports/${id}?as=pdf`}
-          onClick={markViewed}
-          className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-medium text-brand-900 hover:bg-brand-50"
-        >
-          {t('downloadPdf')}
-        </a>
+        {hasPdf ? (
+          <a
+            href={`/api/weekly-reports/${id}?as=pdf`}
+            onClick={markViewed}
+            className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-medium text-brand-900 hover:bg-brand-50"
+          >
+            {t('downloadPdf')}
+          </a>
+        ) : null}
       </div>
 
       {canSign ? (

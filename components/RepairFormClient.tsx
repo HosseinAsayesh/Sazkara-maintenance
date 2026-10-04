@@ -589,6 +589,12 @@ export function RepairFormClient(props: RepairFormProps) {
         <div className="grid gap-5 p-4 sm:grid-cols-2">
           <SignaturePad ref={techSig} label={t('technicianSignature')} />
           <SignaturePad ref={mgrSig} label={t('storeManagerSignature')} />
+          {/* Optional: when a store manager will not let the work go ahead on a signature
+              alone, their stamp on the paper form settles it. */}
+          <div className="sm:col-span-2">
+            <PhotoInput label={t('photoStamp')} name="photoStamp" />
+            <p className="mt-1 text-xs text-[var(--muted)]">{t('photoStampHelp')}</p>
+          </div>
         </div>
       </Card>
 

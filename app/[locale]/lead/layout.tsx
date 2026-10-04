@@ -25,7 +25,10 @@ export default async function LeadLayout({
       locale={locale}
       userName={user.name}
       userSubtitle={user.technicianCode ?? undefined}
-      nav={[{ href: '/lead', label: t('crew') }]}
+      nav={[
+        { href: '/lead', label: t('crew') },
+        { href: '/lead/photos', label: t('uidPhotos') },
+      ]}
     >
       {children}
     </AppShell>

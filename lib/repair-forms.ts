@@ -300,7 +300,7 @@ export async function createRepairForm(input: CreateRepairFormInput) {
       });
 
       // --- Project scope --------------------------------------------------------
-      const { projectId, phaseId } = await resolveProjectForUid(tx, uid);
+      const { projectId, phaseId, batchId } = await resolveProjectForUid(tx, uid);
 
       // --- §6.3 re-repair detection (revised) ------------------------------------
       // The PROJECT is what defines a re-repair, not elapsed time: the same stand
@@ -407,6 +407,7 @@ export async function createRepairForm(input: CreateRepairFormInput) {
 
           projectId,
           phaseId,
+          batchId,
 
           isReRepair,
           previousFormId,

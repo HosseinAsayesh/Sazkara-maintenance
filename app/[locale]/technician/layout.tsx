@@ -20,6 +20,7 @@ export default async function TechnicianLayout({
       userSubtitle={user.technicianCode ?? undefined}
       nav={[
         { href: '/technician', label: t('newReport') },
+        { href: '/technician/photos', label: t('uidPhotos') },
         { href: '/technician/profile', label: t('myProfile') },
       ]}
     >

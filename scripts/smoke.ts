@@ -1306,6 +1306,210 @@ async function main() {
   await prisma.store.delete({ where: { id: delStore.id } });
 
   /* ---------------------------------------------------------------- */
+  section('re-filing an order under another phase moves its reports');
+  const { moveOrderToProject } = await import('../lib/projects');
+  // Leftovers of an interrupted earlier run.
+  {
+    const stale = await prisma.repairForm.findMany({
+      where: { uid: { in: ['MOVE1', 'MOVE2'] } },
+      select: { id: true },
+    });
+    const ids = stale.map((f) => f.id);
+    await prisma.partUsage.deleteMany({ where: { repairFormId: { in: ids } } });
+    await prisma.photo.deleteMany({ where: { repairFormId: { in: ids } } });
+    await prisma.repairForm.deleteMany({ where: { id: { in: ids } } });
+    await prisma.weeklyReport.deleteMany({ where: { project: { name: { startsWith: 'Smoke move' } } } });
+    await prisma.importBatch.deleteMany({ where: { name: 'سفارش انتقال' } });
+    await prisma.stand.deleteMany({ where: { store: { uid: { in: ['MOVE1', 'MOVE2'] } } } });
+    await prisma.store.deleteMany({ where: { uid: { in: ['MOVE1', 'MOVE2'] } } });
+    await prisma.project.deleteMany({ where: { name: { startsWith: 'Smoke move' } } });
+  }
+  const moveProject = await prisma.project.create({
+    data: { name: 'Smoke move project', startDate: new Date() },
+  });
+  const phase1 = await prisma.phase.create({
+    data: { projectId: moveProject.id, name: 'فاز ۱', sortOrder: 1 },
+  });
+  const phase2 = await prisma.phase.create({
+    data: { projectId: moveProject.id, name: 'فاز ۲', sortOrder: 2 },
+  });
+  const moveOrder = await commitImport(
+    [
+      { rowNumber: 1, uid: 'MOVE1', cityName: tehran.name, storeName: 'فروشگاه انتقال' },
+      { rowNumber: 2, uid: 'MOVE2', cityName: tehran.name, storeName: 'فروشگاه انتقال ۲' },
+    ],
+    {
+      name: 'سفارش انتقال',
+      source: 'JTI_EXCEL',
+      importedById: manager.id,
+      projectId: moveProject.id,
+      phaseId: phase1.id,
+      confirmStands: true,
+    },
+  );
+  assert.equal(moveOrder.batch.phaseId, phase1.id);
+  ok('a new order can be filed under a chosen phase');
+
+  const day = new Date();
+  const moved1 = await createRepairForm({
+    uid: 'MOVE1',
+    technicianId: tech.id,
+    cityId: tehran.id,
+    date: new Date(day.getTime() - 2 * DAY_MS),
+    parts: [{ partCatalogItemId: fuse.id, action: 'REPLACED', quantity: 1 }],
+    qualityScore: 4,
+    photos,
+    ...sigs,
+  });
+  assert.equal(moved1.form.batchId, moveOrder.batch.id);
+  assert.equal(moved1.form.phaseId, phase1.id);
+  ok('a technician\'s report remembers the order it was filed against');
+
+  // The same stand repaired again in the same project: a re-repair.
+  const moved1b = await createRepairForm({
+    uid: 'MOVE1',
+    technicianId: tech.id,
+    cityId: tehran.id,
+    date: day,
+    parts: [{ partCatalogItemId: fuse.id, action: 'REPLACED', quantity: 1 }],
+    qualityScore: 4,
+    photos,
+    ...sigs,
+  });
+  assert.equal(moved1b.isReRepair, true);
+
+  const phase2Before = await prisma.repairForm.count({ where: { phaseId: phase2.id } });
+  assert.equal(phase2Before, 0);
+  const moveResult = await moveOrderToProject(moveOrder.batch.id, moveProject.id, phase2.id);
+  assert.equal(moveResult.forms, 2);
+  assert.equal(await prisma.repairForm.count({ where: { phaseId: phase2.id } }), 2);
+  assert.equal(await prisma.repairForm.count({ where: { phaseId: phase1.id } }), 0);
+  ok('moving the order to phase 2 moves its reports — the dashboard filter sees them', '2 reports');
+
+  // Out of the project altogether: the second repair is no longer a re-repair of it…
+  const otherProject = await prisma.project.create({
+    data: { name: 'Smoke move other', startDate: new Date() },
+  });
+  // …but only the moved order's reports change project; put the first visit elsewhere.
+  await prisma.repairForm.update({
+    where: { id: moved1.form.id },
+    data: { batchId: null, projectId: otherProject.id, phaseId: null },
+  });
+  const { recomputeReRepairs } = await import('../lib/projects');
+  await recomputeReRepairs(prisma, [moved1.form.standId]);
+  const after = await prisma.repairForm.findUniqueOrThrow({ where: { id: moved1b.form.id } });
+  assert.equal(after.isReRepair, false);
+  assert.equal(after.previousFormId, null);
+  assert.equal(after.hasPreviousProjectHistory, true);
+  ok('re-repair flags follow the project boundary after a move');
+
+  /* ---------------------------------------------------------------- */
+  section('uid search-as-you-type and photos');
+  const { loadUidPhotos, suggestUids } = await import('../lib/uid-lookup');
+  // MOVE-2 is an open order row; MOVE-1 is done (its row closed when it was reported).
+  const sugg = await suggestUids('move');
+  assert.equal(sugg[0].uid, 'MOVE2');
+  assert.equal(sugg[0].kind, 'ORDER');
+  assert.ok(sugg.some((s) => s.uid === 'MOVE1' && s.kind === 'HISTORY'));
+  assert.equal((await suggestUids('m')).length, 0);
+  ok('open order rows are listed first, then known uids', sugg.map((s) => `${s.uid}:${s.kind}`).join(' '));
+
+  const gallery = await loadUidPhotos('move-1');
+  assert.ok(gallery);
+  assert.equal(gallery.visits.length, 2);
+  assert.deepEqual(
+    gallery.visits[0].photos.map((p) => p.type),
+    ['STORE', 'BEFORE', 'AFTER'],
+  );
+  ok('a uid\'s photos load per visit, newest first', `${gallery.visits.length} visits`);
+
+  /* ---------------------------------------------------------------- */
+  section('weekly reports: one city, Excel + evidence PDF, signed approval page');
+  const { generateWeeklyEvidence, generateWeeklyWorkbook, stampApprovalOntoEvidence, weeklyTitle } =
+    await import('../lib/weekly-reports');
+  const { PDFDocument } = await import('pdf-lib');
+  // Real image bytes, and a stamped-form photo, on the MOVE-1 visit.
+  const stampRef = await storage.put(PNG, { prefix: 'test', filename: 'stamp.png' });
+  const realRefs = await Promise.all(
+    ['store', 'before', 'after'].map((n) => storage.put(PNG, { prefix: 'test', filename: `${n}.png` })),
+  );
+  await prisma.photo.deleteMany({ where: { repairFormId: moved1b.form.id } });
+  await prisma.photo.createMany({
+    data: [
+      { repairFormId: moved1b.form.id, type: 'STORE', fileRef: realRefs[0], index: 0 },
+      { repairFormId: moved1b.form.id, type: 'BEFORE', fileRef: realRefs[1], index: 1 },
+      { repairFormId: moved1b.form.id, type: 'AFTER', fileRef: realRefs[2], index: 2 },
+      { repairFormId: moved1b.form.id, type: 'STAMP', fileRef: stampRef, index: 3 },
+    ],
+  });
+  // The re-repair flag was cleared above, so this visit is main-sheet work in phase 2.
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const scope = {
+    fromIso: iso(new Date(day.getTime() - 6 * DAY_MS)),
+    toIso: iso(new Date(day.getTime() + DAY_MS)),
+    projectId: moveProject.id,
+    phaseId: phase2.id,
+    cityId: tehran.id,
+  };
+  const title = weeklyTitle(scope.fromIso, scope.toIso, { cityName: tehran.name, phaseName: phase2.name });
+  assert.ok(title.includes(tehran.name) && title.includes(phase2.name));
+
+  const weeklySheet = await generateWeeklyWorkbook(scope, title);
+  assert.equal(weeklySheet.rowCount, 1);
+  const otherCity = await prisma.city.findFirstOrThrow({ where: { id: { not: tehran.id } } });
+  const emptySheet = await generateWeeklyWorkbook({ ...scope, cityId: otherCity.id }, title);
+  assert.equal(emptySheet.rowCount, 0);
+  ok('the weekly Excel holds only the chosen city and phase', `${tehran.name}: 1 row, ${otherCity.name}: 0`);
+
+  const evidence = await generateWeeklyEvidence(scope, title);
+  assert.equal(evidence.standCount, 1);
+  const evidenceBytes = await storage.get(evidence.fileRef);
+  assert.equal(evidenceBytes.subarray(0, 4).toString('latin1'), '%PDF');
+  const evidencePages = (await PDFDocument.load(evidenceBytes)).getPageCount();
+  ok('the weekly evidence PDF is the photo pack, not the sheet', `${evidencePages} pages`);
+
+  const weekly = await prisma.weeklyReport.create({
+    data: {
+      title,
+      periodFrom: new Date(`${scope.fromIso}T00:00:00Z`),
+      periodTo: new Date(`${scope.toIso}T00:00:00Z`),
+      projectId: moveProject.id,
+      phaseId: phase2.id,
+      cityId: tehran.id,
+      source: 'GENERATED',
+      fileRef: weeklySheet.fileRef,
+      fileName: weeklySheet.fileName,
+      evidenceFileRef: evidence.fileRef,
+      evidenceFileName: evidence.fileName,
+      submittedById: manager.id,
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approverName: 'ناظر آزمایشی',
+      approverSignatureRef: refs[3],
+    },
+  });
+  await stampApprovalOntoEvidence(weekly.id);
+  const signed = await prisma.weeklyReport.findUniqueOrThrow({ where: { id: weekly.id } });
+  assert.notEqual(signed.evidenceFileRef, evidence.fileRef);
+  const signedPages = (await PDFDocument.load(await storage.get(signed.evidenceFileRef!))).getPageCount();
+  assert.equal(signedPages, evidencePages + 1);
+  ok('approval adds a signed page to the evidence PDF', `${evidencePages} -> ${signedPages} pages`);
+
+  // Tidy up so the sections below see the data they expect.
+  await prisma.weeklyReport.delete({ where: { id: weekly.id } });
+  const moveForms = await prisma.repairForm.findMany({
+    where: { uid: { in: ['MOVE1', 'MOVE2'] } },
+    select: { id: true },
+  });
+  await prisma.partUsage.deleteMany({ where: { repairFormId: { in: moveForms.map((f) => f.id) } } });
+  await prisma.photo.deleteMany({ where: { repairFormId: { in: moveForms.map((f) => f.id) } } });
+  await prisma.repairForm.deleteMany({ where: { id: { in: moveForms.map((f) => f.id) } } });
+  await prisma.importBatch.delete({ where: { id: moveOrder.batch.id } });
+  await prisma.stand.deleteMany({ where: { store: { uid: { in: ['MOVE1', 'MOVE2'] } } } });
+  await prisma.store.deleteMany({ where: { uid: { in: ['MOVE1', 'MOVE2'] } } });
+  await prisma.project.deleteMany({ where: { id: { in: [moveProject.id, otherProject.id] } } });
+
+  /* ---------------------------------------------------------------- */
   section('normalisation guards');
   assert.equal(normaliseUid('۱۲۳-۴۵۶'), '123456');
   ok('Persian digits and separators normalise into one uid', '۱۲۳-۴۵۶ -> 123456');

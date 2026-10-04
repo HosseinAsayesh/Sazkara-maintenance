@@ -97,7 +97,8 @@
     "clientView": "Jti view",
     "downloadRequests": "File requests by JTI",
     "queries": "Jti's questions",
-    "weeklyReports": "Weekly reports"
+    "weeklyReports": "Weekly reports",
+    "uidPhotos": "UID photos"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -246,7 +247,9 @@
     "beforeFirstHelp": "Before anything else, photograph the stand as you found it.",
     "afterPhotoHelp": "Repair done? Photograph the stand as you leave it.",
     "beforeGateTitle": "The “before” photo comes first",
-    "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page."
+    "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page.",
+    "photoStamp": "Photo of the store's stamped form (optional)",
+    "photoStampHelp": "If the store manager stamped the form, photograph it. It appears under its own caption in the evidence PDF."
   },
   "reasons": {
     "STAND_HEALTHY": "Stand is healthy",
@@ -357,7 +360,8 @@
     "errors": {
       "uidRequired": "The Stand UID column must be mapped",
       "noRows": "No rows found in this sheet",
-      "parseFailed": "Could not read the file"
+      "parseFailed": "Could not read the file",
+      "phaseMismatch": "That phase does not belong to this project."
     },
     "duplicateHeader": "Previous repair",
     "editOrder": "Edit order",
@@ -383,7 +387,9 @@
     "targetNewOrder": "New order",
     "alsoDeleteForms": "delete the {forms} reports too",
     "deleteOrderAndFormsConfirm": "Delete order \"{name}\" AND its {forms} repair reports?\n\nTheir photos, signatures and parts usage are erased too, and they disappear from the dashboard and every export.\n\nThis cannot be undone. Continue?",
-    "orderDeletedRemovedForms": "Order \"{name}\" and its {forms} reports were deleted."
+    "orderDeletedRemovedForms": "Order \"{name}\" and its {forms} reports were deleted.",
+    "assignSaved": "Saved. The order and its {forms} reports moved to the new project and phase.",
+    "phaseHint": "Optional — can be changed later on the order's page."
   },
   "pendingUids": {
     "title": "UIDs awaiting confirmation",
@@ -943,7 +949,7 @@
   "weekly": {
     "title": "Weekly reports for JTI",
     "sendTitle": "Send a weekly report",
-    "sendHelp": "JTI receives it in their panel and must approve it with their name and signature after opening it.",
+    "sendHelp": "One report per city: the Excel plus the evidence PDF (photos and signatures). Jti opens each and approves it with name and signature.",
     "fileSource": "File",
     "modeGenerate": "Built by the app",
     "modeUpload": "Uploaded file",
@@ -970,8 +976,8 @@
     "clientTitle": "Weekly reports",
     "clientHelp": "Open each report, then approve it with your name and signature.",
     "downloadExcel": "Download Excel",
-    "downloadPdf": "Download PDF",
-    "openFirst": "Open the report (Excel or PDF) first — approval unlocks after you have seen it.",
+    "downloadPdf": "Download evidence PDF",
+    "openFirst": "Open the report first (Excel or evidence PDF) — approval unlocks once you have seen it.",
     "approveHelp": "By approving you confirm you have seen this report.",
     "approverName": "Your name (JTI supervisor)",
     "signature": "Signature",
@@ -984,14 +990,32 @@
       "fileRequired": "Choose the Excel file to upload.",
       "fileTooLarge": "The file is larger than 20 MB.",
       "xlsxOnly": "Only .xlsx files.",
-      "emptyPeriod": "There are no reports in this period to put in the file.",
+      "emptyPeriod": "Nothing was reported in this period for the chosen cities.",
       "notFound": "This report no longer exists.",
       "alreadyApproved": "This report is already approved.",
       "forbidden": "Only the JTI account can approve.",
       "viewFirst": "Open the report first.",
       "nameRequired": "Enter your name.",
-      "signatureRequired": "Sign in the box."
-    }
+      "signatureRequired": "Sign in the box.",
+      "rangeTooLong": "The period can be at most 31 days.",
+      "cityRequired": "Pick at least one city.",
+      "oneCityForUpload": "Pick one city for an uploaded file.",
+      "phaseMismatch": "That phase does not belong to this project.",
+      "pdfTooLarge": "The PDF is over 28 MB — leave it empty and the app builds it.",
+      "pdfOnly": "PDF files only.",
+      "noEvidence": "No visits in this city and period for the evidence PDF."
+    },
+    "allPhases": "All phases",
+    "cities": "Cities",
+    "citiesHint": "One report per ticked city. A city with no work in the period is skipped.",
+    "allCities": "All cities",
+    "noneCities": "None",
+    "uploadEvidence": "Evidence PDF (optional)",
+    "uploadEvidenceHint": "Left empty, the app builds the evidence PDF for this city and period, with photos. Max 28 MB.",
+    "sendingHelp": "Building the evidence PDFs with photos can take a few minutes. Keep this page open.",
+    "sentCount": "{count} report(s) sent; they now await approval in the Jti panel.",
+    "skippedCities": "These cities had no work in the period and were skipped: {cities}",
+    "evidencePdf": "Evidence PDF"
   },
   "account": {
     "title": "My password",
@@ -1008,5 +1032,29 @@
       "mismatch": "The two new passwords do not match.",
       "sameAsOld": "The new password is the same as the old one."
     }
+  },
+  "uidLookup": {
+    "title": "UID photos",
+    "help": "Type or pick a UID to see every photo from its earlier visits.",
+    "placeholder": "UID",
+    "searching": "Searching…",
+    "noMatch": "No match — you can still type the full UID.",
+    "inOrder": "In order",
+    "history": "History",
+    "unknownUid": "This UID is not in the system.",
+    "visitCount": "{count} recorded visit(s)",
+    "noPhotos": "No photos have been recorded for this UID yet.",
+    "photoStore": "Store",
+    "photoBefore": "Before",
+    "photoAfter": "After",
+    "photoStamp": "Stamped form",
+    "photoOther": "Extra",
+    "repaired": "Repaired",
+    "notRepaired": "Not repaired",
+    "stand": "Stand {n}",
+    "reRepair": "Re-repair",
+    "close": "Close",
+    "prev": "Previous",
+    "next": "Next"
   }
 }

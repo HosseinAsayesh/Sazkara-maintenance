@@ -2,10 +2,10 @@ import { getCurrentUser } from '@/lib/auth';
 import { safeFilename } from '@/lib/exports/jti';
 import { prisma } from '@/lib/prisma';
 import { getStorage } from '@/lib/storage';
-import { renderWeeklyReportPdf } from '@/lib/weekly-reports';
 
 /**
- * A weekly report's file: `?as=xlsx` (default), `?as=pdf`, or `?as=signature` for the
+ * A weekly report's file: `?as=xlsx` (default), `?as=pdf` for the evidence PDF (photos
+ * and signatures, with the approval page once signed), or `?as=signature` for the
  * approver's signature image. Manager and the Jti account only.
  *
  * Jti's first download of either format is what unlocks their approval — the record that
@@ -43,7 +43,11 @@ export async function GET(
   const base = safeFilename(report.title.replace(/\//g, '.'));
 
   if (as === 'pdf') {
-    const pdf = await renderWeeklyReportPdf(id);
+    // Reports sent before v0.6.1 carry no evidence PDF.
+    if (!report.evidenceFileRef || !(await storage.exists(report.evidenceFileRef))) {
+      return Response.json({ error: 'NO_EVIDENCE' }, { status: 404 });
+    }
+    const pdf = await storage.get(report.evidenceFileRef);
     return new Response(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',

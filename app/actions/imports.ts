@@ -237,10 +237,22 @@ export async function commitImportAction(
       .map((v) => String(v))
       .filter(Boolean);
 
+    // The manager can file the order under a phase up front; left empty, it joins the
+    // active project's first phase as before.
+    const projectId = String(formData.get('projectId') ?? '') || null;
+    const phaseId = String(formData.get('phaseId') ?? '') || null;
+    if (phaseId) {
+      const { prisma } = await import('@/lib/prisma');
+      const phase = await prisma.phase.findUnique({ where: { id: phaseId } });
+      if (!phase || phase.projectId !== projectId) return { error: 'phaseMismatch' };
+    }
+
     const result = await commitImport(rows, {
       name,
       source: 'JTI_EXCEL',
       importedById: manager.id,
+      projectId,
+      phaseId,
       fileRef,
       mapping,
       mappingProfileId,

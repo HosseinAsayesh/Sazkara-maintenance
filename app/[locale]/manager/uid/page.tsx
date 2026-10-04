@@ -1,6 +1,8 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { StandHistory } from '@/components/StandHistory';
+import { toView } from '@/components/UidPhotoPage';
+import { UidPhotoGallery } from '@/components/UidPhotos';
 import { UidSearchBox } from '@/components/UidSearchBox';
 import { Link } from '@/i18n/navigation';
 import {
@@ -18,6 +20,7 @@ import { requireManager } from '@/lib/auth';
 import { formatDateForLocale } from '@/lib/dates';
 import { prisma } from '@/lib/prisma';
 import { normaliseUid } from '@/lib/text';
+import { loadUidPhotos } from '@/lib/uid-lookup';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,10 +38,11 @@ export default async function UidSearchPage({
   // Set by the delete action, which lands here because the form's own page is gone.
   const deletedFormCode = typeof sp.deleted === 'string' ? sp.deleted : '';
 
-  const [t, tc, ti] = await Promise.all([
+  const [t, tc, ti, tp] = await Promise.all([
     getTranslations({ locale, namespace: 'uidSearch' }),
     getTranslations({ locale, namespace: 'common' }),
     getTranslations({ locale, namespace: 'imports' }),
+    getTranslations({ locale, namespace: 'uidLookup' }),
   ]);
 
   const uid = query ? normaliseUid(query) : '';
@@ -65,6 +69,9 @@ export default async function UidSearchPage({
         },
       })
     : null;
+
+  // Every photo taken at this uid, so the manager need not export a PDF to see them.
+  const photos = stand ? await loadUidPhotos(stand.uid) : null;
 
   return (
     <div className="space-y-4">
@@ -176,6 +183,14 @@ export default async function UidSearchPage({
               )}
             </div>
           </Card>
+
+          {photos ? (
+            <UidPhotoGallery
+              title={tp('title')}
+              description={tp('visitCount', { count: photos.visitCount })}
+              visits={photos.visits.map((v) => toView(v, locale))}
+            />
+          ) : null}
 
           <StandHistory locale={locale} history={stand.repairForms} canEdit />
         </>

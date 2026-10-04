@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { ImportWizard } from '@/components/ImportWizard';
 import { requireManager } from '@/lib/auth';
+import { listProjectOptions } from '@/lib/projects';
 
 export default async function NewImportPage({
   params,
@@ -10,12 +11,15 @@ export default async function NewImportPage({
   setRequestLocale(locale);
   await requireManager(locale);
 
-  const t = await getTranslations({ locale, namespace: 'imports' });
+  const [t, projects] = await Promise.all([
+    getTranslations({ locale, namespace: 'imports' }),
+    listProjectOptions(),
+  ]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-brand-900">{t('newImport')}</h1>
-      <ImportWizard locale={locale} />
+      <ImportWizard locale={locale} projects={projects} />
     </div>
   );
 }

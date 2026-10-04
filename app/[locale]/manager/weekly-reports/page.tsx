@@ -28,8 +28,9 @@ export default async function WeeklyReportsPage({
 
   const t = await getTranslations({ locale, namespace: 'weekly' });
 
-  const [projects, reports] = await Promise.all([
+  const [projects, cities, reports] = await Promise.all([
     listProjectOptions(),
+    prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.weeklyReport.findMany({
       orderBy: { submittedAt: 'desc' },
       include: { project: { select: { name: true } } },
@@ -43,7 +44,12 @@ export default async function WeeklyReportsPage({
 
       <WeeklyReportForm
         locale={locale}
-        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        projects={projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          phases: p.phases.map((ph) => ({ id: ph.id, name: ph.name })),
+        }))}
+        cities={cities}
         defaultProjectId={active?.id ?? ''}
       />
 
@@ -117,13 +123,17 @@ export default async function WeeklyReportsPage({
                         >
                           Excel
                         </a>
-                        {' · '}
-                        <a
-                          href={`/api/weekly-reports/${r.id}?as=pdf`}
-                          className="text-brand-700 hover:underline"
-                        >
-                          PDF
-                        </a>
+                        {r.evidenceFileRef ? (
+                          <>
+                            {' · '}
+                            <a
+                              href={`/api/weekly-reports/${r.id}?as=pdf`}
+                              className="text-brand-700 hover:underline"
+                            >
+                              {t('evidencePdf')}
+                            </a>
+                          </>
+                        ) : null}
                       </Td>
                       <Td>
                         {r.status !== 'APPROVED' ? (

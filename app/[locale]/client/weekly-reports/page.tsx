@@ -66,12 +66,14 @@ export default async function ClientWeeklyReportsPage({
                   >
                     {t('downloadExcel')}
                   </a>
-                  <a
-                    href={`/api/weekly-reports/${r.id}?as=pdf`}
-                    className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-medium text-brand-900 hover:bg-brand-50"
-                  >
-                    {t('downloadPdf')}
-                  </a>
+                  {r.evidenceFileRef ? (
+                    <a
+                      href={`/api/weekly-reports/${r.id}?as=pdf`}
+                      className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-medium text-brand-900 hover:bg-brand-50"
+                    >
+                      {t('downloadPdf')}
+                    </a>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -79,6 +81,7 @@ export default async function ClientWeeklyReportsPage({
                 locale={locale}
                 id={r.id}
                 viewed={Boolean(r.firstViewedAt)}
+                hasPdf={Boolean(r.evidenceFileRef)}
                 canSign={user.role === 'CLIENT_SUPERVISOR'}
               />
             )}

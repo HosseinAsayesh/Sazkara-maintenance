@@ -87,6 +87,9 @@ enum PhotoType {
   BEFORE
   AFTER
   OTHER
+  /// The store's stamped consent form, photographed. Optional: a signature alone does
+  /// not convince every store manager, and a stamp on paper settles it.
+  STAMP
 }
 
 /// §6.2 — a uid added outside the official order stays PENDING until a manager confirms it.
@@ -155,6 +158,7 @@ model City {
   stores            Store[]
   repairForms       RepairForm[]
   evidencePdfBatchs EvidencePdfBatch[]
+  weeklyReports     WeeklyReport[]
 }
 
 /// A store is a LOCATION, and the Jti uid identifies it. One uid can carry several
@@ -241,11 +245,11 @@ model Project {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  phases      Phase[]
+  phases           Phase[]
   downloadRequests DownloadRequest[]
   weeklyReports    WeeklyReport[]
-  batches     ImportBatch[]
-  repairForms RepairForm[]
+  batches          ImportBatch[]
+  repairForms      RepairForm[]
 
   @@index([isActive])
 }
@@ -261,8 +265,9 @@ model Phase {
   sortOrder Int      @default(1)
   createdAt DateTime @default(now())
 
-  batches     ImportBatch[]
-  repairForms RepairForm[]
+  batches       ImportBatch[]
+  repairForms   RepairForm[]
+  weeklyReports WeeklyReport[]
 
   @@unique([projectId, name])
   @@index([projectId, sortOrder])
@@ -292,7 +297,10 @@ model ImportBatch {
   mappingProfileId String?
   mappingProfile   ColumnMappingProfile? @relation(fields: [mappingProfileId], references: [id])
 
-  lines OrderLine[]
+  lines       OrderLine[]
+  /// Reports filed against this order (historical rows, or a technician's visit to one
+  /// of its uids). Moving the order to another project/phase moves these with it.
+  repairForms RepairForm[]
 }
 
 /// §5 — a saved mapping so a similarly-shaped re-upload can reuse it. `signature` is a
@@ -380,9 +388,9 @@ model RepairForm {
   store   Store?  @relation(fields: [storeId], references: [id])
 
   /// Snapshot of the store's uid at submit time — export column 4 reads this.
-  uid              String
+  uid        String
   /// Which stand at that location this form covers (1, 2, 3 ...).
-  standIndex       Int     @default(1)
+  standIndex Int    @default(1)
 
   storeName        String?
   storeAddress     String?
@@ -405,9 +413,13 @@ model RepairForm {
   /// Which campaign this visit belongs to. Set from the matched order line's batch, or
   /// from the active project when the uid arrived outside any order.
   projectId String?
-  project   Project? @relation(fields: [projectId], references: [id])
+  project   Project?     @relation(fields: [projectId], references: [id])
   phaseId   String?
-  phase     Phase?   @relation(fields: [phaseId], references: [id])
+  phase     Phase?       @relation(fields: [phaseId], references: [id])
+  /// The order the project/phase above came from. Without it, re-filing an order under
+  /// another phase left its reports behind in the old one.
+  batchId   String?
+  batch     ImportBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   /// §6.3 (revised) — the stand was already repaired EARLIER IN THE SAME PROJECT.
   /// Excluded from the "stands repaired" headline count and from the main Jti export;
@@ -447,6 +459,7 @@ model RepairForm {
   @@index([outcome])
   @@index([projectId, date])
   @@index([phaseId])
+  @@index([batchId])
   // Drives re-repair detection: "has this stand been repaired in this project before?"
   @@index([standId, projectId, outcome])
 }
@@ -520,7 +533,6 @@ model Counter {
   value Int    @default(0)
 }
 
-
 // ---------------------------------------------------------------------------
 // Client supervisor (Jti) — the two models that make a read-only panel workable.
 // ---------------------------------------------------------------------------
@@ -567,9 +579,9 @@ model DownloadRequest {
 
   status DownloadStatus @default(PENDING)
 
-  decidedById String?
-  decidedBy   User?     @relation("DownloadDecider", fields: [decidedById], references: [id])
-  decidedAt   DateTime?
+  decidedById  String?
+  decidedBy    User?     @relation("DownloadDecider", fields: [decidedById], references: [id])
+  decidedAt    DateTime?
   /// Why it was refused, shown to Jti. Silence on a refusal breeds a phone call.
   decisionNote String?
 
@@ -579,7 +591,7 @@ model DownloadRequest {
   downloadedAt DateTime?
   /// Approval is not permanent: a stale workbook circulating inside Jti is worse than
   /// asking again.
-  expiresAt DateTime?
+  expiresAt    DateTime?
 
   createdAt DateTime @default(now())
 
@@ -678,18 +690,27 @@ model WeeklyReport {
 
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id])
+  phaseId   String?
+  phase     Phase?   @relation(fields: [phaseId], references: [id])
+  /// One report per city: teams work several cities in parallel, and Jti signs each off.
+  cityId    String?
+  city      City?    @relation(fields: [cityId], references: [id])
 
-  source   WeeklyReportSource
-  fileRef  String
-  fileName String
+  source           WeeklyReportSource
+  fileRef          String
+  fileName         String
+  /// The evidence PDF (photos, signatures) for the same period, city and phase — what
+  /// "the PDF" means to Jti. Null on reports submitted before v0.6.1.
+  evidenceFileRef  String?
+  evidenceFileName String?
   /// The manager's covering note, shown to Jti.
-  note     String?
+  note             String?
 
   submittedById String
   submittedBy   User     @relation("WeeklyReportSubmitter", fields: [submittedById], references: [id])
   submittedAt   DateTime @default(now())
 
-  status WeeklyReportStatus @default(AWAITING_APPROVAL)
+  status        WeeklyReportStatus @default(AWAITING_APPROVAL)
   /// First time Jti opened the file, as Excel or PDF. Approval is refused before it:
   /// "if they saw it, they must approve it" needs proof that they saw it.
   firstViewedAt DateTime?

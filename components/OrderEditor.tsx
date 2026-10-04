@@ -183,6 +183,9 @@ export function OrderEditor({
         <div className="space-y-3 p-4">
           {err(deleteState)}
           {err(assignState)}
+          {assignState.ok === 'assigned' ? (
+            <Alert tone="success">{t('assignSaved', { forms: assignState.forms ?? 0 })}</Alert>
+          ) : null}
 
           {/* Re-filing an order under a different campaign changes which export it
               lands in, so it is an explicit control rather than an import-time guess. */}

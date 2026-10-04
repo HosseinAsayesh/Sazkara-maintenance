@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer-core';
 
 import { DAY_MS, endOfLocalDayExclusive, formatJalali, localDayKey, startOfLocalDay } from '../dates';
 import { prisma } from '../prisma';
+import { projectScopeWhere } from '../projects';
 import { getAppSettings } from '../settings';
 import { getStorage } from '../storage';
 import { findChromeExecutable } from './chrome';
@@ -62,12 +63,20 @@ export interface EvidenceParams {
    * which belongs to the main pack.
    */
   onlyReRepairs?: boolean;
+  /** Narrow to one project / phase — a weekly report covers one phase of one city. */
+  projectId?: string | null;
+  phaseId?: string | null;
+  /** Leave re-repairs out, matching the main Jti sheet the PDF accompanies. */
+  excludeReRepairs?: boolean;
 }
 
 export async function collectEvidenceData({
   cityId,
   date,
   onlyReRepairs,
+  projectId,
+  phaseId,
+  excludeReRepairs,
 }: EvidenceParams) {
   const [city, settings, forms] = await Promise.all([
     prisma.city.findUnique({ where: { id: cityId } }),
@@ -76,7 +85,8 @@ export async function collectEvidenceData({
       where: {
         cityId,
         date: { gte: startOfLocalDay(date), lt: endOfLocalDayExclusive(date) },
-        ...(onlyReRepairs ? { isReRepair: true } : {}),
+        ...(onlyReRepairs ? { isReRepair: true } : excludeReRepairs ? { isReRepair: false } : {}),
+        ...projectScopeWhere(projectId, phaseId),
       },
       orderBy: { formCode: 'asc' },
       include: {
@@ -105,10 +115,19 @@ async function renderFormPage(
     dataUri(form.storeManagerSignature),
   ]);
 
-  const extras = form.photos.filter((p) => p.type === 'OTHER');
-  const extraImgs = (await Promise.all(extras.map((p) => dataUri(p.fileRef)))).filter(
-    Boolean,
-  ) as string[];
+  // The stamped consent form leads the extra photos, under its own caption.
+  const extras = [
+    ...form.photos.filter((p) => p.type === 'STAMP'),
+    ...form.photos.filter((p) => p.type === 'OTHER'),
+  ];
+  const extraImgs = (
+    await Promise.all(
+      extras.map(async (p) => ({
+        src: await dataUri(p.fileRef),
+        label: p.type === 'STAMP' ? 'فرم مهرشده فروشگاه' : 'تصویر تکمیلی',
+      })),
+    )
+  ).filter((x): x is { src: string; label: string } => !!x.src);
 
   const replaced = form.parts.filter((p) => p.action === 'REPLACED');
   const repaired = form.parts.filter((p) => p.action === 'REPAIRED');
@@ -203,7 +222,7 @@ async function renderFormPage(
     ${
       extraImgs.length
         ? `<div class="shots extra">${extraImgs
-            .map((src) => imageSlot(src, 'تصویر تکمیلی'))
+            .map((x) => imageSlot(x.src, x.label))
             .join('')}</div>`
         : ''
     }
@@ -326,7 +345,7 @@ export async function buildEvidenceHtml(params: EvidenceParams): Promise<{
   return { html, standCount: forms.length, cityName: city.name };
 }
 
-async function htmlToPdf(html: string): Promise<Buffer> {
+export async function htmlToPdf(html: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
     executablePath: findChromeExecutable(),
     headless: true,
@@ -370,6 +389,9 @@ export async function generateEvidenceRangePdf(params: {
   fromIso: string;
   toIso: string;
   onlyReRepairs?: boolean;
+  projectId?: string | null;
+  phaseId?: string | null;
+  excludeReRepairs?: boolean;
 }): Promise<{ buffer: Buffer; standCount: number; cityName: string; days: number }> {
   const start = Date.parse(`${params.fromIso}T12:00:00Z`);
   const end = Date.parse(`${params.toIso}T12:00:00Z`);
@@ -387,6 +409,9 @@ export async function generateEvidenceRangePdf(params: {
       cityId: params.cityId,
       date: new Date(start + i * DAY_MS),
       onlyReRepairs: params.onlyReRepairs,
+      projectId: params.projectId,
+      phaseId: params.phaseId,
+      excludeReRepairs: params.excludeReRepairs,
     });
     cityName = day.cityName;
     if (day.standCount === 0) continue;

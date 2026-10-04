@@ -91,6 +91,8 @@ export async function submitRepairFormAction(
       ['photoStore', 'STORE'],
       ['photoBefore', 'BEFORE'],
       ['photoAfter', 'AFTER'],
+      // Optional: the store's stamped consent form, for managers a signature does not settle.
+      ['photoStamp', 'STAMP'],
     ] as Array<[string, PhotoType]>) {
       const ref = await storeImage(formData.get(field) as File | null, `photos/${dayPrefix}`);
       if (ref) photos.push({ type, fileRef: ref });
@@ -151,11 +153,14 @@ export async function submitRepairFormAction(
     // evidence about one specific stand.
     const extraCount = Math.min(Number(formData.get('extraStandCount') ?? 0) || 0, 10);
     const storePhotoRef = photos.find((p) => p.type === 'STORE')?.fileRef;
+    // The stamped form covers the whole visit, like the signatures.
+    const stampPhotoRef = photos.find((p) => p.type === 'STAMP')?.fileRef;
     const extraFormCodes: string[] = [];
 
     for (let i = 0; i < extraCount; i++) {
       const extraPhotos: PhotoInput[] = [];
       if (storePhotoRef) extraPhotos.push({ type: 'STORE', fileRef: storePhotoRef });
+      if (stampPhotoRef) extraPhotos.push({ type: 'STAMP', fileRef: stampPhotoRef });
       for (const [field, type] of [
         [`extra_${i}_photoBefore`, 'BEFORE'],
         [`extra_${i}_photoAfter`, 'AFTER'],

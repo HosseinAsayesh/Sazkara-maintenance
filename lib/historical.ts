@@ -855,6 +855,7 @@ export async function commitHistorical(
               // in the app reads RepairForm.projectId.
               projectId: opts.projectId ?? null,
               phaseId: opts.phaseId ?? null,
+              batchId: batch.id,
               storeName: row.storeName ?? null,
               storeAddress: row.address ?? null,
               storeManagerName: row.managerName ?? null,
@@ -908,6 +909,7 @@ export async function commitHistorical(
                 standIndex,
                 projectId: opts.projectId ?? null,
                 phaseId: opts.phaseId ?? null,
+                batchId: batch.id,
                 storeName: row.storeName ?? null,
                 storeAddress: row.address ?? null,
                 storeManagerName: row.managerName ?? null,

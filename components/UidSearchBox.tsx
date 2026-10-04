@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
 
-import { Button, Card, Input } from './ui';
+import { UidAutocomplete } from './UidAutocomplete';
+import { Button, Card } from './ui';
 
 export function UidSearchBox({
   initial,
@@ -22,25 +23,32 @@ export function UidSearchBox({
   const pathname = usePathname();
   const [value, setValue] = useState(initial);
 
+  const go = (input: string) => {
+    const q = input.trim();
+    const base = target ?? pathname;
+    router.push(q ? `${base}?q=${encodeURIComponent(q)}` : base);
+  };
+
   return (
     <Card className="p-3">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const q = value.trim();
-          const base = target ?? pathname;
-          router.push(q ? `${base}?q=${encodeURIComponent(q)}` : base);
+          go(value);
         }}
         className="flex gap-2"
       >
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={t('placeholder')}
-          dir="ltr"
-          className="dir-ltr"
-          autoFocus={autoFocus}
-        />
+        <div className="min-w-0 flex-1">
+          <UidAutocomplete
+            value={value}
+            onChange={setValue}
+            onPick={go}
+            placeholder={t('placeholder')}
+            className="dir-ltr"
+            autoFocus={autoFocus}
+            enterKeyHint="search"
+          />
+        </div>
         <Button type="submit">{tc('search')}</Button>
       </form>
     </Card>

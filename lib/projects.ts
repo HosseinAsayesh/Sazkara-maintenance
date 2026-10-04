@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 
+import { DAY_MS, RE_REPAIR_WINDOW_DAYS } from './dates';
 import { prisma } from './prisma';
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -132,22 +133,26 @@ export async function addPhase(projectId: string, name: string) {
 export async function resolveProjectForUid(
   db: Db,
   uid: string,
-): Promise<{ projectId: string | null; phaseId: string | null }> {
+): Promise<{ projectId: string | null; phaseId: string | null; batchId: string | null }> {
   const line = await db.orderLine.findFirst({
     where: { uid, status: { not: 'EXCLUDED' } },
     orderBy: { createdAt: 'desc' },
-    select: { batch: { select: { projectId: true, phaseId: true } } },
+    select: { batch: { select: { id: true, projectId: true, phaseId: true } } },
   });
 
   if (line?.batch?.projectId) {
-    return { projectId: line.batch.projectId, phaseId: line.batch.phaseId };
+    return {
+      projectId: line.batch.projectId,
+      phaseId: line.batch.phaseId,
+      batchId: line.batch.id,
+    };
   }
 
   const active = await db.project.findFirst({
     where: { isActive: true },
     select: { id: true },
   });
-  return { projectId: active?.id ?? null, phaseId: null };
+  return { projectId: active?.id ?? null, phaseId: null, batchId: null };
 }
 
 /**
@@ -219,4 +224,111 @@ export async function deleteProject(projectId: string, opts: { force?: boolean }
   });
 
   return impact;
+}
+
+/**
+ * Re-decide which repairs are re-repairs, for the given stands.
+ *
+ * A re-repair is a stand repaired again INSIDE THE SAME PROJECT, so moving reports to
+ * another project can make one appear or disappear. Same rule as at submit time
+ * (lib/repair-forms.ts): the earlier repair of that stand in that project, by date, then
+ * by filing order. Archive rows are never re-repairs themselves (they were imported as
+ * plain visits), but they still count as the earlier repair a technician's visit follows.
+ */
+export async function recomputeReRepairs(db: Db, standIds: string[]) {
+  if (!standIds.length) return 0;
+  const historical = await db.user.findFirst({
+    where: { phone: '00000000000' },
+    select: { id: true },
+  });
+  const forms = await db.repairForm.findMany({
+    where: { standId: { in: [...new Set(standIds)] } },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      id: true,
+      standId: true,
+      projectId: true,
+      outcome: true,
+      date: true,
+      technicianId: true,
+      isReRepair: true,
+      previousFormId: true,
+      isQuickReRepair: true,
+      hasPreviousProjectHistory: true,
+    },
+  });
+
+  let changed = 0;
+  /** Repairs seen so far, per stand. */
+  const repairedSoFar = new Map<string, typeof forms>();
+  for (const form of forms) {
+    const earlier = repairedSoFar.get(form.standId) ?? [];
+    let isReRepair = false;
+    let previousFormId: string | null = null;
+    let isQuickReRepair = false;
+    let hasPreviousProjectHistory = false;
+
+    if (form.outcome === 'REPAIRED' && form.technicianId !== historical?.id) {
+      const previous = form.projectId
+        ? [...earlier].reverse().find((f) => f.projectId === form.projectId)
+        : undefined;
+      if (previous) {
+        isReRepair = true;
+        previousFormId = previous.id;
+        isQuickReRepair =
+          form.date.getTime() - previous.date.getTime() <= RE_REPAIR_WINDOW_DAYS * DAY_MS;
+      }
+      hasPreviousProjectHistory = earlier.some(
+        (f) => !form.projectId || f.projectId !== form.projectId,
+      );
+    } else {
+      // Not something this rule decides: leave the stored history flag alone.
+      hasPreviousProjectHistory = form.hasPreviousProjectHistory;
+    }
+
+    if (
+      isReRepair !== form.isReRepair ||
+      previousFormId !== form.previousFormId ||
+      isQuickReRepair !== form.isQuickReRepair ||
+      hasPreviousProjectHistory !== form.hasPreviousProjectHistory
+    ) {
+      await db.repairForm.update({
+        where: { id: form.id },
+        data: { isReRepair, previousFormId, isQuickReRepair, hasPreviousProjectHistory },
+      });
+      changed++;
+    }
+    if (form.outcome === 'REPAIRED') repairedSoFar.set(form.standId, [...earlier, form]);
+  }
+  return changed;
+}
+
+/**
+ * Re-file an order under another project/phase, taking its reports along.
+ *
+ * Every filter in the app reads the project and phase stored on each report, so moving
+ * only the order left the reports in the old phase — the dashboard kept counting them
+ * there. Returns how many reports moved.
+ */
+export async function moveOrderToProject(
+  batchId: string,
+  projectId: string | null,
+  phaseId: string | null,
+): Promise<{ forms: number; reRepairsChanged: number }> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.importBatch.update({ where: { id: batchId }, data: { projectId, phaseId } });
+      const forms = await tx.repairForm.findMany({
+        where: { batchId },
+        select: { standId: true },
+      });
+      await tx.repairForm.updateMany({ where: { batchId }, data: { projectId, phaseId } });
+      const reRepairsChanged = await recomputeReRepairs(
+        tx,
+        forms.map((f) => f.standId),
+      );
+      return { forms: forms.length, reRepairsChanged };
+    },
+    { timeout: 120_000, maxWait: 20_000 },
+  );
 }

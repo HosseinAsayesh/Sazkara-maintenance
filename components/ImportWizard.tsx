@@ -45,7 +45,20 @@ const FIELDS = [
  * headers, a sample and the duplicate summary travel to the browser, so a 3000-row Jti
  * sheet doesn't have to be serialised into the page.
  */
-export function ImportWizard({ locale }: { locale: string }) {
+export interface ImportProjectOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  phases: Array<{ id: string; name: string }>;
+}
+
+export function ImportWizard({
+  locale,
+  projects = [],
+}: {
+  locale: string;
+  projects?: ImportProjectOption[];
+}) {
   const t = useTranslations('imports');
   const tc = useTranslations('common');
 
@@ -65,6 +78,12 @@ export function ImportWizard({ locale }: { locale: string }) {
   const [mapping, setMapping] = useState<Record<string, number | ''>>({});
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [batchName, setBatchName] = useState('');
+  // Project and phase the order is filed under; the active project by default.
+  const [projectId, setProjectId] = useState(
+    () => projects.find((p) => p.isActive)?.id ?? '',
+  );
+  const [phaseId, setPhaseId] = useState('');
+  const phases = projects.find((p) => p.id === projectId)?.phases ?? [];
   const [saveProfile, setSaveProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
 
@@ -146,6 +165,40 @@ export function ImportWizard({ locale }: { locale: string }) {
               placeholder={t('batchNamePlaceholder')}
             />
           </Field>
+          {projects.length ? (
+            <>
+              <Field label={tc('project')}>
+                <Select
+                  value={projectId}
+                  onChange={(e) => {
+                    setProjectId(e.target.value);
+                    setPhaseId('');
+                  }}
+                >
+                  <option value="">—</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={tc('phase')} hint={t('phaseHint')}>
+                <Select
+                  value={phaseId}
+                  onChange={(e) => setPhaseId(e.target.value)}
+                  disabled={!phases.length}
+                >
+                  <option value="">—</option>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </>
+          ) : null}
           <Field label={tc('upload')} required>
             <input
               type="file"
@@ -271,6 +324,8 @@ export function ImportWizard({ locale }: { locale: string }) {
               fd.set('sheetName', review.sheetName);
               fd.set('headerRow', String(review.headerRow));
               fd.set('name', batchName || 'Import');
+              fd.set('projectId', projectId);
+              fd.set('phaseId', phases.some((p) => p.id === phaseId) ? phaseId : '');
               fd.set('locale', locale);
               fd.set('signature', parsed?.signature ?? '');
               for (const [field, index] of Object.entries(review.mapping)) {
