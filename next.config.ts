@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '25mb',
     },
+    // Release builds run on the 6 GB laptop: seven page-data workers at once exhaust
+    // its memory, two do not.
+    ...(process.env.SAZKARA_RELEASE === '1' ? { cpus: 2 } : {}),
   },
 };
 
