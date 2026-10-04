@@ -133,11 +133,25 @@ const inStage = (bin: string) => path.join(STAGE, 'node_modules', ...bin.split('
 step('Generating the database client for Windows + Linux');
 run(node, [inStage('prisma/build/index.js'), 'generate'], { cwd: STAGE, stdio: 'inherit' });
 
+step('Type-checking');
+// Its own step rather than inside `next build`, which would hold the compiler and the
+// bundler in memory together. A type error still stops the release here. The route
+// types (PageProps and friends) come from `next typegen`, which the build would
+// otherwise have generated.
+run(node, [inStage('next/dist/bin/next'), 'typegen'], { cwd: STAGE, stdio: 'inherit' });
+run(node, [inStage('typescript/bin/tsc'), '--noEmit', '-p', '.'], { cwd: STAGE, stdio: 'inherit' });
+
 step('Building the app');
 run(node, [inStage('next/dist/bin/next'), 'build'], {
   cwd: STAGE,
   stdio: 'inherit',
-  env: { ...process.env, SAZKARA_RELEASE: '1', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1' },
+  env: {
+    ...process.env,
+    SAZKARA_RELEASE: '1',
+    SAZKARA_TYPECHECKED: '1',
+    NODE_ENV: 'production',
+    NEXT_TELEMETRY_DISABLED: '1',
+  },
 });
 
 step('Compiling the first-time setup tool');
