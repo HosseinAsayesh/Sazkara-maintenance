@@ -142,7 +142,11 @@ run(node, [inStage('next/dist/bin/next'), 'typegen'], { cwd: STAGE, stdio: 'inhe
 run(node, [inStage('typescript/bin/tsc'), '--noEmit', '-p', '.'], { cwd: STAGE, stdio: 'inherit' });
 
 step('Building the app');
-run(node, [inStage('next/dist/bin/next'), 'build'], {
+// SAZKARA_WEBPACK=1 builds with webpack instead of Turbopack: slower, but its memory is
+// ordinary JS heap that can be collected, where Turbopack's native allocations fail
+// outright once the laptop's memory runs short.
+const bundler = process.env.SAZKARA_WEBPACK === '1' ? ['--webpack'] : [];
+run(node, [inStage('next/dist/bin/next'), 'build', ...bundler], {
   cwd: STAGE,
   stdio: 'inherit',
   env: {
