@@ -11,8 +11,9 @@
  * is left alone, and Prisma can write its Linux engine without fighting the demo server
  * for a locked DLL.
  *
- * Runs on the vendor's Windows laptop. Needs git, tar (built into Windows 10+) and 7-Zip
- * (7z.exe or 7zr.exe) for the escrow archive.
+ * Runs on the vendor's laptop (Windows or Linux). Needs git, tar and 7-Zip (7z) for the
+ * escrow archive. On Linux, prefer `npm run package:release:docker`, which runs this
+ * inside the server's Ubuntu release (scripts/release-docker.sh).
  */
 import { randomBytes, createHash } from 'node:crypto';
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
@@ -61,7 +62,10 @@ function walk(dir: string, visit: (file: string) => void) {
 }
 
 function copy(from: string, to: string) {
-  fs.cpSync(from, to, { recursive: true });
+  // verbatimSymlinks: Next's standalone output links .next/node_modules/<pkg>-<hash> to
+  // ../../node_modules/<pkg>. Without it, cpSync rewrites those to absolute paths into
+  // the temp build folder, which do not exist on the server.
+  fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
 }
 
 /** Shell scripts and unit files must reach Linux with LF endings or they will not run. */
@@ -159,10 +163,14 @@ run(node, [inStage('next/dist/bin/next'), 'build', ...bundler], {
 });
 
 step('Compiling the first-time setup tool');
+// On Windows bin/esbuild is a JS launcher; on Linux esbuild's install swaps it for the
+// native binary, which must be executed directly rather than handed to node.
+const esbuild = inStage('esbuild/bin/esbuild');
+const [esbuildCmd, esbuildPre] = process.platform === 'win32' ? [node, [esbuild]] : [esbuild, []];
 run(
-  node,
+  esbuildCmd,
   [
-    inStage('esbuild/bin/esbuild'),
+    ...esbuildPre,
     'prisma/seed.ts',
     '--bundle',
     '--platform=node',
@@ -257,7 +265,9 @@ console.log(
 // --- the one file to upload to the server ---
 step('Creating the server upload archive');
 const serverTar = `sazkara-server-${version}.tar.gz`;
-run(TAR, ['-czf', serverTar, 'app', 'tools', 'config', 'database'], { cwd: OUT });
+// GNU tar records the builder's uid; the server extracts as root, so store root instead.
+const owner = TAR === 'tar' ? ['--owner=0', '--group=0', '--numeric-owner'] : [];
+run(TAR, ['-czf', serverTar, ...owner, 'app', 'tools', 'config', 'database'], { cwd: OUT });
 
 // --- escrow ---
 step('Creating the encrypted source escrow');

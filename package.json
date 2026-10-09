@@ -23,6 +23,7 @@
     "db:backup": "tsx --conditions=react-server scripts/backup.ts",
     "license": "tsx --conditions=react-server scripts/license.ts",
     "package:release": "tsx scripts/package-release.ts",
+    "package:release:docker": "bash scripts/release-docker.sh",
     "docs:shots": "tsx --conditions=react-server scripts/docs-screenshots.ts",
     "docs:build": "python scripts/build-guide.py",
     "docs:pdf": "tsx --conditions=react-server scripts/guide-pdf.ts"
