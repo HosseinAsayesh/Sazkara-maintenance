@@ -9,6 +9,7 @@ import { DAY_MS } from './dates';
 import {
   JTI_COL,
   LEGACY_PART_COLUMN_COUNT,
+  LEGACY_QUANTITY_FACTOR,
   LEGACY_TO_CURRENT_SORT_ORDER,
 } from './parts';
 import { prisma } from './prisma';
@@ -494,7 +495,9 @@ function readRows(buffer: Buffer): Promise<{
         const sortOrder = cols.sortOrderFor(offset);
         if (sortOrder === null) continue;
         const qty = cellNumber(row.getCell(COL_FIRST_PART + offset).value);
-        if (qty > 0) parts.push({ sortOrder, quantity: Math.round(qty) });
+        // Archives counted wire in 10 cm pieces; the catalogue records centimetres.
+        const factor = LEGACY_QUANTITY_FACTOR[sortOrder] ?? 1;
+        if (qty > 0) parts.push({ sortOrder, quantity: Math.round(qty) * factor });
       }
 
       const qualityRaw = cellText(row.getCell(cols.colQuality));

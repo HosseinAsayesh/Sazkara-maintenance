@@ -67,14 +67,14 @@ export async function AuthShell({
         </div>
 
         <div className="relative">
-          <h2 className="text-[28px] font-bold leading-[1.5] tracking-[-0.01em]">
+          <h2 className="text-[1.75rem] font-bold leading-[1.5] tracking-[-0.01em]">
             {t('brandHeadline')}
           </h2>
           <div className="my-5 h-[3px] w-[46px] bg-teal-400" />
           <p className="max-w-[42ch] text-sm leading-[1.9] text-brand-200">{t('brandBlurb')}</p>
         </div>
 
-        <div className="relative text-[11px] text-ink-400 dir-ltr">sazkara.com</div>
+        <div className="relative text-[0.6875rem] text-ink-400 dir-ltr">sazkara.com</div>
       </aside>
 
       <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-12">
@@ -92,9 +92,9 @@ export async function AuthShell({
             <p className="mt-2.5 text-xs text-[var(--muted)]">{t('tagline')}</p>
           </div>
 
-          <h1 className="text-[22px] font-bold text-brand-900">{title}</h1>
+          <h1 className="text-[1.375rem] font-bold text-brand-900">{title}</h1>
           {subtitle ? (
-            <p className="mt-2 text-[13px] leading-5 text-[var(--muted)]">{subtitle}</p>
+            <p className="mt-2 text-[0.8125rem] leading-5 text-[var(--muted)]">{subtitle}</p>
           ) : null}
 
           <div className="mt-7">{children}</div>

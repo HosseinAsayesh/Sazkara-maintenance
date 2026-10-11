@@ -149,7 +149,7 @@ export function UidAutocomplete({
                   </span>
                   <span
                     className={
-                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+                      'shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium ' +
                       (s.kind === 'ORDER'
                         ? 'bg-emerald-50 text-emerald-700'
                         : 'bg-slate-100 text-slate-600')

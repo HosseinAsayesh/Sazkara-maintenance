@@ -4,7 +4,10 @@
     "shortName": "Sazkara",
     "tagline": "Stand repair tracking and reporting",
     "brandHeadline": "Stand maintenance and repair",
-    "brandBlurb": "Repairs reported from the shop floor, live project progress and a standard JTI export — instead of the paper form and manual Excel entry."
+    "brandBlurb": "Repairs reported from the shop floor, live project progress and a standard JTI export — instead of the paper form and manual Excel entry.",
+    "textSize": "Text size",
+    "textSmaller": "Smaller text",
+    "textLarger": "Larger text"
   },
   "common": {
     "save": "Save",
@@ -98,7 +101,8 @@
     "downloadRequests": "File requests by JTI",
     "queries": "Jti's questions",
     "weeklyReports": "Weekly reports",
-    "uidPhotos": "UID photos"
+    "uidPhotos": "UID photos",
+    "menu": "Menu"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -180,7 +184,7 @@
     "storeManagerName": "Store manager",
     "storePhone": "Store phone",
     "storeAddress": "Store address",
-    "digitalAddressHelp": "Google Maps link for the store",
+    "digitalAddressHelp": "Google Maps link for the store — required. Tap \"Use my location\" or paste the link.",
     "useMyLocation": "Use my location",
     "locationCaptured": "Location captured",
     "locationDenied": "Location access was denied — enter the link manually.",
@@ -219,13 +223,14 @@
       "photosRequired": "All three photos are required",
       "signaturesRequired": "Both signatures are required",
       "reasonRequired": "Pick a reason when no parts were recorded",
-      "qualityRequired": "Pick a quality score",
+      "qualityRequired": "Pick the stand's quality score — even when the stand is healthy.",
       "partsOrReason": "Either record parts, or pick a reason the stand was not repaired",
       "invalidQuantity": "One of the part quantities is not valid.",
       "uidRequired": "A stand UID is required",
       "cityRequired": "This store is not on file yet — pick its city",
       "submitFailed": "Could not submit the report",
-      "extraUidRequired": "Enter the UID for stand {n, number}."
+      "extraUidRequired": "Enter the UID for stand {n, number}.",
+      "digitalAddressRequired": "The store's Google Maps link is required. Tap \"Use my location\" or enter the link."
     },
     "secondStand": "Another stand at this store",
     "addStand": "Add another stand",
@@ -235,7 +240,7 @@
     "extraStandHelp": "If this store has more than one stand, enter each UID and its repair details separately here.",
     "replacedSection": "Replaced parts",
     "repairedSection": "Repaired parts",
-    "cmHint": "in centimetres (steps of 50)",
+    "cmHint": "in centimetres (steps of {step, number})",
     "sharedUidNote": "Stand {n, number} at the same UID ({uid}) — it has no separate UID.",
     "sectionStorePhoto": "Store photo",
     "standPhotosHelp": "Before and after photos of THIS stand",
@@ -249,7 +254,8 @@
     "beforeGateTitle": "The “before” photo comes first",
     "beforeGateBody": "Parts cannot be recorded until the stand's original condition is photographed. If you cannot reach the stand, pick a reason further down this page.",
     "photoStamp": "Photo of the store's stamped form (optional)",
-    "photoStampHelp": "If the store manager stamped the form, photograph it. It appears under its own caption in the evidence PDF."
+    "photoStampHelp": "If the store manager stamped the form, photograph it. It appears under its own caption in the evidence PDF.",
+    "qualityHelpAlways": "Required on every visit, even when the stand is healthy. 0 = very poor, 5 = excellent"
   },
   "reasons": {
     "STAND_HEALTHY": "Stand is healthy",
@@ -300,7 +306,8 @@
     "isTehran": "Apply the Tehran wage rate to this city",
     "cityAdded": "City added",
     "cityExists": "That city already exists",
-    "manageCities": "Manage cities"
+    "manageCities": "Manage cities",
+    "remainingExcel": "Download remaining UIDs as Excel ({n})"
   },
   "imports": {
     "title": "Jti orders",
@@ -533,7 +540,7 @@
   },
   "reRepairs": {
     "title": "Re-repairs",
-    "help": "Stands repaired twice within one project. The same UID recurring in a later project is not a re-repair. These are not counted again in \"stands repaired\", but the parts they consumed still count toward usage totals.",
+    "help": "Return visits to stands already repaired in this project — whether the second visit repaired them or found them healthy. The same UID recurring in a later project is not a re-repair. These count only as re-repairs: they do not affect the repair rate or \"not repaired\", but the parts they consumed still count toward usage totals.",
     "daysAfter": "{days, number} days after the previous repair",
     "empty": "Nothing recorded",
     "gapHeader": "Gap since previous repair",
@@ -542,7 +549,8 @@
     "exportTitle": "Re-repair exports",
     "exportHelp": "Excel and evidence PDFs for re-repairs, separate from the main repairs",
     "previousProject": "History in earlier projects",
-    "previousProjectHelp": "This UID was repaired in a different project; it does not count as a re-repair of this one."
+    "previousProjectHelp": "This UID was repaired in a different project; it does not count as a re-repair of this one.",
+    "resultHeader": "Visit result"
   },
   "settings": {
     "title": "Settings",
@@ -1030,8 +1038,15 @@
       "wrongCurrent": "The current password is not right.",
       "tooShort": "The new password must be at least 8 characters.",
       "mismatch": "The two new passwords do not match.",
-      "sameAsOld": "The new password is the same as the old one."
-    }
+      "sameAsOld": "The new password is the same as the old one.",
+      "nameTooShort": "The name must be at least 2 characters.",
+      "nameTooLong": "The name cannot be longer than 80 characters."
+    },
+    "nameTitle": "My name",
+    "nameHelp": "The name shown at the top of the page, on reports and on approvals.",
+    "name": "Full name",
+    "nameSubmit": "Save name",
+    "nameChanged": "Name saved."
   },
   "uidLookup": {
     "title": "UID photos",
@@ -1056,5 +1071,44 @@
     "close": "Close",
     "prev": "Previous",
     "next": "Next"
+  },
+  "backup": {
+    "title": "Backup",
+    "help": "Take whatever you need as one zip file. Every file name carries its project, phase, UID and date.",
+    "include": "What should the backup include?",
+    "parts": {
+      "projects": "Project list",
+      "orders": "Orders",
+      "uids": "UIDs Excel",
+      "reRepairs": "Re-repairs Excel",
+      "photos": "Photos and signatures"
+    },
+    "partsHelp": {
+      "projects": "One Excel of every project, its phases and figures",
+      "orders": "One Excel per order with all its UIDs and their status",
+      "uids": "Each project's Jti report, one file per phase",
+      "reRepairs": "Each project's re-repairs report, one file per phase",
+      "photos": "Before/after, storefront, stamp and signatures — in project / phase / city / UID folders"
+    },
+    "project": "Project",
+    "allProjects": "All projects",
+    "start": "Create backup",
+    "working": "Working…",
+    "cancel": "Cancel",
+    "preparing": "Preparing the files…",
+    "progress": "{done} of about {total} MB",
+    "files": "{n} files",
+    "done": "Ready — {size} MB",
+    "again": "Download again",
+    "failed": "The backup could not be created. Please try again."
+  },
+  "push": {
+    "on": "Notifications on",
+    "off": "Notifications off",
+    "turnOn": "Turn on notifications on this device — you'll be told when each order finishes",
+    "turnOff": "Turn off notifications on this device",
+    "failed": "Notifications could not be turned on. Please try again.",
+    "unsupported": "This browser does not support notifications. On iPhone, first add the app to the home screen from the Share menu and open it from there.",
+    "denied": "Notifications are blocked for this site in the browser settings. Allow them in the site settings and try again."
   }
 }

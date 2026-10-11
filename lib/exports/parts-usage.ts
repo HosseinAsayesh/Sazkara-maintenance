@@ -74,7 +74,8 @@ export async function buildPartsUsageReport(
   };
 
   const [catalog, usages, repairedStands] = await Promise.all([
-    prisma.partCatalogItem.findMany({ orderBy: { sortOrder: 'asc' } }),
+    // Repair-only work (soldering, gluing...) is never a consumed part.
+    prisma.partCatalogItem.findMany({ where: { repairOnly: false }, orderBy: { sortOrder: 'asc' } }),
     prisma.partUsage.findMany({
       where: { action: 'REPLACED', repairForm: formWhere },
       select: {

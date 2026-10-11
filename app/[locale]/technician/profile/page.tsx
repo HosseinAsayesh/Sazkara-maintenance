@@ -61,7 +61,7 @@ export default async function TechnicianProfilePage({
         <StatCard label={t('stats.totalVisits')} value={stats.totalVisits} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={tc('city')} />
           <div className="p-3">

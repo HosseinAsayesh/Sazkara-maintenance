@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { requireActionManager } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getStorage } from '@/lib/storage';
+import { recomputeReRepairs } from '@/lib/projects';
 import { computeWage } from '@/lib/wages';
 import { isNotRepairedReason } from '@/lib/reasons';
 
@@ -61,6 +62,8 @@ export async function deleteRepairFormAction(
   await prisma.$transaction(async (tx) => {
     // PartUsage and Photo cascade with the form (see the schema relations).
     await tx.repairForm.delete({ where: { id: formId } });
+    // A later visit to this stand may have been a re-repair only because of this one.
+    await recomputeReRepairs(tx, [form.standId]);
 
     // Put the work back on the board: if no other form still covers this uid, the order
     // line goes back to PENDING so it reappears as outstanding.
@@ -139,20 +142,34 @@ export async function updateRepairFormAction(
       parsed.push({ partCatalogItemId, action, quantity });
     }
 
-    // Same catalogue guard the technician's submit path applies: the SMD strips are cut
-    // in whole 50 cm steps and nothing may exceed its unit's ceiling.
+    // Same catalogue guard the technician's submit path applies: the strips and wires
+    // are cut in whole steps and nothing may exceed its unit's ceiling. A quantity the
+    // form already holds is let through as it is: it was recorded under an earlier step
+    // (SMD used to be cut in 50 cm) and re-saving the form must not reject it.
     if (parsed.length) {
-      const catalogue = await prisma.partCatalogItem.findMany({
-        where: { id: { in: parsed.map((p) => p.partCatalogItemId) } },
-        select: { id: true, unit: true, quantityStep: true },
-      });
+      const [catalogue, recorded] = await Promise.all([
+        prisma.partCatalogItem.findMany({
+          where: { id: { in: parsed.map((p) => p.partCatalogItemId) } },
+          select: { id: true, unit: true, quantityStep: true },
+        }),
+        prisma.partUsage.findMany({
+          where: { repairFormId: formId },
+          select: { partCatalogItemId: true, action: true, quantity: true },
+        }),
+      ]);
       const byId = new Map(catalogue.map((c) => [c.id, c]));
+      const unchanged = new Set(
+        recorded.map((u) => `${u.partCatalogItemId}:${u.action}:${u.quantity}`),
+      );
       for (const entry of parsed) {
         const item = byId.get(entry.partCatalogItemId);
         if (!item) return { error: 'generic' };
         const step = Math.max(1, item.quantityStep);
         const max = item.unit === 'CENTIMETER' ? 5000 : 99;
-        if (entry.quantity % step !== 0 || entry.quantity > max) {
+        const asRecorded = unchanged.has(
+          `${entry.partCatalogItemId}:${entry.action}:${entry.quantity}`,
+        );
+        if ((!asRecorded && entry.quantity % step !== 0) || entry.quantity > max) {
           return { error: 'invalidQuantity' };
         }
       }
@@ -222,7 +239,8 @@ export async function updateRepairFormAction(
         storePhone: text('storePhone'),
         digitalAddress: text('digitalAddress'),
         timeSpentMinutes: num('timeSpentMinutes'),
-        qualityScore: outcome === 'REPAIRED' ? quality : null,
+        // Recorded on every visit now, healthy or not (lib/photo-rules.ts).
+        qualityScore: quality,
         notes: text('notes'),
         outcome,
         notRepairedReason:
@@ -234,6 +252,12 @@ export async function updateRepairFormAction(
         wageRateApplied: wage.rate,
       },
     });
+
+    // A changed date or outcome can make this visit — or a later one at the same
+    // stand — a re-repair, or stop it being one.
+    if (date.getTime() !== existing.date.getTime() || outcome !== existing.outcome) {
+      await recomputeReRepairs(tx, [existing.standId]);
+    }
   });
 
   revalidateForm(locale);

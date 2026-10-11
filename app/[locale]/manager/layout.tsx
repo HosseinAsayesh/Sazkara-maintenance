@@ -36,6 +36,7 @@ export default async function ManagerLayout({
       userName={user.name}
       userSubtitle={user.phone}
       isManager
+      notifications
       nav={[
         { href: '/manager', label: t('dashboard') },
         { href: '/manager/projects', label: t('projects') },

@@ -174,8 +174,15 @@ async function main() {
 
   /* ---------------------------------------------------------------- */
   section('Seed data');
-  const parts = await prisma.partCatalogItem.findMany({ orderBy: { sortOrder: 'asc' } });
+  const catalogue = await prisma.partCatalogItem.findMany({ orderBy: { sortOrder: 'asc' } });
+  // The thirty parts; the repair-only work items (soldering, gluing...) follow them.
+  const parts = catalogue.filter((p) => !p.repairOnly);
+  const repairServices = catalogue.filter((p) => p.repairOnly);
   assert.equal(parts.length, 30);
+  assert.deepEqual(
+    repairServices.map((p) => p.nameFa),
+    ['رفع قطعی برق ورودی', 'چسب کاری قطعات استند', 'لحیم کاری'],
+  );
   assert.equal(parts[0].nameFa, 'پلکسی شلف');
   assert.equal(parts[29].nameFa, 'درب');
   ok('30-part catalogue in export order', `${parts[0].nameFa} … ${parts[29].nameFa}`);
@@ -373,6 +380,7 @@ async function main() {
   assert.equal(notRepaired.wage.amount, 50000);
   assert.equal(notRepaired.wage.tier, 0);
   ok('no parts -> NOT_REPAIRED with a fixed reason', notRepaired.form.notRepairedReason!);
+  ok('a shut shop needs no quality score (no stand to score)');
   ok('unsuccessful visit paid the flat call-out rate', String(notRepaired.wage.amount));
 
   await assert.rejects(
@@ -1001,13 +1009,19 @@ async function main() {
   ok('re-repair evidence pack covers only the repeats', `${reRepairPdf.standCount} stand`);
 
   /* ---------------------------------------------------------------- */
-  section('SMD strips measured in centimetres');
+  section('SMD strips and wires measured in centimetres');
   const smdWhite = parts.find((p) => p.nameFa === 'نوار SMD سفید')!;
+  const wire1 = parts.find((p) => p.nameFa === 'سیم نمره ۱')!;
   assert.equal(smdWhite.unit, 'CENTIMETER');
-  assert.equal(smdWhite.quantityStep, 50);
-  const pieceParts = parts.filter((p) => p.unit === 'CENTIMETER');
-  assert.equal(pieceParts.length, 2); // white + blue strip, nothing else
-  ok('only the two SMD strips are centimetre-measured', `step ${smdWhite.quantityStep} cm`);
+  assert.equal(smdWhite.quantityStep, 30);
+  assert.equal(wire1.unit, 'CENTIMETER');
+  assert.equal(wire1.quantityStep, 10);
+  const cmParts = parts.filter((p) => p.unit === 'CENTIMETER');
+  assert.deepEqual(
+    cmParts.map((p) => p.nameFa).sort(),
+    ['سیم نمره ۰.۵', 'سیم نمره ۱', 'نوار SMD آبی', 'نوار SMD سفید'].sort(),
+  );
+  ok('SMD strips (30 cm) and both wires (10 cm) are centimetre-measured');
 
   const smdForm = await createRepairForm({
     uid: 'SZ7777',
@@ -1037,7 +1051,22 @@ async function main() {
       }),
     /INVALID_QUANTITY/,
   );
-  ok('a non-multiple-of-50 cut is rejected');
+  ok('a non-multiple-of-30 cut is rejected');
+
+  await assert.rejects(
+    () =>
+      createRepairForm({
+        uid: 'SZ7778',
+        technicianId: tech.id,
+        cityId: isfahan.id,
+        parts: [{ partCatalogItemId: wire1.id, action: 'REPLACED', quantity: 15 }],
+        qualityScore: 4,
+        photos,
+        ...sigs,
+      }),
+    /INVALID_QUANTITY/,
+  );
+  ok('wire must come in whole 10 cm steps');
 
   // The centimetre value must reach the Jti sheet as-is, in the strip's own column.
   const smdRows = await collectJtiRows({ scope: 'ALL' });
@@ -1508,6 +1537,173 @@ async function main() {
   await prisma.stand.deleteMany({ where: { store: { uid: { in: ['MOVE1', 'MOVE2'] } } } });
   await prisma.store.deleteMany({ where: { uid: { in: ['MOVE1', 'MOVE2'] } } });
   await prisma.project.deleteMany({ where: { id: { in: [moveProject.id, otherProject.id] } } });
+
+  /* ---------------------------------------------------------------- */
+  // Client, 2026-10: a call-back to a stand already repaired in this project is a
+  // re-repair whatever it finds — counted, listed and exported only as a re-repair.
+  section('a healthy call-back is a re-repair');
+  const callbackCity = isfahan;
+  const firstVisit = await createRepairForm({
+    uid: 'HV0001',
+    technicianId: tech.id,
+    cityId: callbackCity.id,
+    storeName: 'فروشگاه بازدید مجدد',
+    parts: [{ partCatalogItemId: fuse.id, action: 'REPLACED', quantity: 1 }],
+    qualityScore: 4,
+    photos,
+    ...sigs,
+  });
+  assert.equal(firstVisit.isReRepair, false);
+  const beforeCallback = await getOverview({});
+
+  await assert.rejects(
+    () =>
+      createRepairForm({
+        uid: 'HV0001',
+        technicianId: tech.id,
+        cityId: callbackCity.id,
+        parts: [],
+        notRepairedReason: 'STAND_HEALTHY',
+        photos,
+        ...sigs,
+      }),
+    /QUALITY_REQUIRED/,
+  );
+  ok('a healthy stand still needs its quality score');
+
+  const callback = await createRepairForm({
+    uid: 'HV0001',
+    technicianId: tech.id,
+    cityId: callbackCity.id,
+    parts: [],
+    notRepairedReason: 'STAND_HEALTHY',
+    qualityScore: 3,
+    photos,
+    ...sigs,
+  });
+  assert.equal(callback.outcome, 'NOT_REPAIRED');
+  assert.equal(callback.isReRepair, true);
+  assert.equal(callback.form.previousFormId, firstVisit.form.id);
+  assert.equal(callback.form.qualityScore, 3);
+  ok('healthy call-back flagged as a re-repair of the earlier repair');
+  ok('its quality score is kept', String(callback.form.qualityScore));
+
+  const afterCallback = await getOverview({});
+  assert.equal(afterCallback.totals.reRepairs, beforeCallback.totals.reRepairs + 1);
+  assert.equal(afterCallback.totals.notRepaired, beforeCallback.totals.notRepaired);
+  assert.equal(afterCallback.totals.repaired, beforeCallback.totals.repaired);
+  assert.equal(afterCallback.totals.successRate, beforeCallback.totals.successRate);
+  ok('dashboard counts it only under re-repairs; success rate unchanged');
+
+  const mainRows = await collectJtiRows({ scope: 'MAIN' });
+  const reRows = await collectJtiRows({ scope: 'RE_REPAIR' });
+  assert.ok(!mainRows.some((r) => r.formCode === callback.form.formCode));
+  assert.ok(reRows.some((r) => r.formCode === callback.form.formCode));
+  ok('exported with the re-repairs, not in the main sheet');
+
+  // Deleting the earlier repair leaves nothing for the call-back to follow.
+  const { recomputeReRepairs: recompute } = await import('../lib/projects');
+  await prisma.repairForm.update({
+    where: { id: firstVisit.form.id },
+    data: { projectId: null },
+  });
+  await recompute(prisma, [callback.form.standId]);
+  const recomputed = await prisma.repairForm.findUniqueOrThrow({ where: { id: callback.form.id } });
+  assert.equal(recomputed.isReRepair, false);
+  ok('recompute clears it once the earlier repair is no longer in the project');
+
+  /* ---------------------------------------------------------------- */
+  section('repair work without a part');
+  const solder = repairServices.find((p) => p.nameFa === 'لحیم کاری')!;
+  const serviced = await createRepairForm({
+    uid: 'SV0001',
+    technicianId: tech.id,
+    cityId: callbackCity.id,
+    storeName: 'فروشگاه لحیم',
+    parts: [{ partCatalogItemId: solder.id, action: 'REPAIRED', quantity: 1 }],
+    qualityScore: 5,
+    photos,
+    ...sigs,
+  });
+  assert.equal(serviced.outcome, 'REPAIRED');
+  const servicedRow = (await collectJtiRows({ scope: 'ALL' })).find(
+    (r) => r.formCode === serviced.form.formCode,
+  )!;
+  assert.ok(servicedRow.parts.every((q) => q === 0));
+  assert.ok(servicedRow.storeDetails.includes('لحیم کاری'));
+  ok('soldering counts as a repair and is described, never billed as a part', servicedRow.storeDetails);
+  const servicedUsage = await buildPartsUsageReport({});
+  assert.ok(!servicedUsage.rows.some((r) => r.nameFa === 'لحیم کاری' && r.total > 0));
+  ok('repair work stays out of the parts bill');
+
+  /* ---------------------------------------------------------------- */
+  section('remaining UIDs, backup zip and order-finished notice');
+  {
+    const { collectRemainingRows, buildRemainingWorkbook } = await import('../lib/exports/remaining');
+    const { planBackup, streamBackup } = await import('../lib/backup');
+    const { notifyFinishedOrders } = await import('../lib/push');
+    const JSZip = (await import('jszip')).default;
+
+    const order = await prisma.importBatch.create({
+      data: {
+        name: 'سفارش آزمایشی',
+        source: 'JTI_EXCEL',
+        importedById: manager.id,
+        projectId: activeProject.id,
+        lines: { create: [{ uid: 'RM0001', cityName: isfahan.name }, { uid: 'RM0002', cityName: isfahan.name }] },
+      },
+    });
+
+    const remaining = await collectRemainingRows({ projectId: activeProject.id });
+    assert.ok(remaining.some((r) => r.uid === 'RM0001'));
+    const sheet = new ExcelJS.Workbook();
+    await sheet.xlsx.load((await buildRemainingWorkbook(remaining, 'test')) as unknown as ArrayBuffer);
+    assert.equal(sheet.worksheets[0].getRow(3).getCell(2).value, 'UID');
+    ok('remaining UIDs export lists the outstanding order lines', `${remaining.length} rows`);
+
+    // One visit closes RM0001; the order is not finished until RM0002 is done too.
+    const visit = (uid: string) =>
+      createRepairForm({
+        uid,
+        technicianId: tech.id,
+        cityId: isfahan.id,
+        parts: [{ partCatalogItemId: fuse.id, action: 'REPLACED', quantity: 1 }],
+        qualityScore: 4,
+        photos,
+        ...sigs,
+      });
+    await visit('RM0001');
+    await notifyFinishedOrders('RM0001');
+    let claimed = await prisma.importBatch.findUniqueOrThrow({ where: { id: order.id } });
+    assert.equal(claimed.completedNotifiedAt, null);
+    await visit('RM0002');
+    await notifyFinishedOrders('RM0002');
+    claimed = await prisma.importBatch.findUniqueOrThrow({ where: { id: order.id } });
+    assert.ok(claimed.completedNotifiedAt);
+    const firstClaim = claimed.completedNotifiedAt!.getTime();
+    await notifyFinishedOrders('RM0002');
+    claimed = await prisma.importBatch.findUniqueOrThrow({ where: { id: order.id } });
+    assert.equal(claimed.completedNotifiedAt!.getTime(), firstClaim);
+    ok('an order is announced once, when its last UID is done');
+
+    const plan = await planBackup({
+      parts: new Set(['projects', 'orders', 'uids', 'reRepairs', 'photos'] as const),
+      projectId: activeProject.id,
+    });
+    const chunks: Buffer[] = [];
+    for await (const chunk of streamBackup(plan)) chunks.push(chunk as Buffer);
+    const zipBytes = Buffer.concat(chunks);
+    const zip = await JSZip.loadAsync(zipBytes);
+    const names = Object.keys(zip.files);
+    assert.ok(names.some((n) => n.endsWith('/راهنما.txt')));
+    assert.ok(names.some((n) => n.endsWith('/پروژه‌ها.xlsx')));
+    assert.ok(names.some((n) => n.includes('/سفارش‌ها/سفارش - سفارش آزمایشی')));
+    assert.ok(names.some((n) => n.includes(`/UIDها - ${activeProject.name}`)));
+    // Within a few percent: the browser draws its progress ring against this.
+    assert.ok(Math.abs(zipBytes.length - plan.estimatedBytes) / zipBytes.length < 0.05);
+    ok('backup zip holds the readme, project list, orders and UID sheets', `${names.length} entries`);
+    ok('backup size estimate is close to the real size', `${plan.estimatedBytes} vs ${zipBytes.length}`);
+  }
 
   /* ---------------------------------------------------------------- */
   section('normalisation guards');

@@ -12,6 +12,7 @@ function toReason(value: FormDataEntryValue | null): NotRepairedReason | null {
   return isNotRepairedReason(s) ? s : null;
 }
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 
 import { getCurrentUser } from '@/lib/auth';
 import { localDayKey } from '@/lib/dates';
@@ -22,6 +23,7 @@ import {
   type PhotoInput,
 } from '@/lib/repair-forms';
 import { getStorage } from '@/lib/storage';
+import { notifyFinishedOrders } from '@/lib/push';
 import { isNotRepairedReason } from '@/lib/reasons';
 
 export interface RepairFormState {
@@ -79,6 +81,13 @@ export async function submitRepairFormAction(
 
   const locale = String(formData.get('locale') || 'fa');
   const dayPrefix = localDayKey(new Date());
+
+  // Checked before any upload: the store's map link is required on every report
+  // (client, 2026-10), and finding that out after the photos have gone up is a rejection
+  // a technician in a shop cannot easily act on.
+  if (!String(formData.get('digitalAddress') ?? '').trim()) {
+    return { error: 'digitalAddressRequired' };
+  }
 
   try {
     const parts = parsePartEntries(formData.getAll('parts'));
@@ -197,6 +206,15 @@ export async function submitRepairFormAction(
 
       extraFormCodes.push(extra.form.formCode);
     }
+
+    // If this visit closed the last outstanding uid of an order, tell the manager and
+    // the crew leads — after the response, so a slow push service never delays the
+    // technician's confirmation.
+    after(() =>
+      notifyFinishedOrders(result.form.uid).catch((err) =>
+        console.error('order-finished notification failed', err),
+      ),
+    );
 
     // The manager dashboard must reflect a submission immediately (§7 "near-real-time").
     revalidatePath(`/${locale}/manager`, 'layout');

@@ -98,7 +98,6 @@ type FormWithParts = Awaited<ReturnType<typeof loadForms>>[number];
 async function loadForms(filters: JtiExportFilters) {
   return prisma.repairForm.findMany({
     where: {
-      ...(filters.scope === 'RE_REPAIR' ? { outcome: 'REPAIRED' as const } : {}),
       ...(filters.scope === 'RE_REPAIR'
         ? { isReRepair: true }
         : filters.scope === 'ALL'
@@ -119,7 +118,11 @@ async function loadForms(filters: JtiExportFilters) {
     include: {
       city: { select: { id: true, name: true } },
       technician: { select: { technicianCode: true } },
-      parts: { include: { part: { select: { nameFa: true, sortOrder: true, unit: true } } } },
+      parts: {
+        include: {
+          part: { select: { nameFa: true, sortOrder: true, unit: true, repairOnly: true } },
+        },
+      },
     },
   });
 }
@@ -135,9 +138,11 @@ function describeStand(form: FormWithParts): string {
   // actually chosen.
   const repaired = form.parts
     .filter((p) => p.action === 'REPAIRED')
-    .map(
-      (p) =>
-        `اصلاح ${qty(p.quantity, p.part.unit)} ${REPAIR_LABEL_BY_CANONICAL_FA.get(p.part.nameFa) ?? p.part.nameFa}`,
+    .map((p) =>
+      // Work with no part (soldering, gluing...) is named as it is, not counted.
+      p.part.repairOnly
+        ? p.part.nameFa
+        : `اصلاح ${qty(p.quantity, p.part.unit)} ${REPAIR_LABEL_BY_CANONICAL_FA.get(p.part.nameFa) ?? p.part.nameFa}`,
     );
   const work = [...replaced, ...repaired].join(' + ');
   const notes = form.notes?.trim();

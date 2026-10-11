@@ -103,18 +103,16 @@ export default async function LeadDashboard({
     const row = tally.get(f.technicianId);
     if (!row) continue;
     row.uids.add(f.uid);
-    if (f.outcome === 'REPAIRED') {
-      if (f.isReRepair) row.reRepairs++;
-      else row.repaired++;
-    } else {
-      row.notRepaired++;
-    }
+    // A re-repair counts only as one, whatever the visit found (§6.3).
+    if (f.isReRepair) row.reRepairs++;
+    else if (f.outcome === 'REPAIRED') row.repaired++;
+    else row.notRepaired++;
   }
 
   const totals = {
     repaired: all.filter((f) => f.outcome === 'REPAIRED' && !f.isReRepair).length,
     reRepairs: all.filter((f) => f.isReRepair).length,
-    notRepaired: all.filter((f) => f.outcome === 'NOT_REPAIRED').length,
+    notRepaired: all.filter((f) => f.outcome === 'NOT_REPAIRED' && !f.isReRepair).length,
     uids: new Set(all.map((f) => f.uid)).size,
   };
 

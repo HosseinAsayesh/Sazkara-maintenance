@@ -40,6 +40,20 @@ export function requiredStandPhotos(
   return ['BEFORE'];
 }
 
+/**
+ * Whether the stand's quality score (0-5) must be recorded. Required on every visit
+ * where the technician stood in front of the stand — healthy, revisited or repaired
+ * alike — because a stand can lose quality between visits while still working. Only
+ * an unreachable stand (gone, shop shut, wrong address) has nothing to score.
+ */
+export function needsQualityScore(
+  outcome: 'REPAIRED' | 'NOT_REPAIRED',
+  notRepairedReason?: string | null,
+): boolean {
+  if (outcome === 'REPAIRED') return true;
+  return !(notRepairedReason && STAND_UNREACHABLE.has(notRepairedReason));
+}
+
 /** True when the "after" tile should be shown at all. */
 export function needsAfterPhoto(outcome: 'REPAIRED' | 'NOT_REPAIRED'): boolean {
   return outcome === 'REPAIRED';

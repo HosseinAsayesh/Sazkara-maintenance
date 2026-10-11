@@ -28,14 +28,26 @@ export interface PartCatalogSeed {
 }
 
 /**
- * The SMD light strips are cut from a reel rather than fitted as units: they are
- * consumed in centimetres, in 50 cm increments (50, 100, 150, 200, ...). Everything else
- * is a discrete piece. Keyed by Persian name because that is the catalogue's identity.
+ * Parts cut to length rather than fitted as units, with the length one tap adds: the SMD
+ * light strips in 30 cm cuts, the wires in 10 cm (client, 2026-10 — the strips were
+ * 50 cm cuts and the wires whole pieces before). Everything else is a discrete piece.
+ * Keyed by Persian name because that is the catalogue's identity.
  */
-export const CENTIMETER_PARTS = new Set(['نوار SMD سفید', 'نوار SMD آبی']);
+export const CENTIMETER_STEPS: Record<string, number> = {
+  'سیم نمره ۱': 10,
+  'سیم نمره ۰.۵': 10,
+  'نوار SMD سفید': 30,
+  'نوار SMD آبی': 30,
+};
 
-/** How much one tap adds for a centimetre-measured part. */
-export const CENTIMETER_STEP = 50;
+export const CENTIMETER_PARTS = new Set(Object.keys(CENTIMETER_STEPS));
+
+/**
+ * Archive sheets (pre-system, and this system's own exports before 2026-10) counted
+ * wire in pieces of 10 cm. Their quantities are multiplied by this on import so they
+ * land in the centimetres the catalogue now records. Keyed by catalogue sortOrder.
+ */
+export const LEGACY_QUANTITY_FACTOR: Record<number, number> = { 5: 10, 6: 10 };
 
 const NAMES: Array<[fa: string, en: string]> = [
   ['پلکسی شلف', 'Plexiglass shelf'],
@@ -74,15 +86,15 @@ const NAMES: Array<[fa: string, en: string]> = [
 
 export const PART_CATALOG: PartCatalogSeed[] = NAMES.map(([nameFa, nameEn], i) => {
   const exportColumn = PART_EXPORT_FIRST_COLUMN + i;
-  const isCm = CENTIMETER_PARTS.has(nameFa);
+  const cmStep = CENTIMETER_STEPS[nameFa];
   return {
     sortOrder: i + 1,
     exportColumn,
     exportColumnKey: `col${String(exportColumn).padStart(2, '0')}`,
     nameFa,
     nameEn,
-    unit: isCm ? 'CENTIMETER' : 'PIECE',
-    quantityStep: isCm ? CENTIMETER_STEP : 1,
+    unit: cmStep ? 'CENTIMETER' : 'PIECE',
+    quantityStep: cmStep ?? 1,
   };
 });
 
@@ -269,6 +281,19 @@ if (new Set(Object.values(LEGACY_TO_CURRENT_SORT_ORDER)).size !== LEGACY_PART_CO
  * what the technician actually chose — printing "کلید گرد" would assert a shape nobody
  * recorded. The distinction is lost only for repairs, where no part is billed.
  */
+/**
+ * Repair work that involves no part at all (client, 2026-10). Each is a catalogue row of
+ * its own, added by migration with `repairOnly` set, so a technician's tap is stored
+ * like any other repaired item and reads back in the Store Details column — but it is
+ * never offered as a replaced part and never reaches the part columns or the parts bill.
+ * Their sortOrders follow the thirty parts; CATALOG_TO_JTI_PART deliberately has none.
+ */
+export const REPAIR_SERVICES = [
+  { nameFa: 'رفع قطعی برق ورودی', nameEn: 'Restore incoming power', sortOrder: 31 },
+  { nameFa: 'چسب کاری قطعات استند', nameEn: 'Glue stand parts', sortOrder: 32 },
+  { nameFa: 'لحیم کاری', nameEn: 'Soldering', sortOrder: 33 },
+] as const;
+
 export interface RepairPickerGroup {
   /** Shown on the button, and printed in column 37. */
   labelFa: string;
@@ -290,7 +315,8 @@ export const REPAIR_PICKER_GROUPS: RepairPickerGroup[] = [
     canonicalFa: 'کابل ۳/۶۰',
     membersFa: ['کابل ۳/۶۰', 'سیم آداپتور'],
   },
-  { labelFa: 'میکروسوئیچ', labelEn: 'Micro-switch', canonicalFa: 'میکروسوئیچ', membersFa: ['میکروسوئیچ'] },
+  // Repairing a micro-switch in place means taking it out of the circuit (client, 2026-10).
+  { labelFa: 'حذف میکروسوئیچ', labelEn: 'Remove micro-switch', canonicalFa: 'میکروسوئیچ', membersFa: ['میکروسوئیچ'] },
   { labelFa: 'فنر', labelEn: 'Spring', canonicalFa: 'فنر', membersFa: ['فنر'] },
   {
     labelFa: 'درب',
@@ -305,6 +331,13 @@ export const REPAIR_PICKER_GROUPS: RepairPickerGroup[] = [
     membersFa: ['کلید گرد', 'کلید مستطیلی'],
   },
   { labelFa: 'برد استند', labelEn: 'Stand board (PCB)', canonicalFa: 'برد استند', membersFa: ['برد استند'] },
+  // Work rather than parts: catalogue rows of their own, marked repairOnly (see below).
+  ...REPAIR_SERVICES.map((s) => ({
+    labelFa: s.nameFa,
+    labelEn: s.nameEn,
+    canonicalFa: s.nameFa,
+    membersFa: [s.nameFa],
+  })),
 ];
 
 /** Canonical Persian name -> the label column 37 should print for a REPAIRED part. */

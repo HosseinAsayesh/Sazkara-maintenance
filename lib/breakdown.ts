@@ -123,10 +123,12 @@ function formWhere(metric: BreakdownMetric, filters: RangeFilters) {
     // must too, or the list will out-count the card it was opened from.
     case 'repaired':
       return { ...base, outcome: 'REPAIRED' as const, isReRepair: false };
+    // Every re-repair, healthy call-backs included, and only those: the card counts a
+    // re-repair there and nowhere else.
     case 'reRepairs':
-      return { ...base, outcome: 'REPAIRED' as const, isReRepair: true };
+      return { ...base, isReRepair: true };
     case 'notRepaired':
-      return { ...base, outcome: 'NOT_REPAIRED' as const };
+      return { ...base, outcome: 'NOT_REPAIRED' as const, isReRepair: false };
     // A store's second and third stands. The first stand of every store is excluded, so
     // this lists the extra cabinets rather than the visits.
     case 'subStands':

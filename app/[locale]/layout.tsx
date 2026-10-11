@@ -3,6 +3,7 @@ import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
+import { FONT_SCALE_SCRIPT } from '@/components/FontSizeControl';
 import { ServiceWorker } from '@/components/ServiceWorker';
 import { directionOf, routing } from '@/i18n/routing';
 import '../globals.css';
@@ -55,6 +56,10 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
       className="h-full antialiased"
       suppressHydrationWarning
     >
+      <head>
+        {/* The text size this device chose (FontSizeControl), applied before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: FONT_SCALE_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
         <ServiceWorker />

@@ -187,7 +187,7 @@ export async function buildWorkWorkbook(
   // A short summary block under the table: the counts a lead actually reports upward.
   const repaired = rows.filter((r) => r.outcome === 'REPAIRED' && !r.isReRepair).length;
   const reRepairs = rows.filter((r) => r.isReRepair).length;
-  const notRepaired = rows.filter((r) => r.outcome === 'NOT_REPAIRED').length;
+  const notRepaired = rows.filter((r) => r.outcome === 'NOT_REPAIRED' && !r.isReRepair).length;
   const uids = new Set(rows.map((r) => r.uid)).size;
 
   sheet.addRow([]);

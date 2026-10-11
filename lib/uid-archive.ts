@@ -118,13 +118,11 @@ export async function listUidArchive(
     row.stands.add(form.standIndex);
     if (form.technician.technicianCode) row.techs.add(form.technician.technicianCode);
 
-    if (form.outcome === 'REPAIRED') {
-      // A re-repair is not a newly repaired stand (§6.3) — counted in its own column.
-      if (form.isReRepair) row.reRepairs++;
-      else row.repaired++;
-    } else {
-      row.notRepaired++;
-    }
+    // A re-repair is not a newly repaired stand (§6.3) — counted in its own column,
+    // healthy call-backs included.
+    if (form.isReRepair) row.reRepairs++;
+    else if (form.outcome === 'REPAIRED') row.repaired++;
+    else row.notRepaired++;
 
     // §6.8 — only replaced parts are consumed inventory.
     for (const usage of form.parts) {

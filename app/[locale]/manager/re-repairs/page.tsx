@@ -49,9 +49,11 @@ export default async function ReRepairsPage({
   const phaseId = typeof sp.phaseId === 'string' ? sp.phaseId : undefined;
   const range = localDayRange(from, to);
 
-  const [t, tc] = await Promise.all([
+  const [t, tc, to_, tr] = await Promise.all([
     getTranslations({ locale, namespace: 'reRepairs' }),
     getTranslations({ locale, namespace: 'common' }),
+    getTranslations({ locale, namespace: 'outcome' }),
+    getTranslations({ locale, namespace: 'reasons' }),
   ]);
 
   const [forms, cities, projects] = await Promise.all([
@@ -126,6 +128,7 @@ export default async function ReRepairsPage({
                     <Th>{tc('technician')}</Th>
                     <Th>{tc('date')}</Th>
                     <Th>{t('gapHeader')}</Th>
+                    <Th>{t('resultHeader')}</Th>
                     <Th>{tc('total')}</Th>
                   </tr>
                 </thead>
@@ -172,6 +175,18 @@ export default async function ReRepairsPage({
                               <Badge tone="danger">{t('quick')}</Badge>
                             </span>
                           ) : null}
+                        </Td>
+                        {/* A call-back may find the stand healthy; it is still a re-repair. */}
+                        <Td>
+                          {form.outcome === 'REPAIRED' ? (
+                            <Badge tone="success">{to_('REPAIRED')}</Badge>
+                          ) : (
+                            <Badge tone="warning">
+                              {form.notRepairedReason
+                                ? tr(form.notRepairedReason)
+                                : to_('NOT_REPAIRED')}
+                            </Badge>
+                          )}
                         </Td>
                         <Td className="tabular-nums">{partsCount}</Td>
                       </tr>

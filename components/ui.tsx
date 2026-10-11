@@ -191,7 +191,7 @@ export function StatCard({
     <>
       <div className="text-xs font-medium text-[var(--muted)]">{label}</div>
       <div className={clsx('mt-1 text-3xl font-bold tabular-nums', accent[tone])}>{value}</div>
-      {hint ? <div className="mt-0.5 text-[11px] text-[var(--muted)]">{hint}</div> : null}
+      {hint ? <div className="mt-0.5 text-[0.6875rem] text-[var(--muted)]">{hint}</div> : null}
     </>
   );
 

@@ -92,3 +92,40 @@ self.addEventListener('fetch', (event) => {
     }),
   );
 });
+
+/*
+ * Push notifications (lib/push.ts): "an order is finished" for managers and crew leads.
+ * The payload is JSON { title, body, url, tag }; tapping opens (or focuses) that page.
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'سازکارا', body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'سازکارا', {
+      body: data.body || '',
+      tag: data.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/maskable-192.png',
+      dir: 'rtl',
+      lang: 'fa',
+      data: { url: data.url || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const w of windows) {
+        if (w.url === target && 'focus' in w) return w.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

@@ -17,7 +17,7 @@ import { ExtraPhotoInput, PhotoInput } from './PhotoInput';
 import { SignaturePad, type SignaturePadHandle } from './SignaturePad';
 import { StandTabs } from './StandTabs';
 import { repairShortlist } from '@/lib/parts';
-import { requiredStandPhotos } from '@/lib/photo-rules';
+import { needsQualityScore, requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from './ui';
 import { NOT_REPAIRED_REASONS } from '@/lib/reasons';
 
@@ -93,6 +93,8 @@ export function RepairFormClient(props: RepairFormProps) {
   const outcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
 
   const standPhotos = requiredStandPhotos(outcome, reason || null);
+  // Scored on every visit to a reachable stand, healthy ones included (lib/photo-rules.ts).
+  const qualityNeeded = needsQualityScore(outcome, reason || null);
 
   /**
    * §4.4 — photograph the stand BEFORE touching it.
@@ -189,8 +191,14 @@ export function RepairFormClient(props: RepairFormProps) {
       failOn(0, t('errors.partsOrReason'));
       return;
     }
-    if (hasParts && quality === null) {
+    if (qualityNeeded && quality === null) {
       failOn(0, t('errors.qualityRequired'));
+      return;
+    }
+    // The map link is how the next visit finds the shop; it may not be left out.
+    if (!digitalAddress.trim()) {
+      setGeoError(t('errors.digitalAddressRequired'));
+      setClientError(t('errors.digitalAddressRequired'));
       return;
     }
     // Cheap, and checked before the photos: the server rejects a cityless form for an
@@ -225,11 +233,11 @@ export function RepairFormClient(props: RepairFormProps) {
         failOn(i + 1, t('errors.partsOrReason'));
         return;
       }
-      if (standHasParts && stand.quality === null) {
+      const standOutcome = standHasParts ? 'REPAIRED' : 'NOT_REPAIRED';
+      if (needsQualityScore(standOutcome, stand.reason || null) && stand.quality === null) {
         failOn(i + 1, t('errors.qualityRequired'));
         return;
       }
-      const standOutcome = standHasParts ? 'REPAIRED' : 'NOT_REPAIRED';
       for (const kind of requiredStandPhotos(standOutcome, stand.reason || null)) {
         const field = kind === 'BEFORE' ? `extra_${i}_photoBefore` : `extra_${i}_photoAfter`;
         const file = formData.get(field);
@@ -253,7 +261,7 @@ export function RepairFormClient(props: RepairFormProps) {
     formData.set('storeManagerSignature', mgrBlob, 'manager-signature.png');
     formData.set('digitalAddress', digitalAddress);
     formData.set('extraStandCount', String(extraStands.length));
-    if (quality !== null) formData.set('qualityScore', String(quality));
+    if (quality !== null && qualityNeeded) formData.set('qualityScore', String(quality));
 
     startTransition(() => formAction(formData));
   };
@@ -298,9 +306,9 @@ export function RepairFormClient(props: RepairFormProps) {
           leads the screen because it is the one thing the technician checks against the
           sticker in front of them before entering anything else. */}
       <Card className="p-4">
-        <div className="text-[11px] text-[var(--muted)]">{tc('uid')}</div>
+        <div className="text-[0.6875rem] text-[var(--muted)]">{tc('uid')}</div>
         <div className="mt-1 flex items-center justify-between gap-3">
-          <div className="dir-ltr text-[26px] font-bold leading-tight tracking-[0.01em]">
+          <div className="dir-ltr text-[1.625rem] font-bold leading-tight tracking-[0.01em]">
             {props.uid}
           </div>
           <span className="shrink-0 rounded-full bg-teal-100 px-3 py-1 text-xs font-medium text-teal-900">
@@ -308,7 +316,7 @@ export function RepairFormClient(props: RepairFormProps) {
           </span>
         </div>
         {props.prefill.storeName || props.prefill.storeAddress ? (
-          <div className="mt-2 text-[13px] text-ink-500">
+          <div className="mt-2 text-[0.8125rem] text-ink-500">
             {[props.prefill.storeName, props.prefill.storeAddress].filter(Boolean).join(' — ')}
           </div>
         ) : null}
@@ -368,11 +376,20 @@ export function RepairFormClient(props: RepairFormProps) {
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Field label={tc('digitalAddress')} hint={t('digitalAddressHelp')} error={geoError}>
+            <Field
+              label={tc('digitalAddress')}
+              hint={t('digitalAddressHelp')}
+              error={geoError}
+              required
+            >
               <div className="flex gap-2">
                 <Input
                   value={digitalAddress}
-                  onChange={(e) => setDigitalAddress(e.target.value)}
+                  required
+                  onChange={(e) => {
+                    setDigitalAddress(e.target.value);
+                    if (e.target.value.trim()) setGeoError(null);
+                  }}
                   dir="ltr"
                   className="dir-ltr"
                   placeholder="https://maps.google.com/?q=..."
@@ -511,8 +528,8 @@ export function RepairFormClient(props: RepairFormProps) {
       <Card>
         <CardHeader title={t('sectionQuality')} />
         <div className="grid gap-4 p-4 sm:grid-cols-2">
-          {hasParts ? (
-            <Field label={t('qualityScore')} hint={t('qualityHelp')} required>
+          {qualityNeeded ? (
+            <Field label={t('qualityScore')} hint={t('qualityHelpAlways')} required>
               <div className="flex gap-1.5">
                 {[0, 1, 2, 3, 4, 5].map((n) => (
                   <button

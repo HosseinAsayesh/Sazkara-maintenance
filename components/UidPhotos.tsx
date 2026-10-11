@@ -146,7 +146,7 @@ export function UidPhotoGallery({
                   />
                   <span
                     className={
-                      'block truncate px-1.5 py-1 text-[11px] ' +
+                      'block truncate px-1.5 py-1 text-[0.6875rem] ' +
                       (p.type === 'STAMP' ? 'font-semibold text-brand-700' : 'text-[var(--muted)]')
                     }
                   >

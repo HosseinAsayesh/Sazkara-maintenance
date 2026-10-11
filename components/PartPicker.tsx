@@ -9,10 +9,12 @@ export interface PartOption {
   nameFa: string;
   nameEn: string;
   sortOrder: number;
-  /** PIECE for most parts; CENTIMETER for the two SMD strips. */
+  /** PIECE for most parts; CENTIMETER for the SMD strips and wires. */
   unit: 'PIECE' | 'CENTIMETER';
-  /** 1 for pieces, 50 for the SMD strips (50/100/150/200 cm ...). */
+  /** 1 for pieces, 30 for the SMD strips, 10 for the wires (centimetres). */
   quantityStep: number;
+  /** Repair work with no part (soldering, gluing...): never offered as a replaced part. */
+  repairOnly?: boolean;
 }
 
 export type PartSelection = Record<string, number>;
@@ -32,7 +34,8 @@ const MAX_CENTIMETERS = 5000;
  * inventory). A technician mistaking one panel for the other corrupts the parts bill, so
  * the distinction is carried by colour and layout rather than by a caption alone.
  *
- * Quantities step in the part's own unit: pieces one at a time, SMD strip in 50 cm cuts.
+ * Quantities step in the part's own unit: pieces one at a time, SMD strip in 30 cm cuts,
+ * wire in 10 cm. Stepping below the smallest amount removes the part.
  *
  * Selections mirror into hidden inputs so the form still submits as plain multipart —
  * no client-side JSON assembly to drift out of sync with the server.
@@ -62,12 +65,15 @@ export function PartPicker({
   const isReplace = action === 'REPLACED';
 
   const filtered = useMemo(() => {
+    // Repair-only work (soldering, gluing...) consumes no part, so it can never be
+    // "replaced"; the repaired list is the only place it belongs.
+    const offered = isReplace ? parts.filter((p) => !p.repairOnly) : parts;
     const q = query.trim().toLowerCase();
-    if (!q) return parts;
-    return parts.filter(
+    if (!q) return offered;
+    return offered.filter(
       (p) => p.nameFa.toLowerCase().includes(q) || p.nameEn.toLowerCase().includes(q),
     );
-  }, [parts, query]);
+  }, [parts, query, isReplace]);
 
   const selectedCount = Object.keys(value).length;
 
@@ -88,6 +94,22 @@ export function PartPicker({
     const snapped = Math.round(qty / step) * step;
     const clamped = Math.max(step, Math.min(maxOf(part), snapped));
     onChange({ ...value, [part.id]: clamped });
+  };
+
+  /**
+   * The − button. Below the smallest amount it removes the part, so "1 fuse -> none" is
+   * the same tap as "2 fuses -> 1". It used to stop at the minimum, which read as a dead
+   * button — and the only way out was tapping the name above it.
+   */
+  const decrement = (part: PartOption, qty: number) => {
+    const step = stepOf(part);
+    if (qty - step < step) {
+      const next = { ...value };
+      delete next[part.id];
+      onChange(next);
+    } else {
+      setQty(part, qty - step);
+    }
   };
 
   const nameOf = (p: PartOption) => (locale === 'fa' ? p.nameFa : p.nameEn);
@@ -175,20 +197,25 @@ export function PartPicker({
                 >
                   {nameOf(part)}
                   {isCm ? (
-                    <span className="mt-0.5 block text-[10px] font-normal text-[var(--muted)]">
-                      {t('cmHint')}
+                    <span className="mt-0.5 block text-[0.625rem] font-normal text-[var(--muted)]">
+                      {t('cmHint', { step })}
                     </span>
                   ) : null}
                 </button>
 
+                {/* Tap targets are a full 40px and sit in their own row with a gap above,
+                    so a thumb on − cannot land on the name button instead — the name
+                    toggles the whole part off, which is what "the − only works a few
+                    pixels higher" was. touch-manipulation drops the double-tap-zoom
+                    delay that made quick taps feel ignored. */}
                 {selected ? (
-                  <div className="mt-2 flex items-center justify-between gap-1">
+                  <div className="mt-2.5 flex items-center justify-between gap-1">
                     <button
                       type="button"
                       aria-label="-"
-                      onClick={() => setQty(part, qty - step)}
+                      onClick={() => decrement(part, qty)}
                       className={clsx(
-                        'h-7 w-7 rounded-md border bg-white text-sm font-bold',
+                        'h-10 w-10 shrink-0 touch-manipulation rounded-md border bg-white text-lg font-bold',
                         isReplace
                           ? 'border-amber-300 text-amber-700'
                           : 'border-teal-300 text-teal-700',
@@ -205,13 +232,13 @@ export function PartPicker({
                           setQty(part, Number(e.target.value.replace(/\D/g, '')) || step)
                         }
                         className={clsx(
-                          'dir-ltr h-7 rounded-md border text-center text-sm tabular-nums',
+                          'dir-ltr h-10 rounded-md border text-center text-sm tabular-nums',
                           isCm ? 'w-12' : 'w-10',
                           isReplace ? 'border-amber-300' : 'border-teal-300',
                         )}
                       />
                       {isCm ? (
-                        <span className="text-[10px] text-[var(--muted)]">
+                        <span className="text-[0.625rem] text-[var(--muted)]">
                           {tc('centimeter')}
                         </span>
                       ) : null}
@@ -221,7 +248,7 @@ export function PartPicker({
                       aria-label="+"
                       onClick={() => setQty(part, qty + step)}
                       className={clsx(
-                        'h-7 w-7 rounded-md border bg-white text-sm font-bold',
+                        'h-10 w-10 shrink-0 touch-manipulation rounded-md border bg-white text-lg font-bold',
                         isReplace
                           ? 'border-amber-300 text-amber-700'
                           : 'border-teal-300 text-teal-700',

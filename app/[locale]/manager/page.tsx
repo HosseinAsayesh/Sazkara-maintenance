@@ -155,6 +155,17 @@ export default async function ManagerDashboard({
         />
       </div>
 
+      {/* The outstanding UIDs as a sheet, for the same project/phase/city filters. */}
+      <div className="flex justify-end">
+        <a
+          href={`/api/manager/exports/remaining?${scope}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+        >
+          <span aria-hidden>⬇</span>
+          {t('remainingExcel', { n: num(overview.totals.remaining) })}
+        </a>
+      </div>
+
       {/* §7 — Tehran vs all-other-cities vs grand total, because pay is split this way. */}
       <Card>
         <CardHeader title={t('wageSplit')} description={t('wageSplitHelp')} />
@@ -203,7 +214,7 @@ export default async function ManagerDashboard({
         </TableWrap>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={t('byCity')} />
           <div className="p-1">

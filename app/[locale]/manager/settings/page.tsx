@@ -1,5 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
+import { BackupPanel } from '@/components/BackupPanel';
+import { ChangeNameCard } from '@/components/ChangeNameCard';
 import { ChangePasswordCard } from '@/components/ChangePasswordCard';
 import { CityManager } from '@/components/CityManager';
 import { JtiAccountSettings } from '@/components/JtiAccountSettings';
@@ -11,6 +13,7 @@ import { findDuplicateCityGroups, listCitiesWithUsage } from '@/lib/cities';
 import { findClientAccount } from '@/lib/client-account';
 import { formatDateForLocale } from '@/lib/dates';
 import { currentLicense } from '@/lib/license';
+import { prisma } from '@/lib/prisma';
 import { getStorage } from '@/lib/storage';
 import { getAppSettings, getWageSettings } from '@/lib/settings';
 
@@ -19,17 +22,18 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage({ params }: PageProps<'/[locale]/manager/settings'>) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requireManager(locale);
+  const user = await requireManager(locale);
 
   const t = await getTranslations({ locale, namespace: 'settings' });
 
-  const [wages, app, cities, duplicateGroups, license, jti] = await Promise.all([
+  const [wages, app, cities, duplicateGroups, license, jti, projects] = await Promise.all([
     getWageSettings(),
     getAppSettings(),
     listCitiesWithUsage(),
     findDuplicateCityGroups(),
     currentLicense(),
     findClientAccount(),
+    prisma.project.findMany({ orderBy: { startDate: 'desc' }, select: { id: true, name: true } }),
   ]);
 
   return (
@@ -52,6 +56,10 @@ export default async function SettingsPage({ params }: PageProps<'/[locale]/mana
         cities={cities}
         duplicateGroups={duplicateGroups.map((group) => group.map((c) => c.id))}
       />
+
+      <BackupPanel projects={projects} />
+
+      <ChangeNameCard name={user.name} />
 
       <ChangePasswordCard />
 

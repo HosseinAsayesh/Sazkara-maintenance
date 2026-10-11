@@ -221,26 +221,7 @@ export function FormEditor({
         <Card>
           <CardHeader title={tf('sectionQuality')} />
           <div className="grid gap-4 p-4">
-            {hasParts ? (
-              <Field label={tf('qualityScore')}>
-                <div className="flex gap-1.5">
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setQuality(n)}
-                      className={
-                        quality === n
-                          ? 'h-11 flex-1 rounded-lg border border-brand-600 bg-brand-600 text-sm font-semibold text-white'
-                          : 'h-11 flex-1 rounded-lg border border-[var(--border)] bg-white text-sm font-semibold text-brand-600 hover:bg-brand-50'
-                      }
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            ) : (
+            {!hasParts ? (
               <Field label={tf('notRepairedReason')} required>
                 <div className="space-y-2">
                   {NOT_REPAIRED_REASONS.map((r) => (
@@ -261,7 +242,28 @@ export function FormEditor({
                   ))}
                 </div>
               </Field>
-            )}
+            ) : null}
+
+            {/* Shown on every visit now: healthy stands are scored too. Optional here,
+                since reports filed before 2026-10 carry no score for those visits. */}
+              <Field label={tf('qualityScore')}>
+                <div className="flex gap-1.5">
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setQuality(n)}
+                      className={
+                        quality === n
+                          ? 'h-11 flex-1 rounded-lg border border-brand-600 bg-brand-600 text-sm font-semibold text-white'
+                          : 'h-11 flex-1 rounded-lg border border-[var(--border)] bg-white text-sm font-semibold text-brand-600 hover:bg-brand-50'
+                      }
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </Field>
 
             <Field label={tc('notes')}>
               <Textarea name="notes" defaultValue={form.notes ?? ''} />

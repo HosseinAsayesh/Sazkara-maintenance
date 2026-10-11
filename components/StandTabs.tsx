@@ -61,8 +61,8 @@ export function StandTabs({
                     : 'border-dashed border-teal-200 bg-teal-50 text-teal-700 hover:border-teal-400',
               )}
             >
-              <div className="text-[15px] font-semibold">{tab.label}</div>
-              <div className={clsx('mt-0.5 text-[11px]', isActive && 'opacity-75')}>
+              <div className="text-[0.9375rem] font-semibold">{tab.label}</div>
+              <div className={clsx('mt-0.5 text-[0.6875rem]', isActive && 'opacity-75')}>
                 {tab.ready ? t('standReady') : t('standIncomplete')}
               </div>
             </button>
@@ -96,7 +96,7 @@ export function StandTabs({
         <button
           type="button"
           onClick={onAdd}
-          className="min-w-[7.5rem] flex-1 rounded-[10px] border-2 border-dashed border-[var(--border)] p-3 text-center text-[13px] font-medium text-[var(--muted)] transition-colors hover:border-brand-400 hover:text-brand-700"
+          className="min-w-[7.5rem] flex-1 rounded-[10px] border-2 border-dashed border-[var(--border)] p-3 text-center text-[0.8125rem] font-medium text-[var(--muted)] transition-colors hover:border-brand-400 hover:text-brand-700"
         >
           + {t('addStand')}
         </button>

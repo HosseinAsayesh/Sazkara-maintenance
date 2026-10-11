@@ -138,6 +138,8 @@ model User {
   weeklyReportsSubmitted WeeklyReport[] @relation("WeeklyReportSubmitter")
   weeklyReportsApproved  WeeklyReport[] @relation("WeeklyReportApprover")
 
+  pushSubscriptions PushSubscription[]
+
   @@index([role, status])
   @@index([leadId])
 }
@@ -301,6 +303,10 @@ model ImportBatch {
   /// Reports filed against this order (historical rows, or a technician's visit to one
   /// of its uids). Moving the order to another project/phase moves these with it.
   repairForms RepairForm[]
+
+  /// When managers and leads were told every line of this order is done. Set once, so
+  /// a later edit that reopens and re-closes a line does not announce it again.
+  completedNotifiedAt DateTime?
 }
 
 /// §5 — a saved mapping so a similarly-shaped re-upload can reuse it. `signature` is a
@@ -360,11 +366,15 @@ model PartCatalogItem {
   /// 1..30, the position within columns 5..34.
   sortOrder       Int    @unique
 
-  /// PIECE for everything except the two SMD strips, which are cut to length.
+  /// PIECE for everything except the SMD strips and wires, which are cut to length.
   unit         PartUnit @default(PIECE)
-  /// Increment the technician's quantity picker steps in: 1 for pieces, 50 for the
-  /// SMD strips (50/100/150/200 cm ...).
+  /// Increment the technician's quantity picker steps in: 1 for pieces, 30 cm for the
+  /// SMD strips, 10 cm for the wires.
   quantityStep Int      @default(1)
+
+  /// Repair work with no part (soldering, gluing, restoring power): offered only in
+  /// the repaired-in-place picker, never as a replaced part or an export part column.
+  repairOnly Boolean @default(false)
 
   active Boolean @default(true)
 
@@ -723,4 +733,18 @@ model WeeklyReport {
 
   @@index([status, submittedAt])
   @@index([periodFrom])
+}
+
+/// A browser/phone that agreed to receive push notifications for its user (Web Push).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The push service URL; unique per browser installation.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

@@ -103,6 +103,17 @@ export default async function BreakdownPage({
         <CardHeader
           title={t('title')}
           description={td.has(`${metric}Help`) ? td(`${metric}Help`) : undefined}
+          action={
+            metric === 'remaining' ? (
+              <a
+                href={`/api/manager/exports/remaining?${back}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-medium text-brand-900 hover:bg-brand-50"
+              >
+                <span aria-hidden>⬇</span>
+                {td('remainingExcel', { n: num(result.total) })}
+              </a>
+            ) : undefined
+          }
         />
 
         {empty ? (

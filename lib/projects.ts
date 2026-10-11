@@ -227,9 +227,10 @@ export async function deleteProject(projectId: string, opts: { force?: boolean }
 }
 
 /**
- * Re-decide which repairs are re-repairs, for the given stands.
+ * Re-decide which visits are re-repairs, for the given stands.
  *
- * A re-repair is a stand repaired again INSIDE THE SAME PROJECT, so moving reports to
+ * A re-repair is any visit to a stand already repaired INSIDE THE SAME PROJECT — the
+ * visit itself may find it healthy — so moving reports to
  * another project can make one appear or disappear. Same rule as at submit time
  * (lib/repair-forms.ts): the earlier repair of that stand in that project, by date, then
  * by filing order. Archive rows are never re-repairs themselves (they were imported as
@@ -268,7 +269,9 @@ export async function recomputeReRepairs(db: Db, standIds: string[]) {
     let isQuickReRepair = false;
     let hasPreviousProjectHistory = false;
 
-    if (form.outcome === 'REPAIRED' && form.technicianId !== historical?.id) {
+    // Any visit to a stand already repaired in the same project is a re-repair, healthy
+    // call-backs included (see createRepairForm). The history flag stays repairs-only.
+    if (form.technicianId !== historical?.id) {
       const previous = form.projectId
         ? [...earlier].reverse().find((f) => f.projectId === form.projectId)
         : undefined;
@@ -278,6 +281,8 @@ export async function recomputeReRepairs(db: Db, standIds: string[]) {
         isQuickReRepair =
           form.date.getTime() - previous.date.getTime() <= RE_REPAIR_WINDOW_DAYS * DAY_MS;
       }
+    }
+    if (form.outcome === 'REPAIRED' && form.technicianId !== historical?.id) {
       hasPreviousProjectHistory = earlier.some(
         (f) => !form.projectId || f.projectId !== form.projectId,
       );

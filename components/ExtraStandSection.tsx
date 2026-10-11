@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { PartPicker, type PartOption, type PartSelection } from './PartPicker';
 import { PhotoInput } from './PhotoInput';
 import { repairShortlist } from '@/lib/parts';
-import { requiredStandPhotos } from '@/lib/photo-rules';
+import { needsQualityScore, requiredStandPhotos } from '@/lib/photo-rules';
 import { Alert, Button, Card, CardHeader, Field, Input, Textarea } from './ui';
 import { NOT_REPAIRED_REASONS } from '@/lib/reasons';
 
@@ -64,10 +64,9 @@ export function ExtraStandSection({
   const hasParts =
     Object.keys(value.replaced).length + Object.keys(value.repaired).length > 0;
 
-  const standPhotos = requiredStandPhotos(
-    hasParts ? 'REPAIRED' : 'NOT_REPAIRED',
-    value.reason || null,
-  );
+  const standOutcome = hasParts ? 'REPAIRED' : 'NOT_REPAIRED';
+  const standPhotos = requiredStandPhotos(standOutcome, value.reason || null);
+  const qualityNeeded = needsQualityScore(standOutcome, value.reason || null);
 
   // Same gate as the primary stand: photograph it before working on it. See
   // RepairFormClient for why this is derived from requiredStandPhotos rather than
@@ -151,34 +150,7 @@ export function ExtraStandSection({
           </div>
         ) : null}
 
-        {hasParts ? (
-          <Field label={t('qualityScore')} required>
-            <div className="flex gap-1.5">
-              {[0, 1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => set('quality', n)}
-                  className={clsx(
-                    'h-11 flex-1 rounded-lg border text-sm font-semibold transition-colors',
-                    value.quality === n
-                      ? 'border-brand-600 bg-brand-600 text-white'
-                      : 'border-[var(--border)] bg-white text-brand-600 hover:bg-brand-50',
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            {value.quality !== null ? (
-              <input
-                type="hidden"
-                name={`extra_${index}_quality`}
-                value={value.quality}
-              />
-            ) : null}
-          </Field>
-        ) : (
+        {!hasParts ? (
           <Field label={t('notRepairedReason')} required>
             <div className="space-y-2">
               {NOT_REPAIRED_REASONS.map((r) => (
@@ -204,7 +176,37 @@ export function ExtraStandSection({
               ))}
             </div>
           </Field>
-        )}
+        ) : null}
+
+        {/* Scored on every visit to a reachable stand, healthy ones included. */}
+        {qualityNeeded ? (
+          <Field label={t('qualityScore')} hint={t('qualityHelpAlways')} required>
+            <div className="flex gap-1.5">
+              {[0, 1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => set('quality', n)}
+                  className={clsx(
+                    'h-11 flex-1 rounded-lg border text-sm font-semibold transition-colors',
+                    value.quality === n
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-[var(--border)] bg-white text-brand-600 hover:bg-brand-50',
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            {value.quality !== null ? (
+              <input
+                type="hidden"
+                name={`extra_${index}_quality`}
+                value={value.quality}
+              />
+            ) : null}
+          </Field>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label={t('timeSpent')}>

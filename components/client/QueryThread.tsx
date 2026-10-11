@@ -101,7 +101,7 @@ export function QueryThread({
                     : 'bg-teal-50 text-ink-900',
                 )}
               >
-                <div className="mb-0.5 text-[11px] font-medium text-[var(--muted)]">
+                <div className="mb-0.5 text-[0.6875rem] font-medium text-[var(--muted)]">
                   {m.side === 'CLIENT' ? t('sideClient') : t('sideTeam')} ·{' '}
                   {format.dateTime(m.createdAt, { dateStyle: 'short', timeStyle: 'short' })}
                 </div>

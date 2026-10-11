@@ -3,7 +3,7 @@ import 'server-only';
 import type { NotRepairedReason, PartAction, PhotoType, Prisma } from '@prisma/client';
 
 import { nextFormCode } from './codes';
-import { requiredStandPhotos } from './photo-rules';
+import { needsQualityScore, requiredStandPhotos } from './photo-rules';
 import { DAY_MS, RE_REPAIR_WINDOW_DAYS } from './dates';
 import { prisma } from './prisma';
 import { resolveCityId as resolveCityByName } from './cities';
@@ -177,8 +177,8 @@ export async function createRepairForm(input: CreateRepairFormInput) {
   const parts = [...merged.values()];
 
   // Quantities are validated against the catalogue, not trusted from the client: the
-  // SMD strips are cut to length and must arrive as whole 50 cm steps, while everything
-  // else is a discrete piece. The picker already enforces this, so a violation means a
+  // SMD strips and wires are cut to length and must arrive as whole steps of their own
+  // (lib/parts.ts), while everything else is a discrete piece. The picker already enforces this, so a violation means a
   // tampered or buggy request — reject it rather than silently snapping a number that
   // ends up on a parts bill.
   if (parts.length) {
@@ -207,7 +207,10 @@ export async function createRepairForm(input: CreateRepairFormInput) {
   if (outcome === 'NOT_REPAIRED' && !input.notRepairedReason) {
     throw new RepairFormError('REASON_REQUIRED');
   }
-  if (outcome === 'REPAIRED' && (input.qualityScore == null || input.qualityScore < 0)) {
+  if (
+    needsQualityScore(outcome, input.notRepairedReason) &&
+    (input.qualityScore == null || input.qualityScore < 0)
+  ) {
     throw new RepairFormError('QUALITY_REQUIRED');
   }
   if (input.qualityScore != null && (input.qualityScore < 0 || input.qualityScore > 5)) {
@@ -308,14 +311,17 @@ export async function createRepairForm(input: CreateRepairFormInput) {
       // fall, while the same stand repaired in a later campaign is normal recurring
       // work and belongs in the main export.
       //
-      // Only a *repair* can be a re-repair — an unsuccessful revisit is just an
-      // unsuccessful visit.
+      // Any return to a stand already REPAIRED in this campaign is a re-repair, whatever
+      // this visit finds (client ruling, 2026-10): a call-back that finds the stand
+      // healthy is still re-repair work, counted and exported with the re-repairs and
+      // kept out of the main repaired / not-repaired figures. A first repair after an
+      // unsuccessful visit is not one — nothing had been repaired yet.
       let isReRepair = false;
       let isQuickReRepair = false;
       let previousFormId: string | null = null;
       let hasPreviousProjectHistory = false;
 
-      if (outcome === 'REPAIRED') {
+      {
         const previousInProject = projectId
           ? await tx.repairForm.findFirst({
               where: {
@@ -346,18 +352,20 @@ export async function createRepairForm(input: CreateRepairFormInput) {
         //
         // `{ not: projectId }` alone would silently drop rows whose projectId is NULL
         // (SQL `<>` is never true against NULL), so unassigned historical repairs are
-        // matched explicitly.
-        const earlierProject = await tx.repairForm.findFirst({
-          where: {
-            standId: stand.id,
-            outcome: 'REPAIRED',
-            ...(projectId
-              ? { OR: [{ projectId: null }, { projectId: { not: projectId } }] }
-              : {}),
-          },
-          select: { id: true },
-        });
-        hasPreviousProjectHistory = !!earlierProject;
+        // matched explicitly. Flagged on repairs only, as before.
+        if (outcome === 'REPAIRED') {
+          const earlierProject = await tx.repairForm.findFirst({
+            where: {
+              standId: stand.id,
+              outcome: 'REPAIRED',
+              ...(projectId
+                ? { OR: [{ projectId: null }, { projectId: { not: projectId } }] }
+                : {}),
+            },
+            select: { id: true },
+          });
+          hasPreviousProjectHistory = !!earlierProject;
+        }
       }
 
       // --- Wage (§6.6) ----------------------------------------------------------
@@ -396,7 +404,7 @@ export async function createRepairForm(input: CreateRepairFormInput) {
 
           date,
           timeSpentMinutes: input.timeSpentMinutes ?? null,
-          qualityScore: outcome === 'REPAIRED' ? (input.qualityScore ?? null) : null,
+          qualityScore: input.qualityScore ?? null,
           notes: input.notes?.trim() || null,
 
           technicianSignature: input.technicianSignature,

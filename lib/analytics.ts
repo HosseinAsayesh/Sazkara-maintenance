@@ -179,9 +179,12 @@ export async function getOverview(filters: RangeFilters): Promise<OverviewStats>
     const bucket = bucketFor(form.cityId);
     track(uidsSeen, form.cityId, form.uid);
     if (form.standIndex >= 2) track(subStandsSeen, form.cityId, form.standId);
-    if (form.outcome === 'REPAIRED') {
-      if (form.isReRepair) bucket.reRepairs++;
-      else bucket.repaired++;
+    // A re-repair is counted only as a re-repair, whatever the visit found (§6.3): a
+    // healthy call-back must not dent the success rate, nor a repaired one inflate it.
+    if (form.isReRepair) {
+      bucket.reRepairs++;
+    } else if (form.outcome === 'REPAIRED') {
+      bucket.repaired++;
     } else {
       bucket.notRepaired++;
       if (form.notRepairedReason) {
@@ -350,7 +353,7 @@ export async function getTechnicianStats(technicianId: string, filters: RangeFil
     }),
     prisma.repairForm.groupBy({
       by: ['notRepairedReason'],
-      where: { ...where, outcome: 'NOT_REPAIRED' },
+      where: { ...where, outcome: 'NOT_REPAIRED', isReRepair: false },
       _count: { _all: true },
     }),
   ]);
@@ -364,14 +367,11 @@ export async function getTechnicianStats(technicianId: string, filters: RangeFil
   for (const form of forms) {
     const key = form.city?.name ?? 'نامشخص';
     const bucket = perCity.get(key) ?? { repaired: 0, notRepaired: 0, wage: 0 };
-    if (form.outcome === 'REPAIRED') {
-      if (form.isReRepair) reRepairs++;
-      else repaired++;
-      bucket.repaired++;
-    } else {
-      notRepaired++;
-      bucket.notRepaired++;
-    }
+    if (form.isReRepair) reRepairs++;
+    else if (form.outcome === 'REPAIRED') repaired++;
+    else notRepaired++;
+    if (form.outcome === 'REPAIRED') bucket.repaired++;
+    else bucket.notRepaired++;
     const wage = Number(form.wageAmount ?? 0);
     wageTotal += wage;
     bucket.wage += wage;

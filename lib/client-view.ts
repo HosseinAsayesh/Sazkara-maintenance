@@ -200,7 +200,7 @@ export async function getClientToday(projectId: string): Promise<ClientFormRow[]
   return (forms as RawClientForm[]).map(toClientRow);
 }
 
-/** §6.3 — stands repaired twice inside this campaign. */
+/** §6.3 — return visits to stands already repaired inside this campaign. */
 export async function getClientReRepairs(projectId: string): Promise<ClientFormRow[]> {
   const forms = await prisma.repairForm.findMany({
     where: { ...projectScopeWhere(projectId), isReRepair: true },

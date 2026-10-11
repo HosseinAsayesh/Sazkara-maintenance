@@ -37,6 +37,7 @@ export default async function ManagerFormPage({
         sortOrder: true,
         unit: true,
         quantityStep: true,
+        repairOnly: true,
       },
     }),
     prisma.city.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),

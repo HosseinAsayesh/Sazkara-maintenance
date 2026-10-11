@@ -176,7 +176,7 @@ export function JalaliDateInput({
             </button>
           </div>
 
-          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] text-ink-400">
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[0.625rem] text-ink-400">
             {JALALI_WEEKDAYS_FA.map((d, i) => (
               <div key={i}>{d}</div>
             ))}
